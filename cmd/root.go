@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/fatih/color"
 	"github.com/go-faster/errors"
 	"github.com/gotd/td/telegram"
 	"github.com/ivanpirog/coloredcobra"
@@ -24,6 +25,7 @@ import (
 	"github.com/iyear/tdl/core/util/fsutil"
 	"github.com/iyear/tdl/core/util/logutil"
 	"github.com/iyear/tdl/core/util/netutil"
+	"github.com/iyear/tdl/pkg/autodl"
 	"github.com/iyear/tdl/pkg/consts"
 	"github.com/iyear/tdl/pkg/extensions"
 	"github.com/iyear/tdl/pkg/kv"
@@ -70,6 +72,33 @@ func New() *cobra.Command {
 		Short:         "Telegram Downloader, but more than a downloader",
 		SilenceErrors: true,
 		SilenceUsage:  true,
+		// A bare `tdl` (no subcommand, no argument) starts the batch mode when
+		// the working directory holds a valid config.json and the account is
+		// logged in. Otherwise the usual help is printed.
+		RunE: func(cmd *cobra.Command, args []string) error {
+			if len(args) > 0 || os.Getenv(batchDisableEnv) != "" {
+				return cmd.Help()
+			}
+
+			path, namespace, err := autodl.AutoStart(cmd.Context(), kv.From(cmd.Context()),
+				viper.GetString(consts.FlagNamespace))
+			if err != nil {
+				return err
+			}
+			if path == "" {
+				return cmd.Help()
+			}
+
+			// the config may select another account than the default one
+			if namespace != "" && !cmd.Flags().Changed(consts.FlagNamespace) {
+				viper.Set(consts.FlagNamespace, namespace)
+				_ = cmd.Flags().Set(consts.FlagNamespace, namespace)
+			}
+
+			color.Yellow("Found %s and a logged in account, starting batch download...", path)
+
+			return NewBatch().RunE(cmd, nil)
+		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
 			// init logger
 			debug, level := viper.GetBool(consts.FlagDebug), zap.InfoLevel
@@ -139,7 +168,7 @@ func New() *cobra.Command {
 
 	cmd.AddCommand(NewVersion(), NewLogin(), NewDownload(), NewForward(),
 		NewChat(), NewUpload(), NewBackup(), NewRecover(), NewMigrate(),
-		NewGen(), NewUpdate(), NewExtension(em))
+		NewGen(), NewUpdate(), NewExtension(em), NewBatch())
 
 	// append extension command to root
 	exts, _ := em.List(context.Background(), false)

@@ -111,6 +111,11 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 	}
 	limit := viper.GetInt(consts.FlagLimit)
 
+	downloader := downloader.New(options)
+	// keep the partial temp file of a failed element so the next run only
+	// fetches the parts that are still missing
+	downloader.SetSkipParts(true)
+
 	logctx.From(ctx).Info("Start download",
 		zap.String("dir", opts.Dir),
 		zap.Bool("rewrite_ext", opts.RewriteExt),
@@ -139,7 +144,7 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 		}
 	}()
 
-	return downloader.New(options).Download(ctx, limit)
+	return downloader.Download(ctx, limit)
 }
 
 func collectDialogs(parsers []parser) ([][]*tmessage.Dialog, error) {

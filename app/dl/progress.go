@@ -26,6 +26,14 @@ type progress struct {
 	opts     Options
 
 	it *iter
+
+	// parts tracks the parts of the element that is currently being
+	// downloaded, so an interrupted download can be resumed without fetching
+	// the parts that already hit the disk.
+	parts *downloader.PartsStore
+	// partial is true when the current element is downloaded from a partial
+	// temp file.
+	partial bool
 }
 
 func newProgress(p pw.Writer, it *iter, opts Options) *progress {
@@ -37,9 +45,61 @@ func newProgress(p pw.Writer, it *iter, opts Options) *progress {
 	}
 }
 
+// OnAdd implements downloader.Progress. It runs before the element is
+// downloaded, so initializing the parts store here is race free.
 func (p *progress) OnAdd(elem downloader.Elem) {
 	tracker := prog.AppendTracker(p.pw, utils.Byte.FormatBinaryBytes, p.processMessage(elem), elem.File().Size())
-	p.trackers.Store(elem.(*iterElem).id, tracker)
+
+	e := elem.(*iterElem)
+	p.parts = downloader.NewPartsStore(e.to.Name(), e.file.Size)
+	p.partial = false
+
+	p.trackers.Store(e.id, tracker)
+}
+
+// Resume implements downloader.Resumer.
+func (p *progress) Resume(elem downloader.Elem) (map[int]struct{}, int64, bool) {
+	if p.parts == nil {
+		return nil, 0, false
+	}
+
+	done := p.parts.Done()
+	if len(done) == 0 {
+		return nil, 0, false
+	}
+
+	e := elem.(*iterElem)
+	if err := downloader.PreAllocate(e.to, e.file.Size); err != nil {
+		p.parts.Reset()
+		return nil, 0, false
+	}
+
+	p.partial = true
+
+	// resume the progress bar from the data already on disk
+	if tracker, ok := p.trackers.Load(e.id); ok {
+		bytes := int64(len(done)) * downloader.MaxPartSize
+		if bytes > e.file.Size {
+			bytes = e.file.Size
+		}
+		tracker.(*pw.Tracker).SetValue(bytes)
+	}
+
+	return done, e.file.Size, true
+}
+
+// PartDone implements downloader.Resumer.
+func (p *progress) PartDone(elem downloader.Elem, index int) {
+	if p.parts != nil {
+		p.parts.PartDone(index)
+	}
+}
+
+// Reset implements downloader.Resumer.
+func (p *progress) Reset(elem downloader.Elem) {
+	if p.parts != nil {
+		p.parts.Reset()
+	}
 }
 
 func (p *progress) OnDownload(elem downloader.Elem, state downloader.ProgressState) {
@@ -71,7 +131,11 @@ func (p *progress) OnDone(elem downloader.Elem, err error) {
 		if !errors.Is(err, context.Canceled) { // don't report user cancel
 			p.fail(t, elem, errors.Wrap(err, "progress"))
 		}
-		_ = os.Remove(e.to.Name()) // just try to remove temp file, ignore error
+		// keep the partial file and its parts sidecar so the next run can
+		// resume instead of starting over
+		if !p.partial {
+			_ = os.Remove(e.to.Name()) // just try to remove temp file, ignore error
+		}
 		return
 	}
 
@@ -100,6 +164,11 @@ func (p *progress) donePost(elem *iterElem) error {
 	newpath := filepath.Join(filepath.Dir(elem.to.Name()), newfile)
 	if err := os.Rename(elem.to.Name(), newpath); err != nil {
 		return errors.Wrap(err, "rename file")
+	}
+
+	// the element is complete, its parts are not needed anymore
+	if p.parts != nil {
+		p.parts.Remove()
 	}
 
 	// Set file modification time to message date if available

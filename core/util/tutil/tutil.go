@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"sort"
 	"strconv"
 	"strings"
 
@@ -194,6 +195,90 @@ func GetSingleMessage(ctx context.Context, c *tg.Client, peer tg.InputPeerClass,
 	}
 
 	return m, nil
+}
+
+// GetMessages resolves a batch of message ids in one request.
+//
+// It returns the messages that still exist and, separately, the ids that are
+// gone (deleted or otherwise unavailable). The returned messages are keyed by
+// their id, and the missing ids are sorted in ascending order. No error is
+// returned for deleted messages, so a batch containing them is still usable.
+//
+// Batching is what makes downloading a large id range practical: fetching one
+// message per request costs one round trip each.
+func GetMessages(ctx context.Context, c *tg.Client, peer tg.InputPeerClass, msgs []int) (map[int]*tg.Message, []int, error) {
+	if len(msgs) == 0 {
+		return map[int]*tg.Message{}, nil, nil
+	}
+
+	ids := make([]tg.InputMessageClass, 0, len(msgs))
+	for _, id := range msgs {
+		ids = append(ids, &tg.InputMessageID{ID: id})
+	}
+
+	// Telegram expects message ids in descending order
+	sort.Slice(ids, func(i, j int) bool {
+		return ids[i].(*tg.InputMessageID).ID > ids[j].(*tg.InputMessageID).ID
+	})
+
+	channel, ok := toInputChannel(peer)
+	if !ok {
+		return nil, nil, errors.Errorf("peer %d is not a channel", GetInputPeerID(peer))
+	}
+
+	res, err := c.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
+		Channel: channel,
+		ID:      ids,
+	})
+	if err != nil {
+		return nil, nil, errors.Wrap(err, "channels get messages")
+	}
+
+	found := make(map[int]*tg.Message, len(msgs))
+	missing := make(map[int]struct{})
+
+	out, ok := res.(*tg.MessagesChannelMessages)
+	if !ok {
+		return nil, nil, errors.Errorf("unexpected messages type %T", res)
+	}
+
+	for _, m := range out.Messages {
+		msg, ok := m.(*tg.Message)
+		if !ok {
+			continue
+		}
+		found[msg.ID] = msg
+	}
+
+	gone := make([]int, 0)
+	for _, id := range msgs {
+		if _, ok := found[id]; ok {
+			continue
+		}
+		if _, ok := missing[id]; ok {
+			continue
+		}
+
+		missing[id] = struct{}{}
+		gone = append(gone, id)
+	}
+	sort.Ints(gone)
+
+	return found, gone, nil
+}
+
+// toInputChannel converts a channel peer into the input channel form required
+// by channels.getMessages.
+func toInputChannel(peer tg.InputPeerClass) (tg.InputChannelClass, bool) {
+	switch p := peer.(type) {
+	case *tg.InputPeerChannel:
+		return &tg.InputChannel{
+			ChannelID:  p.ChannelID,
+			AccessHash: p.AccessHash,
+		}, true
+	default:
+		return nil, false
+	}
 }
 
 type Messages []*tg.Message

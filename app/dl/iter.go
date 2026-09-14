@@ -259,7 +259,7 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 		return false, false
 	}
 
-	to, err := os.Create(path)
+	to, parts, err := downloader.OpenPartial(path, item.Size)
 	if err != nil {
 		i.err = errors.Wrap(err, "create file")
 		return false, false
@@ -273,7 +273,8 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 		fromMsg: message,
 		file:    item,
 
-		to: to,
+		to:    to,
+		parts: parts,
 
 		opts: i.opts,
 	}

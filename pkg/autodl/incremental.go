@@ -151,9 +151,7 @@ loop:
 		}
 
 		if scanned++; scanned > maxIncrementalScan {
-			logctx.From(ctx).Warn("Incremental window scan limit reached; the window is probably too large",
-				zap.Int("limit", maxIncrementalScan))
-			break loop
+			return nil, nil, errors.Errorf("incremental scan exceeded %d messages; keeping last_ts to avoid losing older messages", maxIncrementalScan)
 		}
 
 		if job.TopicID != nil && *job.TopicID > 0 {
@@ -261,10 +259,7 @@ func (r *Runner) advanceIncremental(ctx context.Context, job *Job, store *stateS
 		log.Warn("Incremental window still incomplete, keeping last_ts",
 			zap.Int("missing", len(missing)))
 
-		if !r.confirm(ctx, "Still missing messages. Advance the timestamp anyway (they may be skipped later)?", false) {
-			color.Yellow("Keeping last_ts so the next run covers this window again")
-			return nil
-		}
+		return errors.Errorf("%d message(s) still missing; keeping last_ts", len(missing))
 	}
 
 	if endTS <= state.GetLastTS() {

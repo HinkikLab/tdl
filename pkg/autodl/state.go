@@ -275,11 +275,13 @@ func (s *stateStore) Save() error {
 // SaveThrottled persists the state at most once per saveInterval.
 func (s *stateStore) SaveThrottled() error {
 	s.mu.Lock()
+	defer s.mu.Unlock()
 	if time.Since(s.lastSave) < saveInterval {
-		s.mu.Unlock()
 		return nil
 	}
-	s.mu.Unlock()
-
-	return s.Save()
+	err := s.state.Save(s.path)
+	if err == nil {
+		s.lastSave = time.Now()
+	}
+	return err
 }

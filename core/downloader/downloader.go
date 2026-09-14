@@ -46,19 +46,25 @@ func (d *Downloader) SetSkipParts(skip bool) {
 }
 
 func (d *Downloader) Download(ctx context.Context, limit int) error {
+	if limit <= 0 {
+		return errors.New("download limit must be positive")
+	}
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	wg, wgctx := errgroup.WithContext(ctx)
 	wg.SetLimit(limit)
 
 	for d.opts.Iter.Next(wgctx) {
 		elem := d.opts.Iter.Value()
 
-		wg.Go(func() (rerr error) {
+		wg.Go(func() error {
 			d.opts.Progress.OnAdd(elem)
-			defer func() { d.opts.Progress.OnDone(elem, rerr) }()
+			err := d.download(wgctx, elem)
+			d.opts.Progress.OnDone(elem, err)
 
-			if err := d.download(wgctx, elem); err != nil {
+			if err != nil {
 				// canceled by user, so we directly return error to stop all
-				if errors.Is(err, context.Canceled) {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					return errors.Wrap(err, "download")
 				}
 
@@ -75,11 +81,17 @@ func (d *Downloader) Download(ctx context.Context, limit int) error {
 		})
 	}
 
-	if err := d.opts.Iter.Err(); err != nil {
-		return errors.Wrap(err, "iter")
+	iterErr := d.opts.Iter.Err()
+	if iterErr != nil {
+		cancel()
+	}
+	// Progress callbacks own files and state; wait even if resolution fails.
+	err := wg.Wait()
+	if iterErr != nil {
+		return errors.Wrap(iterErr, "iter")
 	}
 
-	return wg.Wait()
+	return err
 }
 
 func (d *Downloader) download(ctx context.Context, elem Elem) error {
@@ -97,22 +109,29 @@ func (d *Downloader) download(ctx context.Context, elem Elem) error {
 		client = d.opts.Pool.Takeout(ctx, elem.File().DC())
 	}
 
-	threads := tutil.BestThreads(elem.File().Size(), d.opts.Threads)
+	threads := max(1, tutil.BestThreads(elem.File().Size(), d.opts.Threads))
 
 	if parts := d.parts(elem); parts != nil {
 		logctx.From(ctx).Debug("Resume partial download",
 			zap.Int("parts", len(parts)),
 			zap.Int("threads", threads))
 
-		return errors.Wrap(d.parallelIgnore(ctx, client, elem, parts, threads), "download")
+		if err := d.parallelIgnore(ctx, client, elem, parts, threads); err != nil {
+			return errors.Wrap(err, "download")
+		}
+		return nil
 	}
 
+	w := newWriteAt(elem, d.opts.Progress, resumer(d.opts.Progress), MaxPartSize)
 	_, err := downloader.NewDownloader().WithPartSize(MaxPartSize).
 		Download(client, elem.File().Location()).
 		WithThreads(threads).
-		Parallel(ctx, newWriteAt(elem, d.opts.Progress, resumer(d.opts.Progress), MaxPartSize))
+		Parallel(ctx, w)
 	if err != nil {
 		return errors.Wrap(err, "download")
+	}
+	if size := elem.File().Size(); size > 0 && w.downloaded.Load() != size {
+		return errors.Errorf("incomplete download: got %d bytes, expected %d", w.downloaded.Load(), size)
 	}
 
 	return nil

@@ -54,7 +54,8 @@ func TestExistingNames(t *testing.T) {
 
 	names := existingNames(dir)
 	assert.Contains(t, names, "a.mp4")
-	assert.Contains(t, names, "b.mp4")
+	assert.Contains(t, names, filepath.Join("sub", "b.mp4"))
+	assert.NotContains(t, names, "b.mp4")
 
 	// a missing directory is not an error
 	assert.Empty(t, existingNames(filepath.Join(dir, "nope")))

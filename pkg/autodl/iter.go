@@ -3,7 +3,9 @@ package autodl
 import (
 	"bytes"
 	"context"
+	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -171,7 +173,8 @@ type iter struct {
 	include map[string]struct{}
 	exclude map[string]struct{}
 
-	cursor int
+	cursor  int
+	pending []*tg.Message
 
 	mu       sync.Mutex
 	finished map[int]struct{}
@@ -189,8 +192,6 @@ type iterOptions struct {
 	exclude  []string
 	takeout  bool
 	batch    int
-	// progress renders the progress bars and journals the finished parts.
-	progress *jobProgress
 	// onSkip is called with the ids that turned out to have no media.
 	onSkip func(ids []int)
 	// onFinish is called with the ids that are already downloaded.
@@ -216,11 +217,13 @@ func newIter(pool dcpool.Pool, manager *peers.Manager, dialog peers.Peer, dir st
 
 	ids = append([]int(nil), ids...)
 	sort.Ints(ids)
+	ids = slices.Compact(ids)
 
 	batch := opts.batch
 	if batch <= 0 {
 		batch = DefaultBatchSize
 	}
+	batch = min(batch, DefaultBatchSize)
 	opts.batch = batch
 
 	return &iter{
@@ -234,7 +237,7 @@ func newIter(pool dcpool.Pool, manager *peers.Manager, dialog peers.Peer, dir st
 		include:  include,
 		exclude:  exclude,
 		finished: make(map[int]struct{}),
-		elems:    make(chan downloader.Elem, 2*batch),
+		elems:    make(chan downloader.Elem, 1),
 	}, nil
 }
 
@@ -251,28 +254,31 @@ func (i *iter) Next(ctx context.Context) bool {
 		return true
 	}
 
-	ok, skip := i.process(ctx)
-	if skip {
-		return i.Next(ctx)
-	}
-
-	return ok
+	return i.process(ctx)
 }
 
 // process resolves the next batch of messages.
-func (i *iter) process(ctx context.Context) (bool, bool) {
+func (i *iter) process(ctx context.Context) bool {
 	if i.err != nil || i.stopped {
-		return false, false
+		return false
 	}
 
-	in := i.manager.FromInputPeer
-	from, err := in(ctx, i.dialog.InputPeer())
-	if err != nil {
-		i.err = errors.Wrap(err, "resolve input peer")
-		return false, false
-	}
-
-	for i.cursor < len(i.ids) {
+	for len(i.pending) > 0 || i.cursor < len(i.ids) {
+		if len(i.pending) > 0 {
+			msg := i.pending[0]
+			i.pending[0] = nil
+			i.pending = i.pending[1:]
+			if i.isFinished(msg.ID) {
+				continue
+			}
+			if i.push(ctx, i.dialog, msg) {
+				return true
+			}
+			if i.err != nil {
+				return false
+			}
+			continue
+		}
 		end := min(i.cursor+i.opts.batch, len(i.ids))
 		batch := i.ids[i.cursor:end]
 		i.cursor = end
@@ -280,42 +286,25 @@ func (i *iter) process(ctx context.Context) (bool, bool) {
 		found, gone, err := tutil.GetMessages(ctx, i.pool.Default(ctx), i.dialog.InputPeer(), batch)
 		if err != nil {
 			i.err = errors.Wrap(err, "resolve messages")
-			return false, false
+			return false
 		}
 
 		if len(gone) > 0 {
 			i.markSkipped(ctx, gone)
 		}
 
-		produced := false
 		for _, id := range batch {
 			msg, ok := found[id]
 			if !ok {
 				continue // deleted, already handled above
 			}
 
-			if i.isFinished(id) {
-				continue
-			}
-
-			if i.push(ctx, from, msg) {
-				produced = true
-
-				// stop filling once the downloaders have room to work, so a
-				// huge range does not resolve thousands of messages up front
-				if len(i.elems) >= cap(i.elems)/2 {
-					return true, false
-				}
-			}
-		}
-
-		if produced || len(i.elems) > 0 {
-			return true, false
+			i.pending = append(i.pending, msg)
 		}
 	}
 
 	i.stopped = true
-	return false, false
+	return false
 }
 
 // push turns one message into a download element. It reports whether an
@@ -358,7 +347,7 @@ func (i *iter) push(ctx context.Context, from peers.Peer, msg *tg.Message) bool 
 	}
 
 	path := filepath.Join(i.dir, name)
-	if isComplete(path) {
+	if stat, err := os.Stat(path); err == nil && stat.Mode().IsRegular() && stat.Size() == item.Size {
 		// the iterator only sees ids that passed the pre-filter in Runner.missing,
 		// so this is just a safety net for files that appeared meanwhile
 		i.markDone(id)
@@ -366,14 +355,14 @@ func (i *iter) push(ctx context.Context, from peers.Peer, msg *tg.Message) bool 
 	}
 
 	e := newElem(from, id, mediaFile{item, peerID(from), id}, item.Date, path)
-	if err = e.start(i.opts.progress, i.opts.takeout); err != nil {
+	if err = e.start(i.opts.takeout); err != nil {
 		i.err = errors.Wrap(err, "create file")
 		return false
 	}
 
 	select {
 	case <-ctx.Done():
-		e.cleanupFile()
+		_ = e.closeFile()
 		i.err = ctx.Err()
 		return false
 	case i.elems <- e:
@@ -395,7 +384,7 @@ func (i *iter) Drain() {
 	for {
 		select {
 		case e := <-i.elems:
-			e.(*elem).cleanupFile()
+			_ = e.(*elem).closeFile()
 		default:
 			close(i.elems)
 			return

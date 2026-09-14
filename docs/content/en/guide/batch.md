@@ -109,7 +109,7 @@ python script used.
 
 Batch download resumes on two levels:
 
-1. **Message level**: every finished message is written to the state file
+1. **Message level**: every finished message is recorded, with batched writes to the state file
    (default `<download dir>/tdl_state.json`), so the next run skips it without
    requesting it again. Deleted and media-less messages are recorded as well, so
    they are not retried on every run.
@@ -120,6 +120,14 @@ Batch download resumes on two levels:
 
 Successful downloads clean up their `.tmp` and `.parts` files; interrupted ones
 keep them for the next run.
+
+Both batch mode and `tdl dl` keep a separate parts journal for each concurrent
+file. During downloads, journals are checkpointed after 32 new parts or on the
+next write at least one second after the last checkpoint. Normal completion or
+cancellation flushes the remaining records. Forcefully terminating the process
+may require downloading up to 31 unrecorded parts again. Legacy journals without
+a version cannot prove that their temporary files were preserved, so those
+unfinished files restart after upgrading.
 
 ## Troubleshooting
 
@@ -150,9 +158,10 @@ tdl batch --retry-skipped
 ### Incremental mode does not advance `last_ts`
 
 The timestamp only moves once nothing in the window is missing, so a failed
-download is retried by the next run instead of being skipped forever. Confirm
-the interactive prompt to force it forward when the remaining messages really
-should be skipped.
+download is retried by the next run instead of being skipped forever. `--yes`
+does not override this protection. Jobs that still have failures after retrying
+return an error. Reaching the history scan limit also preserves the timestamp
+to avoid skipping messages that have not been scanned.
 
 ## Incremental mode
 
@@ -180,3 +189,7 @@ Compared to the python script, the batch mode:
 - records deleted messages so they are never requested again;
 - picks the thread count per file size (like `tdl dl`) and resumes at part
   granularity instead of restarting whole files.
+- buffers message metadata while opening files on demand, caches resolved
+  dialogs, and avoids resolving already completed jobs;
+- batches parts journal writes and removes the fixed 200 ms progress delay
+  from small file downloads.

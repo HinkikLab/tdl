@@ -19,7 +19,8 @@ type iterElem struct {
 	fromMsg *tg.Message
 	file    *tmedia.Media
 
-	to *os.File
+	to    *os.File
+	parts *downloader.PartsStore
 
 	opts Options
 }

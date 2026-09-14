@@ -77,6 +77,7 @@ type Runner struct {
 
 	pool    dcpool.Pool
 	manager *peers.Manager
+	dialogs map[string]peers.Peer
 }
 
 // Run executes the batch download described by path.
@@ -147,6 +148,9 @@ func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Conf
 
 	var failed int
 	for idx := range cfg.Jobs {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
 		job := &cfg.Jobs[idx]
 
 		jobCtx := logctx.With(ctx, log.Named(fmt.Sprintf("job%d", idx+1)))
@@ -272,7 +276,7 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 			if incremental {
 				color.Yellow("Keeping the incremental timestamp so the next run covers this range again")
 			}
-			return nil
+			return errors.Errorf("%d message(s) still missing", len(left))
 		}
 
 		if err = r.download(ctx, job, link, dir, left, store, state, threads, limit); err != nil {
@@ -281,6 +285,7 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 
 		if left = state.Missing(targets); len(left) > 0 {
 			color.Yellow("%d message(s) are still missing", len(left))
+			return errors.Errorf("%d message(s) still missing", len(left))
 		}
 	}
 
@@ -298,7 +303,15 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 // download iterator from re-resolving those messages one by one.
 func (r *Runner) missing(ctx context.Context, job *Job, link Link, dir string, targets []int,
 	state *State, store *stateStore) []int {
+	targets = state.Missing(targets)
+	if len(targets) == 0 {
+		return nil
+	}
 	out := make([]int, 0, len(targets))
+	tpl, err := newNameTemplate(r.template())
+	if err != nil || !tpl.idsOnly() {
+		return targets
+	}
 
 	// without a resolvable dialog there is nothing to check on disk, so let
 	// the download path report the error
@@ -310,17 +323,6 @@ func (r *Runner) missing(ctx context.Context, job *Job, link Link, dir string, t
 		return state.Missing(targets)
 	}
 
-	tpl, err := newNameTemplate(r.template())
-	if err != nil {
-		return state.Missing(targets)
-	}
-
-	// if the template uses anything but the dialog and message id there is no
-	// way to predict the name before the message is resolved
-	if !tpl.idsOnly() {
-		return state.Missing(targets)
-	}
-
 	existing := existingNames(dir)
 	found := 0
 	for _, id := range targets {
@@ -328,7 +330,8 @@ func (r *Runner) missing(ctx context.Context, job *Job, link Link, dir string, t
 			continue
 		}
 
-		if _, ok := existing[tpl.name(peerID(dialog), id)]; ok {
+		name := filepath.Clean(tpl.name(peerID(dialog), id))
+		if _, ok := existing[name]; ok && isComplete(filepath.Join(dir, name)) {
 			state.Finish(id)
 			found++
 			continue
@@ -366,7 +369,7 @@ func existingNames(dir string) map[string]struct{} {
 
 			for _, s := range sub {
 				if !s.IsDir() {
-					out[s.Name()] = struct{}{}
+					out[filepath.Join(e.Name(), s.Name())] = struct{}{}
 				}
 			}
 			continue
@@ -404,7 +407,6 @@ func (r *Runner) download(ctx context.Context, job *Job, link Link, dir string, 
 		exclude:  r.opts.Exclude,
 		takeout:  r.opts.Takeout,
 		batch:    DefaultBatchSize,
-		progress: progress,
 		onFinish: func(ids []int) {
 			state.Finish(ids...)
 
@@ -450,6 +452,7 @@ func (r *Runner) download(ctx context.Context, job *Job, link Link, dir string, 
 
 	if serr := store.Save(); serr != nil {
 		log.Warn("Save state", zap.Error(serr))
+		multierr.AppendInto(&err, serr)
 	}
 
 	done, failed, skipped := progress.Stats()
@@ -487,6 +490,21 @@ func (r *Runner) download(ctx context.Context, job *Job, link Link, dir string, 
 // (?comment=N is also accepted), because the python config points chat_url at
 // the post and keeps the range in start_comment/end_comment.
 func (r *Runner) resolveDialog(ctx context.Context, job *Job, link Link) (peers.Peer, error) {
+	key := fmt.Sprintf("%t:%s", commentDialog(job, link), link.Chat)
+	if peer, ok := r.dialogs[key]; ok {
+		return peer, nil
+	}
+	peer, err := r.resolveDialogUncached(ctx, job, link)
+	if err == nil {
+		if r.dialogs == nil {
+			r.dialogs = make(map[string]peers.Peer)
+		}
+		r.dialogs[key] = peer
+	}
+	return peer, err
+}
+
+func (r *Runner) resolveDialogUncached(ctx context.Context, job *Job, link Link) (peers.Peer, error) {
 	peer, err := tutil.GetInputPeer(ctx, r.manager, link.Chat)
 	if err != nil {
 		return nil, errors.Wrapf(err, "resolve chat %q", link.Chat)
@@ -574,7 +592,11 @@ func (r *Runner) statePath(job *Job) string {
 		return r.cfg.StateFile
 	}
 
-	return filepath.Join(job.Dir(), DefaultStateFile)
+	dir := job.Dir()
+	if r.opts.Dir != "" {
+		dir = filepath.Join(r.opts.Dir, job.Subdir)
+	}
+	return filepath.Join(dir, DefaultStateFile)
 }
 
 // confirm asks the user a yes/no question.

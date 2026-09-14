@@ -1,6 +1,7 @@
 package autodl
 
 import (
+	"bytes"
 	"os"
 	"path/filepath"
 	"testing"
@@ -29,14 +30,17 @@ func TestElemLifecycle(t *testing.T) {
 
 	e := newTestElem(path, 3*downloader.MaxPartSize)
 
-	require.NoError(t, e.start(nil, false))
+	require.NoError(t, e.start(false))
 	require.NotNil(t, e.to)
 
 	// simulate two finished parts
-	_, err := e.writer.WriteAt([]byte("hello"), 0)
+	_, err := e.To().WriteAt(bytes.Repeat([]byte{1}, downloader.MaxPartSize), 0)
 	require.NoError(t, err)
-	_, err = e.writer.WriteAt([]byte("world"), downloader.MaxPartSize)
+	e.store.PartDone(0)
+	_, err = e.To().WriteAt(bytes.Repeat([]byte{2}, downloader.MaxPartSize), downloader.MaxPartSize)
 	require.NoError(t, err)
+	e.store.PartDone(1)
+	require.NoError(t, e.store.Flush())
 
 	sidecar := downloader.PartsPath(path + tempExt)
 	require.FileExists(t, sidecar)
@@ -61,17 +65,17 @@ func TestElemResumePreAllocates(t *testing.T) {
 
 	// first run: write two parts and abandon the temp file
 	first := newTestElem(path, size)
-	require.NoError(t, first.start(nil, false))
-	_, err := first.writer.WriteAt(make([]byte, 8), 0)
+	require.NoError(t, first.start(false))
+	data := bytes.Repeat([]byte{0xAD}, 2*downloader.MaxPartSize)
+	_, err := first.To().WriteAt(data, 0)
 	require.NoError(t, err)
-	_, err = first.writer.WriteAt(make([]byte, 8), downloader.MaxPartSize)
-	require.NoError(t, err)
+	first.store.PartDone(0)
+	first.store.PartDone(1)
 	require.NoError(t, first.closeFile())
 
-	// second run: the temp file is recreated (and truncated) by start, but the
-	// recorded parts must survive and the file must be pre-allocated again
+	// A restart must preserve the bytes, not just the journal and file size.
 	second := newTestElem(path, size)
-	require.NoError(t, second.start(nil, false))
+	require.NoError(t, second.start(false))
 
 	stat, err := second.to.Stat()
 	require.NoError(t, err)
@@ -79,6 +83,10 @@ func TestElemResumePreAllocates(t *testing.T) {
 
 	store := downloader.NewPartsStore(path+tempExt, size)
 	assert.Len(t, store.Done(), 2)
+	got := make([]byte, len(data))
+	_, err = second.to.ReadAt(got, 0)
+	require.NoError(t, err)
+	assert.Equal(t, data, got)
 
 	require.NoError(t, second.closeFile())
 }
@@ -91,7 +99,7 @@ func TestElemStaleTempFileIsDiscarded(t *testing.T) {
 	require.NoError(t, os.WriteFile(path+tempExt, []byte("stale"), 0o644))
 
 	e := newTestElem(path, 5*downloader.MaxPartSize)
-	require.NoError(t, e.start(nil, false))
+	require.NoError(t, e.start(false))
 
 	stat, err := e.to.Stat()
 	require.NoError(t, err)
@@ -107,7 +115,7 @@ func TestElemCleanup(t *testing.T) {
 	path := filepath.Join(dir, "1_2_video.mp4")
 
 	e := newTestElem(path, downloader.MaxPartSize)
-	require.NoError(t, e.start(nil, false))
+	require.NoError(t, e.start(false))
 
 	e.cleanupFile()
 
@@ -120,7 +128,7 @@ func TestElemFinishRenamesAndClearsParts(t *testing.T) {
 	path := filepath.Join(dir, "sub", "1_2_video.mp4")
 
 	e := newTestElem(path, downloader.MaxPartSize)
-	require.NoError(t, e.start(nil, false))
+	require.NoError(t, e.start(false))
 
 	require.NoError(t, e.finish())
 	assert.FileExists(t, path)

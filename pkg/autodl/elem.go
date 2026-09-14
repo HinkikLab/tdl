@@ -7,7 +7,6 @@ import (
 
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
-	"go.uber.org/atomic"
 
 	"github.com/iyear/tdl/core/downloader"
 	"github.com/iyear/tdl/core/tmedia"
@@ -32,14 +31,8 @@ type elem struct {
 	// store tracks the parts that already hit the disk.
 	store *downloader.PartsStore
 
-	to       *os.File
-	takeout  bool
-	writer   *elemWriter
-	progress *jobProgress
-
-	// written counts the bytes fetched during this run. It is only mutated by
-	// the writer path of one element.
-	written atomic.Int64
+	to      *os.File
+	takeout bool
 }
 
 // newElem prepares the destination of a media item. The temp file is created
@@ -55,8 +48,7 @@ func newElem(peer peers.Peer, msgID int, file downloader.File, date int64, name 
 }
 
 // start creates the temp file and wires the write path up.
-func (e *elem) start(progress *jobProgress, takeout bool) error {
-	e.progress = progress
+func (e *elem) start(takeout bool) error {
 	e.takeout = takeout
 
 	if dir := filepath.Dir(e.path); dir != "" && dir != "." {
@@ -67,26 +59,13 @@ func (e *elem) start(progress *jobProgress, takeout bool) error {
 
 	temp := e.path + tempExt
 
-	f, err := os.Create(temp)
+	f, store, err := downloader.OpenPartial(temp, e.file.Size())
 	if err != nil {
 		return err
 	}
 	e.to = f
 
-	e.store = downloader.NewPartsStore(temp, e.file.Size())
-
-	// keep the partial file so the next run can resume from it
-	ok := false
-	if parts := e.store.Done(); len(parts) > 0 {
-		if err = downloader.PreAllocate(f, e.file.Size()); err == nil {
-			ok = true
-		}
-	}
-	if !ok {
-		e.store.Reset()
-	}
-
-	e.writer = &elemWriter{elem: e}
+	e.store = store
 
 	return nil
 }
@@ -97,8 +76,12 @@ func (e *elem) closeFile() error {
 		return nil
 	}
 
+	flushErr := e.store.Flush()
 	err := e.to.Close()
 	e.to = nil
+	if flushErr != nil {
+		return flushErr
+	}
 	return err
 }
 
@@ -131,34 +114,10 @@ func (e *elem) cleanupFile() {
 func (e *elem) File() downloader.File { return e.file }
 
 // To implements downloader.Elem.
-func (e *elem) To() io.WriterAt { return e.writer }
+func (e *elem) To() io.WriterAt { return e.to }
 
 // AsTakeout implements downloader.Elem.
 func (e *elem) AsTakeout() bool { return e.takeout }
-
-// elemWriter forwards writes to the temp file while feeding the progress bar
-// and the parts sidecar.
-type elemWriter struct {
-	elem *elem
-}
-
-func (w *elemWriter) WriteAt(p []byte, off int64) (int, error) {
-	n, err := w.elem.to.WriteAt(p, off)
-	if err != nil {
-		return n, err
-	}
-
-	if w.elem.store != nil {
-		w.elem.store.PartDone(int(off / downloader.MaxPartSize))
-	}
-
-	w.elem.written.Add(int64(n))
-	if w.elem.progress != nil {
-		w.elem.progress.onWrite(w.elem)
-	}
-
-	return n, nil
-}
 
 // mediaFile adapts a telegram media item to downloader.File.
 type mediaFile struct {
@@ -180,5 +139,5 @@ func isComplete(path string) bool {
 		return false
 	}
 
-	return stat.Size() > 0
+	return stat.Mode().IsRegular() && stat.Size() > 0
 }

@@ -1,7 +1,8 @@
 package downloader
 
 import (
-	"time"
+	"io"
+	"sync"
 
 	"go.uber.org/atomic"
 )
@@ -53,14 +54,14 @@ type Resumer interface {
 	Reset(elem Elem)
 }
 
-// writeAt wrapper for file to use progress bar
-//
-// do not need mutex because gotd has use syncio.WriteAt
+// writeAt reports successful writes and journals only complete parts.
 type writeAt struct {
 	elem     Elem
 	progress Progress
 	resumer  Resumer
 	partSize int
+	resumed  int64
+	mu       sync.Mutex
 
 	downloaded *atomic.Int64
 }
@@ -77,24 +78,31 @@ func newWriteAt(elem Elem, progress Progress, resumer Resumer, partSize int) *wr
 
 func (w *writeAt) WriteAt(p []byte, off int64) (int, error) {
 	at, err := w.elem.To().WriteAt(p, off)
+	if err == nil && at != len(p) {
+		err = io.ErrShortWrite
+	}
 	if err != nil {
-		return 0, err
+		return at, err
 	}
 
-	// some small files may finish too fast, terminal history may not be overwritten
-	// this is just a simple way to avoid the problem
-	if at < w.partSize && at > 0 { // last part(every file only exec once)
-		time.Sleep(time.Millisecond * 200) // to ensure the progress render next time
-	}
-
-	if w.resumer != nil {
+	if w.resumer != nil && at > 0 && off%int64(w.partSize) == 0 &&
+		(at == w.partSize || off+int64(at) == w.elem.File().Size()) {
 		// mark the part as downloaded so a later interrupt can skip it
 		w.resumer.PartDone(w.elem, int(off/int64(w.partSize)))
 	}
 
-	w.progress.OnDownload(w.elem, ProgressState{
-		Downloaded: w.downloaded.Add(int64(at)),
-		Total:      w.elem.File().Size(),
-	})
+	// Resume workers write concurrently; serialize progress delivery so an
+	// older update cannot overwrite a newer value on the progress bar.
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	downloaded := w.downloaded.Add(int64(at))
+	if w.progress != nil {
+		w.progress.OnDownload(w.elem, ProgressState{
+			Downloaded: downloaded,
+			Total:      w.elem.File().Size(),
+			Resumed:    w.resumed,
+			Skipped:    w.resumed,
+		})
+	}
 	return at, nil
 }

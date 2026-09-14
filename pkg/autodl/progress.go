@@ -63,15 +63,20 @@ func (p *jobProgress) OnAdd(e downloader.Elem) {
 	p.mu.Unlock()
 }
 
-// onWrite feeds the progress bar. It is called from the download workers.
-func (p *jobProgress) onWrite(el *elem) {
-	p.mu.Lock()
-	tracker := p.trackers[el]
-	p.mu.Unlock()
+var _ downloader.Resumer = (*jobProgress)(nil)
 
-	if tracker != nil {
-		tracker.SetValue(el.written.Load())
-	}
+func (p *jobProgress) Resume(e downloader.Elem) (map[int]struct{}, int64, bool) {
+	el := e.(*elem)
+	done := el.store.Done()
+	return done, el.file.Size(), len(done) > 0
+}
+
+func (p *jobProgress) PartDone(e downloader.Elem, index int) {
+	e.(*elem).store.PartDone(index)
+}
+
+func (p *jobProgress) Reset(e downloader.Elem) {
+	e.(*elem).store.Reset()
 }
 
 // OnDownload implements downloader.Progress.
@@ -121,7 +126,9 @@ func (p *jobProgress) OnDone(e downloader.Elem, err error) {
 		}
 	}
 
-	el.cleanupFile()
+	if closeErr := el.closeFile(); closeErr != nil {
+		p.ctx.logger.Warn("Close partial file", zap.Error(closeErr))
+	}
 
 	p.mu.Lock()
 	p.failed++

@@ -8,6 +8,7 @@ import (
 	"github.com/fatih/color"
 	"github.com/go-faster/errors"
 	pw "github.com/jedib0t/go-pretty/v6/progress"
+	"go.uber.org/multierr"
 
 	"github.com/iyear/tdl/core/uploader"
 	"github.com/iyear/tdl/pkg/prog"
@@ -16,12 +17,7 @@ import (
 
 type progress struct {
 	pw       pw.Writer
-	trackers *sync.Map // map[tuple]*pw.Tracker
-}
-
-type tuple struct {
-	name string
-	to   int64
+	trackers *sync.Map // map[*iterElem]*pw.Tracker
 }
 
 func newProgress(p pw.Writer) *progress {
@@ -33,11 +29,11 @@ func newProgress(p pw.Writer) *progress {
 
 func (p *progress) OnAdd(elem uploader.Elem) {
 	tracker := prog.AppendTracker(p.pw, utils.Byte.FormatBinaryBytes, p.processMessage(elem), elem.File().Size())
-	p.trackers.Store(p.tuple(elem), tracker)
+	p.trackers.Store(elem.(*iterElem), tracker)
 }
 
 func (p *progress) OnUpload(elem uploader.Elem, state uploader.ProgressState) {
-	tracker, ok := p.trackers.Load(p.tuple(elem))
+	tracker, ok := p.trackers.Load(elem.(*iterElem))
 	if !ok {
 		return
 	}
@@ -48,10 +44,12 @@ func (p *progress) OnUpload(elem uploader.Elem, state uploader.ProgressState) {
 }
 
 func (p *progress) OnDone(elem uploader.Elem, err error) {
-	tracker, ok := p.trackers.Load(p.tuple(elem))
+	key := elem.(*iterElem)
+	tracker, ok := p.trackers.Load(key)
 	if !ok {
 		return
 	}
+	defer p.trackers.Delete(key)
 	t := tracker.(*pw.Tracker)
 	e := elem.(*iterElem)
 
@@ -71,29 +69,27 @@ func (p *progress) OnDone(elem uploader.Elem, err error) {
 			return
 		}
 	}
+	t.MarkAsDone()
 }
 
 func (p *progress) closeFile(e *iterElem) error {
+	var result error
 	if err := e.file.Close(); err != nil {
-		return errors.Wrap(err, "close file")
+		result = multierr.Append(result, errors.Wrap(err, "close file"))
 	}
 
 	if e.thumb != nil {
 		if err := e.thumb.Close(); err != nil {
-			return errors.Wrap(err, "close thumb")
+			result = multierr.Append(result, errors.Wrap(err, "close thumb"))
 		}
 	}
 
-	return nil
+	return result
 }
 
 func (p *progress) fail(t *pw.Tracker, elem uploader.Elem, err error) {
 	p.pw.Log(color.RedString("%s error: %s", p.elemString(elem), err.Error()))
 	t.MarkAsErrored()
-}
-
-func (p *progress) tuple(elem uploader.Elem) tuple {
-	return tuple{elem.(*iterElem).file.File.Name(), elem.(*iterElem).to.ID()}
 }
 
 func (p *progress) processMessage(elem uploader.Elem) string {

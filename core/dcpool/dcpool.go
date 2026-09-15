@@ -120,7 +120,9 @@ func (p *pool) Takeout(ctx context.Context, dc int) *tg.Client {
 		if err != nil {
 			logctx.From(ctx).Warn("takeout error", zap.Error(err))
 			// ignore init delay error and return non-takeout client
-			return p.Client(ctx, dc)
+			// p.mu is already held, so calling Client here would deadlock by
+			// attempting to lock it again.
+			return tg.NewClient(p.invoker(ctx, dc))
 		}
 		p.takeout = sid
 		logctx.From(ctx).Info("get takeout id", zap.Int64("id", sid))

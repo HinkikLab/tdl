@@ -151,7 +151,9 @@ func (p *progress) donePost(elem *iterElem) error {
 	if elem.file.Date > 0 {
 		fileTime := time.Unix(elem.file.Date, 0)
 		if err := os.Chtimes(newpath, fileTime, fileTime); err != nil {
-			return errors.Wrap(err, "set file time")
+			// The payload is already complete and renamed. A filesystem that
+			// rejects timestamp metadata must not make it download again.
+			p.pw.Log(color.YellowString("%s warning: set file time: %s", newpath, err))
 		}
 	}
 

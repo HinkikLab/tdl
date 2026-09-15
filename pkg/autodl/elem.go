@@ -21,7 +21,6 @@ const tempExt = ".tmp"
 type elem struct {
 	dialog peers.Peer
 	msgID  int
-	media  *tmedia.Media
 	file   downloader.File
 	date   int64
 
@@ -130,14 +129,3 @@ type mediaFile struct {
 func (m mediaFile) Location() tg.InputFileLocationClass { return m.media.InputFileLoc }
 func (m mediaFile) Size() int64                         { return m.media.Size }
 func (m mediaFile) DC() int                             { return m.media.DC }
-
-// isComplete reports whether the job directory already holds the final file of
-// this media.
-func isComplete(path string) bool {
-	stat, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-
-	return stat.Mode().IsRegular() && stat.Size() > 0
-}

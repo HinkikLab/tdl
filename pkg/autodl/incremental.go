@@ -156,14 +156,24 @@ loop:
 
 		if job.TopicID != nil && *job.TopicID > 0 {
 			// topics are message threads; only keep messages that answer the
-			// topic root
-			top, ok := m.GetReplyTo()
-			if !ok {
-				continue
-			}
-			header, ok := top.(*tg.MessageReplyHeader)
-			if !ok || header.ReplyToTopID != *job.TopicID {
-				continue
+			// topic root. Direct replies often omit ReplyToTopID, in which
+			// case ReplyToMsgID itself is the topic root.
+			if m.ID != *job.TopicID {
+				top, ok := m.GetReplyTo()
+				if !ok {
+					continue
+				}
+				header, ok := top.(*tg.MessageReplyHeader)
+				if !ok {
+					continue
+				}
+				topicID := header.ReplyToMsgID
+				if id, ok := header.GetReplyToTopID(); ok {
+					topicID = id
+				}
+				if topicID != *job.TopicID {
+					continue
+				}
 			}
 		}
 

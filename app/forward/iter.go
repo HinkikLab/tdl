@@ -72,6 +72,14 @@ type dest struct {
 }
 
 func newIter(opts iterOptions) *iter {
+	dialogs := make([]*tmessage.Dialog, 0, len(opts.dialogs))
+	for _, dialog := range opts.dialogs {
+		if dialog != nil && len(dialog.Messages) > 0 {
+			dialogs = append(dialogs, dialog)
+		}
+	}
+	opts.dialogs = dialogs
+
 	return &iter{
 		opts: opts,
 
@@ -97,7 +105,14 @@ func (i *iter) Next(ctx context.Context) bool {
 
 	// if delay is set, sleep for a while for each iteration
 	if i.opts.delay > 0 && (i.i+i.j) > 0 { // skip first delay
-		time.Sleep(i.opts.delay)
+		timer := time.NewTimer(i.opts.delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			i.err = ctx.Err()
+			return false
+		case <-timer.C:
+		}
 	}
 
 	p, m := i.opts.dialogs[i.i].Peer, i.opts.dialogs[i.i].Messages[i.j]

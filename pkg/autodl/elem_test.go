@@ -134,17 +134,3 @@ func TestElemFinishRenamesAndClearsParts(t *testing.T) {
 	assert.FileExists(t, path)
 	assert.NoFileExists(t, downloader.PartsPath(path+tempExt))
 }
-
-func TestIsComplete(t *testing.T) {
-	dir := t.TempDir()
-
-	assert.False(t, isComplete(filepath.Join(dir, "missing")))
-
-	empty := filepath.Join(dir, "empty")
-	require.NoError(t, os.WriteFile(empty, nil, 0o644))
-	assert.False(t, isComplete(empty))
-
-	full := filepath.Join(dir, "full")
-	require.NoError(t, os.WriteFile(full, []byte("x"), 0o644))
-	assert.True(t, isComplete(full))
-}

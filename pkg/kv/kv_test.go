@@ -4,6 +4,8 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"strconv"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -153,4 +155,37 @@ func TestStorage_MigrateFrom(t *testing.T) {
 			}
 		}
 	})
+}
+
+func TestFileStorageConcurrentUpdates(t *testing.T) {
+	storage, err := New(DriverFile, map[string]any{"path": filepath.Join(t.TempDir(), "test.json")})
+	require.NoError(t, err)
+	defer func() { require.NoError(t, storage.Close()) }()
+
+	ns, err := storage.Open("concurrent")
+	require.NoError(t, err)
+
+	const count = 100
+	var wg sync.WaitGroup
+	errs := make(chan error, count)
+	for i := range count {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			key := strconv.Itoa(i)
+			errs <- ns.Set(context.Background(), key, []byte(key))
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	for i := range count {
+		key := strconv.Itoa(i)
+		value, err := ns.Get(context.Background(), key)
+		require.NoError(t, err)
+		require.Equal(t, []byte(key), value)
+	}
 }

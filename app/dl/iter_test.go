@@ -8,6 +8,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/iyear/tdl/pkg/tmessage"
 )
 
 // TestIterDeletedMessageHandling verifies that deleted messages are handled correctly
@@ -228,4 +230,32 @@ func TestIterContextCancellation(t *testing.T) {
 			t.Fatal("Context should be cancelled")
 		}
 	})
+}
+
+func TestIterDelayHonorsCancellation(t *testing.T) {
+	it := &iter{
+		dialogs:      []*tmessage.Dialog{{Messages: []int{1, 2}}},
+		messageIndex: 1,
+		delay:        time.Hour,
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	done := make(chan bool, 1)
+	go func() { done <- it.Next(ctx) }()
+	time.Sleep(10 * time.Millisecond)
+	cancel()
+
+	select {
+	case ok := <-done:
+		require.False(t, ok)
+		require.ErrorIs(t, it.Err(), context.Canceled)
+	case <-time.After(time.Second):
+		t.Fatal("iterator ignored cancellation while waiting for delay")
+	}
+}
+
+func TestFlatDialogsDropsEmptyEntries(t *testing.T) {
+	valid := &tmessage.Dialog{Messages: []int{1}}
+	empty := &tmessage.Dialog{}
+	got := flatDialogs([][]*tmessage.Dialog{{nil, empty, valid}})
+	require.Equal(t, []*tmessage.Dialog{valid}, got)
 }

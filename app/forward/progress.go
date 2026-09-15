@@ -3,6 +3,7 @@ package forward
 import (
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/fatih/color"
 	pw "github.com/jedib0t/go-pretty/v6/progress"
@@ -14,9 +15,11 @@ import (
 )
 
 type progress struct {
-	pw       pw.Writer
-	trackers map[tuple]*pw.Tracker // TODO(iyear): concurrent map
-	elemName map[int64]string
+	pw        pw.Writer
+	trackers  *sync.Map // map[tuple]*pw.Tracker
+	trackerMu sync.Mutex
+	nameMu    sync.Mutex
+	elemName  map[int64]string
 }
 
 type tuple struct {
@@ -28,21 +31,24 @@ type tuple struct {
 func newProgress(p pw.Writer) *progress {
 	return &progress{
 		pw:       p,
-		trackers: make(map[tuple]*pw.Tracker),
+		trackers: &sync.Map{},
 		elemName: make(map[int64]string),
 	}
 }
 
 func (p *progress) OnAdd(elem forwarder.Elem) {
 	tracker := prog.AppendTracker(p.pw, pw.FormatNumber, p.processMessage(elem, false), 1)
-	p.trackers[p.tuple(elem)] = tracker
+	p.trackers.Store(p.tuple(elem), tracker)
 }
 
 func (p *progress) OnClone(elem forwarder.Elem, state forwarder.ProgressState) {
-	tracker, ok := p.trackers[p.tuple(elem)]
+	p.trackerMu.Lock()
+	defer p.trackerMu.Unlock()
+	trackerValue, ok := p.trackers.Load(p.tuple(elem))
 	if !ok {
 		return
 	}
+	tracker := trackerValue.(*pw.Tracker)
 
 	// display re-upload transfer info
 	tracker.Units.Formatter = utils.Byte.FormatBinaryBytes
@@ -52,10 +58,14 @@ func (p *progress) OnClone(elem forwarder.Elem, state forwarder.ProgressState) {
 }
 
 func (p *progress) OnDone(elem forwarder.Elem, err error) {
-	tracker, ok := p.trackers[p.tuple(elem)]
+	p.trackerMu.Lock()
+	defer p.trackerMu.Unlock()
+	key := p.tuple(elem)
+	trackerValue, ok := p.trackers.LoadAndDelete(key)
 	if !ok {
 		return
 	}
+	tracker := trackerValue.(*pw.Tracker)
 
 	if err != nil {
 		p.pw.Log(color.RedString("%s error: %s", p.metaString(elem), err.Error()))
@@ -89,6 +99,9 @@ func (p *progress) processMessage(elem forwarder.Elem, clone bool) string {
 }
 
 func (p *progress) metaString(elem forwarder.Elem) string {
+	p.nameMu.Lock()
+	defer p.nameMu.Unlock()
+
 	// TODO(iyear): better responsive name
 	if _, ok := p.elemName[elem.From().ID()]; !ok {
 		p.elemName[elem.From().ID()] = runewidth.Truncate(elem.From().VisibleName(), 15, "...")

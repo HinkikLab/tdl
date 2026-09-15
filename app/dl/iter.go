@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
 	"text/template"
 	"time"
@@ -88,8 +89,9 @@ func newIter(pool dcpool.Pool, manager *peers.Manager, dialog [][]*tmessage.Dial
 	}
 
 	// include and exclude
-	includeMap := filterMap.New(opts.Include, fsutil.AddPrefixDot)
-	excludeMap := filterMap.New(opts.Exclude, fsutil.AddPrefixDot)
+	normalizeExt := func(ext string) string { return strings.ToLower(fsutil.AddPrefixDot(ext)) }
+	includeMap := filterMap.New(opts.Include, normalizeExt)
+	excludeMap := filterMap.New(opts.Exclude, normalizeExt)
 
 	// to keep fingerprint stable
 	sortDialogs(dialogs, opts.Desc)
@@ -130,7 +132,14 @@ func (i *iter) Next(ctx context.Context) bool {
 
 	// if delay is set, sleep for a while for each iteration
 	if i.delay > 0 && (i.dialogIndex+i.messageIndex) > 0 { // skip first delay
-		time.Sleep(i.delay)
+		timer := time.NewTimer(i.delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			i.err = ctx.Err()
+			return false
+		case <-timer.C:
+		}
 	}
 
 	if len(i.elem) > 0 { // there are messages(grouped) in channel that not processed
@@ -218,7 +227,7 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 	}
 
 	// process include and exclude
-	ext := filepath.Ext(item.Name)
+	ext := strings.ToLower(filepath.Ext(item.Name))
 	if _, ok = i.include[ext]; len(i.include) > 0 && !ok {
 		return false, true
 	}
@@ -240,9 +249,14 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 		i.err = errors.Wrap(err, "execute template")
 		return false, false
 	}
+	finalPath, err := fsutil.JoinWithin(i.opts.Dir, toName.String())
+	if err != nil {
+		i.err = errors.Wrap(err, "resolve output path")
+		return false, false
+	}
 
 	if i.opts.SkipSame {
-		if stat, err := os.Stat(filepath.Join(i.opts.Dir, toName.String())); err == nil {
+		if stat, err := os.Stat(finalPath); err == nil {
 			if fsutil.GetNameWithoutExt(toName.String()) == fsutil.GetNameWithoutExt(stat.Name()) &&
 				stat.Size() == item.Size {
 				return false, true
@@ -250,8 +264,7 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 		}
 	}
 
-	filename := fmt.Sprintf("%s%s", toName.String(), tempExt)
-	path := filepath.Join(i.opts.Dir, filename)
+	path := fmt.Sprintf("%s%s", finalPath, tempExt)
 
 	// #113. If path contains dirs, create it. So now we support nested dirs.
 	if err = os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
@@ -381,10 +394,11 @@ func (i *iter) DeletedIDs() []string {
 func flatDialogs(dialogs [][]*tmessage.Dialog) []*tmessage.Dialog {
 	res := make([]*tmessage.Dialog, 0)
 	for _, d := range dialogs {
-		if len(d) == 0 {
-			continue
+		for _, dialog := range d {
+			if dialog != nil && len(dialog.Messages) > 0 {
+				res = append(res, dialog)
+			}
 		}
-		res = append(res, d...)
 	}
 	return res
 }

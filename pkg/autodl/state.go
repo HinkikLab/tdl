@@ -20,6 +20,9 @@ import (
 // All methods are safe for concurrent use: the download workers and the
 // iterator both record ids while a job runs.
 type State struct {
+	// Scope identifies the Telegram dialog and mode this state belongs to.
+	// It prevents colliding message IDs when multiple jobs share a state path.
+	Scope string `json:"scope,omitempty"`
 	// Finished holds the message ids that are already downloaded or known to
 	// be unavailable, so they are not requested again.
 	Finished []int `json:"finished"`
@@ -32,6 +35,8 @@ type State struct {
 	mu       sync.Mutex
 	finished map[int]struct{}
 	skipped  map[int]struct{}
+	// needsScopeSave is set when a legacy unscoped file is claimed by a job.
+	needsScopeSave bool
 }
 
 // NewState returns an empty state.
@@ -44,7 +49,12 @@ func NewState() *State {
 
 // LoadState reads a state file. A missing file yields an empty state.
 func LoadState(path string) (*State, error) {
+	return loadState(path, "")
+}
+
+func loadState(path, scope string) (*State, error) {
 	s := NewState()
+	s.Scope = scope
 	if path == "" {
 		return s, nil
 	}
@@ -58,14 +68,23 @@ func LoadState(path string) (*State, error) {
 	}
 
 	var raw struct {
-		Finished []int `json:"finished"`
-		Skipped  []int `json:"skipped"`
-		LastTS   int64 `json:"last_ts"`
+		Scope    string `json:"scope"`
+		Finished []int  `json:"finished"`
+		Skipped  []int  `json:"skipped"`
+		LastTS   int64  `json:"last_ts"`
 	}
 	if err = json.Unmarshal(b, &raw); err != nil {
 		return nil, errors.Wrapf(err, "parse state %s", path)
 	}
+	if scope != "" && raw.Scope != "" && raw.Scope != scope {
+		return nil, errors.Errorf("state %s belongs to %q, not %q; use a distinct subdir or state file", path, raw.Scope, scope)
+	}
 
+	s.Scope = raw.Scope
+	if s.Scope == "" {
+		s.Scope = scope
+		s.needsScopeSave = scope != ""
+	}
 	s.LastTS = raw.LastTS
 	for _, id := range raw.Finished {
 		s.finished[id] = struct{}{}
@@ -86,10 +105,12 @@ func (s *State) Save(path string) error {
 
 	s.mu.Lock()
 	raw := struct {
-		Finished []int `json:"finished"`
-		Skipped  []int `json:"skipped"`
-		LastTS   int64 `json:"last_ts"`
+		Scope    string `json:"scope,omitempty"`
+		Finished []int  `json:"finished"`
+		Skipped  []int  `json:"skipped"`
+		LastTS   int64  `json:"last_ts"`
 	}{
+		Scope:    s.Scope,
 		Finished: s.finishedIDs(),
 		Skipped:  s.skippedIDs(),
 		LastTS:   s.LastTS,
@@ -112,7 +133,13 @@ func (s *State) Save(path string) error {
 		return errors.Wrapf(err, "write state %s", path)
 	}
 
-	return os.Rename(tmp, path)
+	if err = os.Rename(tmp, path); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.needsScopeSave = false
+	s.mu.Unlock()
+	return nil
 }
 
 // IsFinished reports whether the id is downloaded or skipped.
@@ -250,13 +277,23 @@ type stateStore struct {
 const saveInterval = 500 * time.Millisecond
 
 // LoadStateStore opens (or creates) the state store of a job.
-func LoadStateStore(path string) (*stateStore, *State, error) {
-	st, err := LoadState(path)
+func LoadStateStore(path string, scopes ...string) (*stateStore, *State, error) {
+	scope := ""
+	if len(scopes) > 0 {
+		scope = scopes[0]
+	}
+	st, err := loadState(path, scope)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	return &stateStore{path: path, state: st}, st, nil
+	store := &stateStore{path: path, state: st}
+	if st.needsScopeSave {
+		if err := store.Save(); err != nil {
+			return nil, nil, errors.Wrap(err, "bind legacy state scope")
+		}
+	}
+	return store, st, nil
 }
 
 // Save persists the current state.

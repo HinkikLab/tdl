@@ -108,3 +108,37 @@ func TestStateClearSkipped(t *testing.T) {
 	assert.Equal(t, 0, reloaded.ClearSkipped())
 	assert.Equal(t, []int{2, 3}, reloaded.Missing([]int{1, 2, 3}))
 }
+
+func TestStateScopeRejectsAnotherDialog(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tdl_state.json")
+	store, state, err := LoadStateStore(path, "v1|first")
+	require.NoError(t, err)
+	state.Finish(1)
+	require.NoError(t, store.Save())
+
+	_, _, err = LoadStateStore(path, "v1|second")
+	assert.Error(t, err)
+}
+
+func TestLegacyStateBindsScopeOnLoad(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "tdl_state.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"finished":[1]}`), 0o600))
+
+	_, _, err := LoadStateStore(path, "v1|first")
+	require.NoError(t, err)
+	_, _, err = LoadStateStore(path, "v1|second")
+	assert.Error(t, err)
+}
+
+func TestStateScopeIncludesOutputSemantics(t *testing.T) {
+	job := &Job{mode: ModeDirect}
+	link := Link{Chat: "Channel"}
+	r := &Runner{opts: Options{Template: "{{.MessageID}}", Include: []string{"MP4", ".jpg"}}}
+	base := r.stateScope(job, link, "downloads")
+
+	reordered := &Runner{opts: Options{Template: "{{.MessageID}}", Include: []string{"jpg", ".mp4"}}}
+	assert.Equal(t, base, reordered.stateScope(job, link, "downloads"))
+	assert.NotEqual(t, base, r.stateScope(job, link, "other"))
+	r.opts.Template = "{{.FileName}}"
+	assert.NotEqual(t, base, r.stateScope(job, link, "downloads"))
+}

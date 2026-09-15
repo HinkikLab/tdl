@@ -86,7 +86,7 @@ func TestDownloadReportsFailureToProgress(t *testing.T) {
 	var got error
 	p := callbackProgress{done: func(_ Elem, err error) { got = err }}
 	d := New(Options{Pool: testPool{api}, Threads: 1, Iter: &singleIter{elem: el}, Progress: p})
-	require.NoError(t, d.Download(context.Background(), 1), "individual errors are handled by progress so other files continue")
+	require.ErrorIs(t, d.Download(context.Background(), 1), expected)
 	require.ErrorIs(t, got, expected)
 }
 
@@ -124,6 +124,13 @@ func TestDownloadWaitsForWorkersOnIteratorError(t *testing.T) {
 func TestDownloadRejectsInvalidLimit(t *testing.T) {
 	require.Error(t, New(Options{}).Download(context.Background(), 0))
 	require.Error(t, New(Options{}).Download(context.Background(), -1))
+}
+
+func TestDownloadRejectsMissingDependencies(t *testing.T) {
+	ctx := context.Background()
+	require.Error(t, New(Options{Iter: &singleIter{}, Progress: callbackProgress{}}).Download(ctx, 1))
+	require.Error(t, New(Options{Pool: testPool{}, Progress: callbackProgress{}}).Download(ctx, 1))
+	require.Error(t, New(Options{Pool: testPool{}, Iter: &singleIter{}}).Download(ctx, 1))
 }
 
 func TestResumeAlignedTailAndProgress(t *testing.T) {
@@ -263,7 +270,7 @@ func TestDownloadRejectsIncompleteFile(t *testing.T) {
 	var marked bool
 	p := callbackProgress{done: func(_ Elem, err error) { result = err }, part: func(int) { marked = true }}
 	d := New(Options{Pool: testPool{tg.NewClient(&mockRPC{data: []byte("short")})}, Threads: 1, Iter: &singleIter{elem: el}, Progress: p})
-	require.NoError(t, d.Download(context.Background(), 1))
+	require.ErrorContains(t, d.Download(context.Background(), 1), "incomplete download")
 	require.ErrorContains(t, result, "incomplete download")
 	require.False(t, marked, "a truncated response cannot become a completed resume part")
 }

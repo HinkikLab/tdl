@@ -350,6 +350,9 @@ var threadsLevels = []struct {
 }
 
 func BestThreads(size int64, max int) int {
+	if max <= 0 {
+		return 1
+	}
 	// Get best threads num for download, based on file size
 	for _, thread := range threadsLevels {
 		if size < thread.size {

@@ -18,9 +18,9 @@ func New(formatter progress.UnitsFormatter) progress.Writer {
 	if size, err := tsize.GetSize(); err == nil {
 		width = size.Width
 	}
-	width -= 50 // tail length
-	pw.SetTrackerLength(width / 5)
-	pw.SetMessageWidth(width * 3 / 5)
+	width = max(20, width-50) // reserve the tail without producing negative widths
+	pw.SetTrackerLength(max(1, width/5))
+	pw.SetMessageWidth(max(1, width*3/5))
 	pw.SetStyle(progress.StyleDefault)
 	pw.SetTrackerPosition(progress.PositionRight)
 	pw.SetUpdateFrequency(time.Millisecond * 100)
@@ -45,6 +45,7 @@ func Wait(ctx context.Context, pw progress.Writer) {
 	for pw.IsRenderInProgress() {
 		select {
 		case <-ctx.Done():
+			pw.Stop()
 			return
 		default:
 			if pw.LengthActive() == 0 {

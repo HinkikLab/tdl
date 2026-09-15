@@ -36,9 +36,14 @@ func TestParseLink(t *testing.T) {
 			want: Link{Chat: "1697797156", MessageID: 151, Comment: 99},
 		},
 		{
-			name: "topic link keeps the topic out of the message id",
+			name: "public topic link uses the final message id",
 			raw:  "https://t.me/iFreeKnow/45662/55005",
-			want: Link{Chat: "iFreeKnow", MessageID: 45662},
+			want: Link{Chat: "iFreeKnow", MessageID: 55005},
+		},
+		{
+			name: "private topic link uses the final message id",
+			raw:  "https://t.me/c/1492447836/251015/251021",
+			want: Link{Chat: "1492447836", MessageID: 251021},
 		},
 		{
 			name: "missing scheme",
@@ -64,6 +69,9 @@ func TestParseLinkErrors(t *testing.T) {
 		"https://t.me/c/123",
 		"https://t.me/channel/notanumber",
 		"https://t.me/channel/1?comment=abc",
+		"https://t.me/channel/0",
+		"https://t.me/channel/1?comment=0",
+		"https://t.me/channel/topic/message/extra",
 	} {
 		t.Run(raw, func(t *testing.T) {
 			_, err := ParseLink(raw)
@@ -191,6 +199,71 @@ func TestLoadConfigErrors(t *testing.T) {
 		_, err := LoadConfig(path)
 		assert.Error(t, err, "a range job without a range must be rejected")
 	})
+
+	t.Run("unknown field", func(t *testing.T) {
+		path := filepath.Join(dir, "unknown.json")
+		body := `{"jobs":[{"chat_url":"https://t.me/a/1","start_comment":1,"end_comment":2,"start_commment":1}]}`
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+
+		_, err := LoadConfig(path)
+		assert.Error(t, err)
+	})
+
+	t.Run("subdir escapes download base", func(t *testing.T) {
+		path := filepath.Join(dir, "escape.json")
+		body := `{"jobs":[{"chat_url":"https://t.me/a/1","start_comment":1,"end_comment":2,"subdir":"../outside"}]}`
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+
+		_, err := LoadConfig(path)
+		assert.Error(t, err)
+	})
+
+	t.Run("invalid performance setting", func(t *testing.T) {
+		path := filepath.Join(dir, "performance.json")
+		body := `{"threads":0,"jobs":[{"chat_url":"https://t.me/a/1","start_comment":1,"end_comment":2}]}`
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+
+		_, err := LoadConfig(path)
+		assert.Error(t, err)
+	})
+
+	t.Run("zero pool means unlimited", func(t *testing.T) {
+		path := filepath.Join(dir, "unlimited-pool.json")
+		body := `{"pool":0,"jobs":[{"chat_url":"https://t.me/a/1","start_comment":1,"end_comment":2}]}`
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+
+		cfg, err := LoadConfig(path)
+		require.NoError(t, err)
+		require.NotNil(t, cfg.Pool)
+		assert.Zero(t, *cfg.Pool)
+	})
+
+	t.Run("excessive range", func(t *testing.T) {
+		path := filepath.Join(dir, "huge-range.json")
+		body := `{"jobs":[{"chat_url":"https://t.me/a/1","start_comment":1,"end_comment":1000002}]}`
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+
+		_, err := LoadConfig(path)
+		assert.Error(t, err)
+	})
+}
+
+func TestIntValueRejectsLossyNumbers(t *testing.T) {
+	_, ok := IntValue(1.5)
+	assert.False(t, ok)
+	_, ok = IntValue(uint64(^uint(0)))
+	assert.False(t, ok)
+}
+
+func TestLoadConfigForRunAppliesIncrementalBeforeValidation(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "incremental.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"chat_url":"https://t.me/a/1"}]}`), 0o600))
+
+	_, err := LoadConfig(path)
+	require.Error(t, err)
+	cfg, err := LoadConfigForRun(path, true)
+	require.NoError(t, err)
+	require.True(t, cfg.Jobs[0].UsesIncremental(cfg.Incremental))
 }
 
 func TestRangeIDs(t *testing.T) {

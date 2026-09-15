@@ -78,7 +78,14 @@ func (i *iter) Next(ctx context.Context) bool {
 
 	// if delay is set, sleep for a while for each iteration
 	if i.delay > 0 && i.cur > 0 { // skip first delay
-		time.Sleep(i.delay)
+		timer := time.NewTimer(i.delay)
+		defer timer.Stop()
+		select {
+		case <-ctx.Done():
+			i.err = ctx.Err()
+			return false
+		case <-timer.C:
+		}
 	}
 
 	cur := i.files[i.cur]
@@ -94,11 +101,16 @@ func (i *iter) Next(ctx context.Context) bool {
 	return true
 }
 
-func (i *iter) next(ctx context.Context, cur *File) (*iterElem, error) {
+func (i *iter) next(ctx context.Context, cur *File) (_ *iterElem, rerr error) {
 	file, err := i.resolveFile(cur.File)
 	if err != nil {
 		return nil, errors.Wrap(err, "resolve file")
 	}
+	defer func() {
+		if rerr != nil {
+			_ = file.Close()
+		}
+	}()
 
 	env := exprEnv(ctx, cur)
 
@@ -137,6 +149,7 @@ func (i *iter) resolveFile(path string) (*uploaderFile, error) {
 
 	stat, err := f.Stat()
 	if err != nil {
+		_ = f.Close()
 		return nil, errors.Wrap(err, "stat file")
 	}
 
@@ -233,8 +246,11 @@ func (i *iter) resolveThumb(path string) (*uploaderFile, error) {
 
 	// has thumbnail
 	mime, err := mimetype.DetectFile(path)
-	if err != nil || !mediautil.IsImage(mime.String()) { // TODO(iyear): jpg only
-		return nil, errors.Wrapf(err, "invalid thumbnail file: %v", path)
+	if err != nil {
+		return nil, errors.Wrapf(err, "detect thumbnail file: %v", path)
+	}
+	if !mediautil.IsImage(mime.String()) { // TODO(iyear): jpg only
+		return nil, errors.Errorf("invalid thumbnail file: %v", path)
 	}
 
 	thumb, err := os.Open(path)

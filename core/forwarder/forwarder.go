@@ -10,6 +10,7 @@ import (
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
 	"go.uber.org/atomic"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/iyear/tdl/core/dcpool"
@@ -51,6 +52,17 @@ func New(opts Options) *Forwarder {
 }
 
 func (f *Forwarder) Forward(ctx context.Context) error {
+	if f.opts.Pool == nil {
+		return errors.New("forward pool is required")
+	}
+	if f.opts.Iter == nil {
+		return errors.New("forward iterator is required")
+	}
+	if f.opts.Progress == nil {
+		return errors.New("forward progress is required")
+	}
+
+	var failures error
 	for f.opts.Iter.Next(ctx) {
 		elem := f.opts.Iter.Value()
 		if _, ok := f.sent[f.tuple(elem.From(), elem.Msg())]; ok {
@@ -61,10 +73,19 @@ func (f *Forwarder) Forward(ctx context.Context) error {
 		if _, ok := elem.Msg().GetGroupedID(); ok && elem.AsGrouped() {
 			grouped, err := tutil.GetGroupedMessages(ctx, f.opts.Pool.Default(ctx), elem.From().InputPeer(), elem.Msg())
 			if err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return err
+				}
+				logctx.From(ctx).Warn("Resolve grouped messages", zap.Error(err))
+				failures = multierr.Append(failures, errors.Wrap(err, "resolve grouped messages"))
 				continue
 			}
 
 			if err = f.forwardMessage(ctx, elem, grouped...); err != nil {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+					return err
+				}
+				failures = multierr.Append(failures, err)
 				continue
 			}
 
@@ -73,24 +94,27 @@ func (f *Forwarder) Forward(ctx context.Context) error {
 
 		if err := f.forwardMessage(ctx, elem); err != nil {
 			// canceled by user, so we directly return error to stop all
-			if errors.Is(err, context.Canceled) {
+			if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 				return err
 			}
+			failures = multierr.Append(failures, err)
 			continue
 		}
 	}
 
-	return f.opts.Iter.Err()
+	return multierr.Append(failures, f.opts.Iter.Err())
 }
 
 func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*tg.Message) (rerr error) {
 	f.opts.Progress.OnAdd(elem)
 	defer func() {
-		f.sent[f.tuple(elem.From(), elem.Msg())] = struct{}{}
+		if rerr == nil {
+			f.sent[f.tuple(elem.From(), elem.Msg())] = struct{}{}
 
-		// grouped message also should be marked as sent
-		for _, m := range grouped {
-			f.sent[f.tuple(elem.From(), m)] = struct{}{}
+			// grouped message also should be marked as sent
+			for _, m := range grouped {
+				f.sent[f.tuple(elem.From(), m)] = struct{}{}
+			}
 		}
 		f.opts.Progress.OnDone(elem, rerr)
 	}()

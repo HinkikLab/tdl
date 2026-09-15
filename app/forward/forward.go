@@ -65,6 +65,9 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 	if err != nil {
 		return errors.Wrap(err, "collect dialogs")
 	}
+	if totalMessages(dialogs) == 0 {
+		return errors.New("you must specify at least one message")
+	}
 
 	manager := peers.Options{Storage: storage.NewPeers(kvd)}.Build(pool.Default(ctx))
 

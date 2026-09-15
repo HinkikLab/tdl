@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"strconv"
 	"sync"
+	"time"
 
 	"github.com/fatih/color"
 	"github.com/go-faster/errors"
@@ -34,6 +35,11 @@ type media struct {
 	MIME string
 }
 
+type mediaKey struct {
+	peer    string
+	message int
+}
+
 //go:embed serve.go.tmpl
 var tmpl string
 
@@ -48,27 +54,31 @@ func serve(ctx context.Context,
 
 	router := mux.NewRouter()
 
-	cache := &sync.Map{} // map[string]*media
+	cache := &sync.Map{} // map[mediaKey]*media
 	router.Handle("/{peer}/{message:[0-9]+}", handler(func(w http.ResponseWriter, r *http.Request) error {
+		requestCtx, cancel := context.WithCancel(r.Context())
+		defer cancel()
+		stopCancel := context.AfterFunc(ctx, cancel)
+		defer stopCancel()
 		vars := mux.Vars(r)
 		peer := vars["peer"]
 		messageStr := vars["message"]
+		message, err := strconv.Atoi(messageStr)
+		if err != nil {
+			return errors.Wrap(err, "invalid message id")
+		}
+		key := mediaKey{peer: peer, message: message}
 
 		var item *media
-		if t, ok := cache.Load(peer + messageStr); ok {
+		if t, ok := cache.Load(key); ok {
 			item = t.(*media)
 		} else {
-			message, err := strconv.Atoi(messageStr)
-			if err != nil {
-				return errors.Wrap(err, "invalid message id")
-			}
-
-			p, err := tutil.GetInputPeer(ctx, manager, peer)
+			p, err := tutil.GetInputPeer(requestCtx, manager, peer)
 			if err != nil {
 				return errors.Wrap(err, "resolve peer")
 			}
 
-			msg, err := tutil.GetSingleMessage(ctx, pool.Default(ctx), p.InputPeer(), message)
+			msg, err := tutil.GetSingleMessage(requestCtx, pool.Default(requestCtx), p.InputPeer(), message)
 			if err != nil {
 				return errors.Wrap(err, "resolve message")
 			}
@@ -78,12 +88,12 @@ func serve(ctx context.Context,
 				return errors.Wrap(err, "convItem")
 			}
 
-			cache.Store(peer+messageStr, item)
+			cache.Store(key, item)
 		}
 
-		api := pool.Client(ctx, item.DC)
+		api := pool.Client(requestCtx, item.DC)
 		if takeout {
-			api = pool.Takeout(ctx, item.DC)
+			api = pool.Takeout(requestCtx, item.DC)
 		}
 
 		u := partio.NewStreamer(
@@ -102,6 +112,9 @@ func serve(ctx context.Context,
 	items := make([]string, 0)
 	for _, dialog := range dialogs {
 		for _, d := range dialog {
+			if d == nil {
+				continue
+			}
 			for _, m := range d.Messages {
 				items = append(items, fmt.Sprintf("%d/%d", tutil.GetInputPeerID(d.Peer), m))
 			}
@@ -120,18 +133,31 @@ func serve(ctx context.Context,
 	}))
 
 	s := http.Server{
-		Addr:    fmt.Sprintf(":%d", port),
-		Handler: router,
+		Addr:              fmt.Sprintf(":%d", port),
+		Handler:           router,
+		ReadHeaderTimeout: 10 * time.Second,
+		IdleTimeout:       time.Minute,
 	}
 
+	serverDone := make(chan struct{})
+	defer close(serverDone)
 	go func() {
-		<-ctx.Done()
-		_ = s.Shutdown(ctx)
+		select {
+		case <-ctx.Done():
+			shutdownCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+			defer cancel()
+			_ = s.Shutdown(shutdownCtx)
+		case <-serverDone:
+		}
 	}()
 
 	color.Green("(Beta) Serving on http://localhost:%d", port)
 
-	return s.ListenAndServe()
+	err = s.ListenAndServe()
+	if errors.Is(err, http.ErrServerClosed) && ctx.Err() != nil {
+		return nil
+	}
+	return err
 }
 
 func handler(h func(w http.ResponseWriter, r *http.Request) error) http.Handler {

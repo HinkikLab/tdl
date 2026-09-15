@@ -91,16 +91,14 @@ func (f *file) Open(ns string) (storage.Storage, error) {
 		return nil, errors.New("namespace is required")
 	}
 
-	read, err := f.read()
-	if err != nil {
-		return nil, errors.Wrap(err, "read")
-	}
-
-	if _, ok := read[ns]; !ok {
-		read[ns] = make(map[string][]byte)
-		if err = f.write(read); err != nil {
-			return nil, errors.Wrap(err, "write")
+	if err := f.update(func(data map[string]map[string][]byte) bool {
+		if _, ok := data[ns]; !ok {
+			data[ns] = make(map[string][]byte)
+			return true
 		}
+		return false
+	}); err != nil {
+		return nil, errors.Wrap(err, "open namespace")
 	}
 
 	return &fileKV{f: f, ns: ns}, nil
@@ -113,7 +111,10 @@ func (f *file) Close() error {
 func (f *file) read() (map[string]map[string][]byte, error) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	return f.readLocked()
+}
 
+func (f *file) readLocked() (map[string]map[string][]byte, error) {
 	bytes, err := os.ReadFile(f.path)
 	if err != nil {
 		return nil, err
@@ -130,13 +131,30 @@ func (f *file) read() (map[string]map[string][]byte, error) {
 func (f *file) write(m map[string]map[string][]byte) error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
+	return f.writeLocked(m)
+}
 
+func (f *file) writeLocked(m map[string]map[string][]byte) error {
 	bytes, err := json.Marshal(m)
 	if err != nil {
 		return err
 	}
 
 	return os.WriteFile(f.path, bytes, 0o644)
+}
+
+func (f *file) update(fn func(map[string]map[string][]byte) bool) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	data, err := f.readLocked()
+	if err != nil {
+		return err
+	}
+	if !fn(data) {
+		return nil
+	}
+	return f.writeLocked(data)
 }
 
 type fileKV struct {
@@ -157,23 +175,21 @@ func (f *fileKV) Get(_ context.Context, key string) ([]byte, error) {
 }
 
 func (f *fileKV) Set(_ context.Context, key string, value []byte) error {
-	m, err := f.f.read()
-	if err != nil {
-		return errors.Wrap(err, "read")
-	}
-
-	m[f.ns][key] = value
-
-	return f.f.write(m)
+	return f.f.update(func(data map[string]map[string][]byte) bool {
+		if data[f.ns] == nil {
+			data[f.ns] = make(map[string][]byte)
+		}
+		data[f.ns][key] = value
+		return true
+	})
 }
 
 func (f *fileKV) Delete(_ context.Context, key string) error {
-	m, err := f.f.read()
-	if err != nil {
-		return errors.Wrap(err, "read")
-	}
-
-	delete(m[f.ns], key)
-
-	return f.f.write(m)
+	return f.f.update(func(data map[string]map[string][]byte) bool {
+		if _, ok := data[f.ns][key]; !ok {
+			return false
+		}
+		delete(data[f.ns], key)
+		return true
+	})
 }

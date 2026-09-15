@@ -1,6 +1,7 @@
 package fsutil
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -21,4 +22,17 @@ func AddPrefixDot(ext string) string {
 		return "." + ext
 	}
 	return ext
+}
+
+// JoinWithin joins a generated relative path to dir and rejects paths that
+// would escape the configured output directory.
+func JoinWithin(dir, name string) (string, error) {
+	if strings.TrimSpace(name) == "" {
+		return "", fmt.Errorf("generated path is empty")
+	}
+	clean := filepath.Clean(name)
+	if filepath.IsAbs(clean) || filepath.VolumeName(clean) != "" || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("generated path escapes the output directory: %q", name)
+	}
+	return filepath.Join(dir, clean), nil
 }

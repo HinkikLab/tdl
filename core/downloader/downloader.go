@@ -2,9 +2,11 @@ package downloader
 
 import (
 	"context"
+	"sync"
 
 	"github.com/go-faster/errors"
 	"github.com/gotd/td/telegram/downloader"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 	"golang.org/x/sync/errgroup"
 
@@ -49,10 +51,21 @@ func (d *Downloader) Download(ctx context.Context, limit int) error {
 	if limit <= 0 {
 		return errors.New("download limit must be positive")
 	}
+	if d.opts.Pool == nil {
+		return errors.New("download pool is required")
+	}
+	if d.opts.Iter == nil {
+		return errors.New("download iterator is required")
+	}
+	if d.opts.Progress == nil {
+		return errors.New("download progress is required")
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	wg, wgctx := errgroup.WithContext(ctx)
 	wg.SetLimit(limit)
+	var failureMu sync.Mutex
+	var failures error
 
 	for d.opts.Iter.Next(wgctx) {
 		elem := d.opts.Iter.Value()
@@ -68,13 +81,17 @@ func (d *Downloader) Download(ctx context.Context, limit int) error {
 					return errors.Wrap(err, "download")
 				}
 
-				// don't return error, just log it
+				// Continue independent files, but report every failure after all
+				// scheduled downloads have settled.
 				logctx.
 					From(ctx).
 					Error("Download error",
 						zap.Any("element", elem),
 						zap.Error(err),
 					)
+				failureMu.Lock()
+				failures = multierr.Append(failures, err)
+				failureMu.Unlock()
 			}
 
 			return nil
@@ -88,9 +105,11 @@ func (d *Downloader) Download(ctx context.Context, limit int) error {
 	// Progress callbacks own files and state; wait even if resolution fails.
 	err := wg.Wait()
 	if iterErr != nil {
-		return errors.Wrap(iterErr, "iter")
+		err = multierr.Append(err, errors.Wrap(iterErr, "iter"))
 	}
-
+	failureMu.Lock()
+	err = multierr.Append(err, failures)
+	failureMu.Unlock()
 	return err
 }
 

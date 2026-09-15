@@ -3,6 +3,7 @@ package uploader
 import (
 	"context"
 	"io"
+	"sync"
 	"time"
 
 	"github.com/gabriel-vasile/mimetype"
@@ -13,6 +14,7 @@ import (
 	"github.com/gotd/td/telegram/uploader"
 	"github.com/gotd/td/tg"
 	"github.com/samber/lo"
+	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/iyear/tdl/core/util/fsutil"
@@ -23,7 +25,8 @@ import (
 const MaxPartSize = 512 * 1024
 
 type Uploader struct {
-	opts Options
+	opts     Options
+	uploadFn func(context.Context, Elem) error
 }
 
 type Options struct {
@@ -38,34 +41,67 @@ func New(o Options) *Uploader {
 }
 
 func (u *Uploader) Upload(ctx context.Context, limit int) error {
+	if limit <= 0 {
+		return errors.New("upload limit must be positive")
+	}
+	if u.opts.Client == nil {
+		return errors.New("upload client is required")
+	}
+	if u.opts.Iter == nil {
+		return errors.New("upload iterator is required")
+	}
+	if u.opts.Progress == nil {
+		return errors.New("upload progress is required")
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	wg, wgctx := errgroup.WithContext(ctx)
 	wg.SetLimit(limit)
+	var failureMu sync.Mutex
+	var failures error
 
 	for u.opts.Iter.Next(wgctx) {
 		elem := u.opts.Iter.Value()
 
-		wg.Go(func() (rerr error) {
+		wg.Go(func() error {
 			u.opts.Progress.OnAdd(elem)
-			defer func() { u.opts.Progress.OnDone(elem, rerr) }()
+			upload := u.upload
+			if u.uploadFn != nil {
+				upload = u.uploadFn
+			}
+			err := upload(wgctx, elem)
+			u.opts.Progress.OnDone(elem, err)
 
-			if err := u.upload(wgctx, elem); err != nil {
+			if err != nil {
 				// canceled by user, so we directly return error to stop all
-				if errors.Is(err, context.Canceled) {
+				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
 					return errors.Wrap(err, "upload")
 				}
 
-				// don't return error, just log it
+				// Keep processing independent files, but make the command fail after
+				// every scheduled upload has settled.
+				failureMu.Lock()
+				failures = multierr.Append(failures, err)
+				failureMu.Unlock()
 			}
 
 			return nil
 		})
 	}
 
-	if err := u.opts.Iter.Err(); err != nil {
-		return errors.Wrap(err, "iter")
+	iterErr := u.opts.Iter.Err()
+	if iterErr != nil {
+		cancel()
 	}
-
-	return wg.Wait()
+	err := wg.Wait()
+	if iterErr != nil {
+		err = multierr.Append(err, errors.Wrap(iterErr, "iter"))
+	}
+	failureMu.Lock()
+	err = multierr.Append(err, failures)
+	failureMu.Unlock()
+	return err
 }
 
 func (u *Uploader) upload(ctx context.Context, elem Elem) error {
@@ -77,7 +113,7 @@ func (u *Uploader) upload(ctx context.Context, elem Elem) error {
 
 	up := uploader.NewUploader(u.opts.Client).
 		WithPartSize(MaxPartSize).
-		WithThreads(u.opts.Threads).
+		WithThreads(max(1, u.opts.Threads)).
 		WithProgress(&wrapProcess{
 			elem:    elem,
 			process: u.opts.Progress,

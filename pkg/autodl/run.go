@@ -2,9 +2,13 @@ package autodl
 
 import (
 	"context"
+	"crypto/sha256"
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
@@ -20,6 +24,7 @@ import (
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/tclient"
+	"github.com/iyear/tdl/core/util/fsutil"
 	"github.com/iyear/tdl/core/util/tutil"
 	"github.com/iyear/tdl/pkg/prog"
 	"github.com/iyear/tdl/pkg/utils"
@@ -42,8 +47,11 @@ type Options struct {
 
 	// PoolSize, Threads and Limit override the config performance settings.
 	PoolSize int
-	Threads  int
-	Limit    int
+	// PoolSizeSet distinguishes an explicit zero (unlimited connections) from
+	// an unset override.
+	PoolSizeSet bool
+	Threads     int
+	Limit       int
 	// Delay is the delay between tasks.
 	Delay time.Duration
 
@@ -87,16 +95,9 @@ type Runner struct {
 // so one process, one connection pool and batched requests are used for the
 // whole run.
 func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Options) error {
-	cfg, err := LoadConfig(opts.ConfigPath)
+	cfg, err := LoadConfigForRun(opts.ConfigPath, opts.Incremental)
 	if err != nil {
 		return err
-	}
-
-	if opts.Incremental {
-		for i := range cfg.Jobs {
-			on := true
-			cfg.Jobs[i].Incremental = &on
-		}
 	}
 
 	return run(ctx, c, kvd, cfg, opts)
@@ -124,7 +125,13 @@ func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Conf
 		cfg.Jobs[i].mode = mode
 	}
 
-	poolSize := pick(opts.PoolSize, num(cfg.Pool), DefaultPoolSize)
+	poolSize := DefaultPoolSize
+	if cfg.Pool != nil {
+		poolSize = *cfg.Pool
+	}
+	if opts.PoolSizeSet || opts.PoolSize > 0 {
+		poolSize = opts.PoolSize
+	}
 	threads := pick(opts.Threads, num(cfg.Threads), DefaultThreads)
 	limit := pick(opts.Limit, num(cfg.Limit), DefaultLimit)
 
@@ -193,7 +200,7 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 	incremental := job.UsesIncremental(r.cfg.Incremental)
 
 	statePath := r.statePath(job)
-	store, state, err := LoadStateStore(statePath)
+	store, state, err := LoadStateStore(statePath, r.stateScope(job, link, dir))
 	if err != nil {
 		return err
 	}
@@ -240,7 +247,7 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 		return nil
 	}
 
-	missing := r.missing(ctx, job, link, dir, targets, state, store)
+	missing := r.missing(targets, state)
 
 	log.Info("Plan",
 		zap.Int("targets", len(targets)),
@@ -298,87 +305,12 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 
 // missing returns the targets that still have to be downloaded.
 //
-// An id counts as done when the state file records it, or when the file it
-// would produce is already on disk. Checking the filesystem up front keeps the
-// download iterator from re-resolving those messages one by one.
-func (r *Runner) missing(ctx context.Context, job *Job, link Link, dir string, targets []int,
-	state *State, store *stateStore) []int {
-	targets = state.Missing(targets)
-	if len(targets) == 0 {
-		return nil
-	}
-	out := make([]int, 0, len(targets))
-	tpl, err := newNameTemplate(r.template())
-	if err != nil || !tpl.idsOnly() {
-		return targets
-	}
-
-	// without a resolvable dialog there is nothing to check on disk, so let
-	// the download path report the error
-	dialog, err := r.resolveDialog(ctx, job, link)
-	if err != nil {
-		logctx.From(ctx).Debug("Resolve dialog for the file check",
-			zap.Error(err))
-
-		return state.Missing(targets)
-	}
-
-	existing := existingNames(dir)
-	found := 0
-	for _, id := range targets {
-		if state.IsFinished(id) {
-			continue
-		}
-
-		name := filepath.Clean(tpl.name(peerID(dialog), id))
-		if _, ok := existing[name]; ok && isComplete(filepath.Join(dir, name)) {
-			state.Finish(id)
-			found++
-			continue
-		}
-
-		out = append(out, id)
-	}
-
-	if found > 0 {
-		color.Cyan("Found %d file(s) already on disk", found)
-		if serr := store.Save(); serr != nil {
-			logctx.From(ctx).Warn("Save state", zap.Error(serr))
-		}
-	}
-
-	return out
-}
-
-// existingNames indexes the file names that are already in the download
-// directory, including one level of sub directories.
-func existingNames(dir string) map[string]struct{} {
-	out := make(map[string]struct{})
-
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		return out
-	}
-
-	for _, e := range entries {
-		if e.IsDir() {
-			sub, err := os.ReadDir(filepath.Join(dir, e.Name()))
-			if err != nil {
-				continue
-			}
-
-			for _, s := range sub {
-				if !s.IsDir() {
-					out[filepath.Join(e.Name(), s.Name())] = struct{}{}
-				}
-			}
-			continue
-		}
-
-		out[e.Name()] = struct{}{}
-	}
-
-	return out
+// An id counts as done only when the state file records it. Files not recorded
+// in state are resolved in batches by the iterator, which can compare their
+// actual Telegram size before skipping them. Treating an arbitrary non-empty
+// file as complete here would permanently hide truncated downloads.
+func (r *Runner) missing(targets []int, state *State) []int {
+	return state.Missing(targets)
 }
 
 func (r *Runner) download(ctx context.Context, job *Job, link Link, dir string, ids []int,
@@ -597,6 +529,37 @@ func (r *Runner) statePath(job *Job) string {
 		dir = filepath.Join(r.opts.Dir, job.Subdir)
 	}
 	return filepath.Join(dir, DefaultStateFile)
+}
+
+// stateScope prevents one state file from silently reusing message IDs from a
+// different Telegram dialog or interpretation mode.
+func (r *Runner) stateScope(job *Job, link Link, dir string) string {
+	dir = filepath.Clean(dir)
+	if runtime.GOOS == "windows" {
+		dir = strings.ToLower(dir)
+	}
+	identity := strings.Join([]string{
+		strings.ToLower(strings.TrimSpace(link.Chat)),
+		job.mode,
+		strings.ToLower(strings.TrimSpace(job.Chat)),
+		fmt.Sprint(num(job.TopicID)),
+		fmt.Sprint(num(job.ReplyPostID)),
+		dir,
+		r.template(),
+		normalizeScopeExtensions(r.opts.Include),
+		normalizeScopeExtensions(r.opts.Exclude),
+	}, "\x00")
+	return fmt.Sprintf("v2|%x", sha256.Sum256([]byte(identity)))
+}
+
+func normalizeScopeExtensions(exts []string) string {
+	normalized := make([]string, 0, len(exts))
+	for _, ext := range exts {
+		normalized = append(normalized, strings.ToLower(fsutil.AddPrefixDot(ext)))
+	}
+	sort.Strings(normalized)
+	normalized = slices.Compact(normalized)
+	return strings.Join(normalized, ",")
 }
 
 // confirm asks the user a yes/no question.

@@ -3,6 +3,7 @@ package up
 import (
 	"io/fs"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"github.com/iyear/tdl/core/util/fsutil"
@@ -12,9 +13,11 @@ import (
 
 func walk(paths, includes, excludes []string) ([]*File, error) {
 	files := make([]*File, 0)
+	seen := make(map[string]struct{})
 
-	includesMap := filterMap.New(includes, fsutil.AddPrefixDot)
-	excludesMap := filterMap.New(excludes, fsutil.AddPrefixDot)
+	normalizeExt := func(ext string) string { return strings.ToLower(fsutil.AddPrefixDot(ext)) }
+	includesMap := filterMap.New(includes, normalizeExt)
+	excludesMap := filterMap.New(excludes, normalizeExt)
 	excludesMap[consts.UploadThumbExt] = struct{}{} // ignore thumbnail files
 
 	for _, path := range paths {
@@ -27,7 +30,7 @@ func walk(paths, includes, excludes []string) ([]*File, error) {
 			}
 
 			// process include and exclude
-			ext := filepath.Ext(path)
+			ext := strings.ToLower(filepath.Ext(path))
 			if _, ok := includesMap[ext]; len(includesMap) > 0 && !ok {
 				return nil
 			}
@@ -35,8 +38,21 @@ func walk(paths, includes, excludes []string) ([]*File, error) {
 				return nil
 			}
 
+			absolute, err := filepath.Abs(path)
+			if err != nil {
+				return err
+			}
+			key := filepath.Clean(absolute)
+			if runtime.GOOS == "windows" {
+				key = strings.ToLower(key)
+			}
+			if _, ok := seen[key]; ok {
+				return nil
+			}
+			seen[key] = struct{}{}
+
 			f := File{File: path}
-			t := strings.TrimRight(path, filepath.Ext(path)) + consts.UploadThumbExt
+			t := strings.TrimSuffix(path, filepath.Ext(path)) + consts.UploadThumbExt
 			if fsutil.PathExists(t) {
 				f.Thumb = t
 			}

@@ -7,6 +7,9 @@
 package autodl
 
 import (
+	"bytes"
+	"io"
+	"math"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -42,6 +45,9 @@ const (
 	// DefaultBatchSize is how many message ids are fetched (and resolved) per
 	// Telegram request.
 	DefaultBatchSize = 100
+	// MaxRangeMessages prevents a malformed range from allocating enough memory
+	// to terminate the process before any Telegram request is made.
+	MaxRangeMessages = 1_000_000
 )
 
 // Config is the python-compatible config.json.
@@ -118,14 +124,39 @@ func (j *Job) Dir() string { return j.dir }
 // If the file has no .json suffix, a YAML file is read instead. YAML is a
 // superset of JSON, so this only widens what is accepted.
 func LoadConfig(path string) (*Config, error) {
+	return loadConfig(path, false)
+}
+
+// LoadConfigForRun loads a config while applying command-line modes that
+// affect validation. In particular, --incremental makes ranges optional.
+func LoadConfigForRun(path string, forceIncremental bool) (*Config, error) {
+	return loadConfig(path, forceIncremental)
+}
+
+func loadConfig(path string, forceIncremental bool) (*Config, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
 		return nil, errors.Wrapf(err, "read config %s", path)
 	}
 
 	var c Config
-	if err = yaml.Unmarshal(b, &c); err != nil {
+	dec := yaml.NewDecoder(bytes.NewReader(b))
+	dec.KnownFields(true)
+	if err = dec.Decode(&c); err != nil {
 		return nil, errors.Wrapf(err, "parse config %s", path)
+	}
+	var extra any
+	if err = dec.Decode(&extra); err != io.EOF {
+		if err == nil {
+			err = errors.New("multiple YAML documents are not supported")
+		}
+		return nil, errors.Wrapf(err, "parse config %s", path)
+	}
+	if forceIncremental {
+		for i := range c.Jobs {
+			on := true
+			c.Jobs[i].Incremental = &on
+		}
 	}
 
 	if err = c.Normalize(); err != nil {
@@ -147,6 +178,19 @@ func (c *Config) Normalize() error {
 	if c.DownloadBase == "" {
 		c.DownloadBase = DefaultDownloadBase
 	}
+	for name, value := range map[string]*int{
+		"threads": c.Threads, "limit": c.Limit,
+	} {
+		if value != nil && *value <= 0 {
+			return errors.Errorf("%s must be positive", name)
+		}
+	}
+	if c.Pool != nil && *c.Pool < 0 {
+		return errors.New("pool must not be negative")
+	}
+	if c.OverlapSeconds != nil && *c.OverlapSeconds < 0 {
+		return errors.New("overlap_seconds must not be negative")
+	}
 
 	for i := range c.Jobs {
 		if err := c.Jobs[i].normalize(c.DownloadBase, c.Incremental); err != nil {
@@ -167,6 +211,10 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 	}
 
 	if j.Subdir != "" {
+		clean := filepath.Clean(j.Subdir)
+		if filepath.IsAbs(clean) || filepath.VolumeName(clean) != "" || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
+			return errors.Errorf("subdir %q must stay inside download_base", j.Subdir)
+		}
 		j.dir = filepath.Join(base, j.Subdir)
 	} else {
 		j.dir = base
@@ -176,6 +224,15 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 		if v, ok := IntValue(j.Comment); ok && v > 0 {
 			j.StartComment = &v
 		}
+	}
+	if j.StartComment != nil && *j.StartComment <= 0 {
+		return errors.New("start_comment must be positive")
+	}
+	if j.EndComment != nil && *j.EndComment <= 0 {
+		return errors.New("end_comment must be positive")
+	}
+	if j.Overlap != nil && *j.Overlap < 0 {
+		return errors.New("overlap_seconds must not be negative")
 	}
 
 	if !j.UsesIncremental(globalIncremental) {
@@ -187,6 +244,9 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 
 		if *j.EndComment <= *j.StartComment {
 			return errors.Errorf("end_comment(%d) must be greater than start_comment(%d)", *j.EndComment, *j.StartComment)
+		}
+		if int64(*j.EndComment)-int64(*j.StartComment) > MaxRangeMessages {
+			return errors.Errorf("message range exceeds the safety limit of %d", MaxRangeMessages)
 		}
 	}
 
@@ -238,13 +298,19 @@ func IntValue(v any) (int, bool) {
 	case bool:
 		return 0, false
 	case float64:
-		return int(t), true
+		if math.IsNaN(t) || math.IsInf(t, 0) || math.Trunc(t) != t {
+			return 0, false
+		}
+		i, err := strconv.ParseInt(strconv.FormatFloat(t, 'f', -1, 64), 10, strconv.IntSize)
+		return int(i), err == nil
 	case int:
 		return t, true
 	case int64:
-		return int(t), true
+		i := int(t)
+		return i, int64(i) == t
 	case uint64:
-		return int(t), true
+		i := int(t)
+		return i, i >= 0 && uint64(i) == t
 	case string:
 		i, err := strconv.Atoi(strings.TrimSpace(t))
 		if err != nil {
@@ -299,30 +365,39 @@ func ParseLink(raw string) (Link, error) {
 	}
 
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) == 0 || parts[0] == "" {
+	if len(parts) < 2 || parts[0] == "" {
 		return l, errors.Errorf("invalid telegram link %q", raw)
 	}
 
 	if strings.EqualFold(parts[0], "c") { // private channel: /c/<id>/<msg>
-		if len(parts) < 3 {
+		if len(parts) != 3 && len(parts) != 4 {
 			return l, errors.Errorf("invalid private channel link %q", raw)
 		}
 		l.Chat = parts[1]
-		if l.MessageID, err = strconv.Atoi(parts[2]); err != nil {
+		messagePart := parts[len(parts)-1]
+		if l.MessageID, err = strconv.Atoi(messagePart); err != nil {
 			return l, errors.Wrapf(err, "invalid message id in %q", raw)
 		}
 	} else {
-		l.Chat = parts[0]
-		if len(parts) >= 2 {
-			if l.MessageID, err = strconv.Atoi(parts[1]); err != nil {
-				return l, errors.Wrapf(err, "invalid message id in %q", raw)
-			}
+		if len(parts) != 2 && len(parts) != 3 {
+			return l, errors.Errorf("invalid telegram link %q", raw)
 		}
+		l.Chat = parts[0]
+		messagePart := parts[len(parts)-1]
+		if l.MessageID, err = strconv.Atoi(messagePart); err != nil {
+			return l, errors.Wrapf(err, "invalid message id in %q", raw)
+		}
+	}
+	if l.MessageID <= 0 {
+		return l, errors.Errorf("message id in %q must be positive", raw)
 	}
 
 	if c := u.Query().Get("comment"); c != "" {
 		if l.Comment, err = strconv.Atoi(c); err != nil {
 			return l, errors.Wrapf(err, "invalid comment id in %q", raw)
+		}
+		if l.Comment <= 0 {
+			return l, errors.Errorf("comment id in %q must be positive", raw)
 		}
 	}
 

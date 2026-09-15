@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 
+	"github.com/go-faster/errors"
 	"github.com/gotd/td/telegram"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
@@ -48,6 +49,11 @@ type batchFlags struct {
 // --batch-* wins over the global -l/-t/--pool, which in turn wins over the
 // performance keys of config.json.
 func (f *batchFlags) options(global *cobra.Command) autodl.Options {
+	globalPool, globalPoolSet := changedIntValue(global, consts.FlagPoolSize)
+	poolSize, poolSizeSet := globalPool, globalPoolSet
+	if changed(global, "batch-pool") {
+		poolSize, poolSizeSet = f.pool, true
+	}
 	opts := autodl.Options{
 		ConfigPath:   f.config,
 		Dir:          f.dir,
@@ -57,7 +63,8 @@ func (f *batchFlags) options(global *cobra.Command) autodl.Options {
 		Takeout:      f.takeout,
 		Threads:      pickInt(f.threads, changedInt(global, consts.FlagThreads)),
 		Limit:        pickInt(f.limit, changedInt(global, consts.FlagLimit)),
-		PoolSize:     pickInt(f.pool, changedInt(global, consts.FlagPoolSize)),
+		PoolSize:     poolSize,
+		PoolSizeSet:  poolSizeSet,
 		CheckOnly:    f.checkOnly,
 		Yes:          f.yes,
 		Mode:         f.mode,
@@ -77,17 +84,22 @@ func (f *batchFlags) options(global *cobra.Command) autodl.Options {
 
 // changedInt returns the persistent flag value when the user set it explicitly.
 func changedInt(cmd *cobra.Command, name string) int {
+	v, _ := changedIntValue(cmd, name)
+	return v
+}
+
+func changedIntValue(cmd *cobra.Command, name string) (int, bool) {
 	f := cmd.Flags().Lookup(name)
 	if f == nil || !f.Changed {
-		return 0
+		return 0, false
 	}
 
 	v, err := cmd.Flags().GetInt(name)
 	if err != nil {
-		return 0
+		return 0, false
 	}
 
-	return v
+	return v, true
 }
 
 // changed reports whether the user set a persistent flag explicitly.
@@ -131,6 +143,24 @@ missing ones are fetched again.`,
 		GroupID: groupTools.ID,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
+			for name, value := range map[string]int{
+				"batch-threads": f.threads,
+				"batch-limit":   f.limit,
+				"batch-pool":    f.pool,
+			} {
+				if value < 0 {
+					return fmt.Errorf("--%s must not be negative", name)
+				}
+			}
+			for _, name := range []string{consts.FlagThreads, consts.FlagLimit, consts.FlagPoolSize} {
+				if value, set := changedIntValue(cmd, name); set && value < 0 {
+					return fmt.Errorf("--%s must not be negative", name)
+				}
+			}
+			if f.overlapSeconds < -1 {
+				return errors.New("--overlap-seconds must not be less than -1")
+			}
+
 			cfg := f.config
 			if cfg == "" {
 				if found, ok := autodl.FindConfig(); ok {
@@ -140,7 +170,7 @@ missing ones are fetched again.`,
 				}
 			}
 
-			parsed, err := autodl.LoadConfig(cfg)
+			parsed, err := autodl.LoadConfigForRun(cfg, f.incremental)
 			if err != nil {
 				return err
 			}

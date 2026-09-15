@@ -93,7 +93,7 @@ func TestBatchDownloadFailureAndResume(t *testing.T) {
 	}))
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	require.NoError(t, downloader.New(downloader.Options{Pool: batchPool{api}, Threads: 1, Iter: &elemIter{el: first}, Progress: progress, SkipParts: true}).Download(ctx, 1))
+	require.ErrorContains(t, downloader.New(downloader.Options{Pool: batchPool{api}, Threads: 1, Iter: &elemIter{el: first}, Progress: progress, SkipParts: true}).Download(ctx, 1), "connection interrupted")
 	require.False(t, state.IsFinished(2))
 	require.NoFileExists(t, path)
 	done, failed, _ := progress.Stats()
@@ -197,7 +197,16 @@ func TestFinishedTargetsNeedNoPeerLookup(t *testing.T) {
 	state := NewState()
 	state.Finish(1, 2)
 	r := &Runner{}
-	require.Empty(t, r.missing(context.Background(), &Job{}, Link{}, t.TempDir(), []int{1, 2}, state, nil))
+	require.Empty(t, r.missing([]int{1, 2}, state))
+}
+
+func TestMissingDoesNotTrustUnknownFileSize(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "1.bin"), []byte("short"), 0o600))
+
+	r := &Runner{opts: Options{Template: `{{.MessageID}}.bin`}}
+	state := NewState()
+	require.Equal(t, []int{1}, r.missing([]int{1}, state))
 }
 
 func TestIterDoesNotSkipTruncatedFile(t *testing.T) {

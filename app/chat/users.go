@@ -76,6 +76,13 @@ func Users(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Us
 	pw.Style().Visibility.Percentage = true
 
 	go pw.Render()
+	defer func() {
+		if rerr != nil {
+			pw.Stop()
+			return
+		}
+		prog.Wait(ctx, pw)
+	}()
 
 	builder := func() *participants.GetParticipantsQueryBuilder {
 		return participants.NewQueryBuilder(c.API()).
@@ -102,7 +109,6 @@ func Users(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Us
 		}
 	}
 
-	prog.Wait(ctx, pw)
 	return nil
 }
 

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"strconv"
+	"sync"
 
 	"github.com/gotd/td/telegram/updates"
 
@@ -13,6 +14,7 @@ import (
 
 type State struct {
 	kv Storage
+	mu sync.Mutex
 }
 
 func NewState(kv Storage) updates.StateStorage {
@@ -51,6 +53,9 @@ func (s *State) GetState(ctx context.Context, userID int64) (updates.State, bool
 }
 
 func (s *State) SetState(ctx context.Context, userID int64, state updates.State) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	if err := s.Set(ctx, s.stateKey(userID), state); err != nil {
 		return err
 	}
@@ -59,6 +64,9 @@ func (s *State) SetState(ctx context.Context, userID int64, state updates.State)
 }
 
 func (s *State) SetPts(ctx context.Context, userID int64, pts int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	state, k := updates.State{}, s.stateKey(userID)
 
 	if err := s.Get(ctx, k, &state); err != nil {
@@ -69,6 +77,9 @@ func (s *State) SetPts(ctx context.Context, userID int64, pts int) error {
 }
 
 func (s *State) SetQts(ctx context.Context, userID int64, qts int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	state, k := updates.State{}, s.stateKey(userID)
 
 	if err := s.Get(ctx, k, &state); err != nil {
@@ -79,6 +90,9 @@ func (s *State) SetQts(ctx context.Context, userID int64, qts int) error {
 }
 
 func (s *State) SetDate(ctx context.Context, userID int64, date int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	state, k := updates.State{}, s.stateKey(userID)
 
 	if err := s.Get(ctx, k, &state); err != nil {
@@ -89,6 +103,9 @@ func (s *State) SetDate(ctx context.Context, userID int64, date int) error {
 }
 
 func (s *State) SetSeq(ctx context.Context, userID int64, seq int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	state, k := updates.State{}, s.stateKey(userID)
 
 	if err := s.Get(ctx, k, &state); err != nil {
@@ -99,6 +116,9 @@ func (s *State) SetSeq(ctx context.Context, userID int64, seq int) error {
 }
 
 func (s *State) SetDateSeq(ctx context.Context, userID int64, date, seq int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	state, k := updates.State{}, s.stateKey(userID)
 
 	if err := s.Get(ctx, k, &state); err != nil {
@@ -128,6 +148,9 @@ func (s *State) GetChannelPts(ctx context.Context, userID, channelID int64) (int
 }
 
 func (s *State) SetChannelPts(ctx context.Context, userID, channelID int64, pts int) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
 	c, k := make(map[int64]int), s.channelKey(userID)
 
 	if err := s.Get(ctx, k, &c); err != nil {

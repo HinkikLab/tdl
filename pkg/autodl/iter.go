@@ -10,7 +10,6 @@ import (
 	"strings"
 	"sync"
 	"text/template"
-	"text/template/parse"
 	"time"
 
 	"github.com/go-faster/errors"
@@ -22,6 +21,7 @@ import (
 	"github.com/iyear/tdl/core/downloader"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/tmedia"
+	"github.com/iyear/tdl/core/util/fsutil"
 	"github.com/iyear/tdl/core/util/tutil"
 	"github.com/iyear/tdl/pkg/tplfunc"
 	"github.com/iyear/tdl/pkg/utils"
@@ -30,10 +30,6 @@ import (
 // nameTemplate renders the download file name.
 type nameTemplate struct {
 	tpl *template.Template
-	// literal is set when the template does not depend on the message at all.
-	// Only then can the list of existing files be built without resolving any
-	// message first.
-	literal string
 }
 
 func newNameTemplate(tpl string) (*nameTemplate, error) {
@@ -44,14 +40,7 @@ func newNameTemplate(tpl string) (*nameTemplate, error) {
 		return nil, errors.Wrap(err, "parse template")
 	}
 
-	nt := &nameTemplate{tpl: parsed}
-
-	name, err := nt.execute(&fileTemplate{})
-	if err == nil && !strings.Contains(name, "{") {
-		nt.literal = name
-	}
-
-	return nt, nil
+	return &nameTemplate{tpl: parsed}, nil
 }
 
 func (n *nameTemplate) execute(data *fileTemplate) (string, error) {
@@ -61,86 +50,6 @@ func (n *nameTemplate) execute(data *fileTemplate) (string, error) {
 	}
 
 	return buf.String(), nil
-}
-
-// idsOnly reports whether the file name depends on nothing but the dialog id
-// and the message id, which makes it predictable before the message is
-// resolved.
-func (n *nameTemplate) idsOnly() bool {
-	fields := make(map[string]struct{})
-	collectFields(n.tpl.Tree.Root, fields)
-
-	for f := range fields {
-		if f != "DialogID" && f != "MessageID" {
-			return false
-		}
-	}
-
-	return len(fields) > 0
-}
-
-// collectFields walks a template tree and records every .Field it references.
-func collectFields(node parse.Node, out map[string]struct{}) {
-	switch n := node.(type) {
-	case nil:
-		return
-	case *parse.ListNode:
-		if n == nil {
-			return
-		}
-		for _, child := range n.Nodes {
-			collectFields(child, out)
-		}
-	case *parse.ActionNode:
-		collectFields(n.Pipe, out)
-	case *parse.PipeNode:
-		if n == nil {
-			return
-		}
-		for _, cmd := range n.Cmds {
-			collectFields(cmd, out)
-		}
-	case *parse.CommandNode:
-		for _, arg := range n.Args {
-			collectFields(arg, out)
-		}
-	case *parse.FieldNode:
-		if len(n.Ident) > 0 {
-			out[n.Ident[0]] = struct{}{}
-		}
-	case *parse.ChainNode:
-		collectFields(n.Node, out)
-	case *parse.IfNode:
-		collectFields(n.Pipe, out)
-		collectFields(n.List, out)
-		collectFields(n.ElseList, out)
-	case *parse.RangeNode:
-		collectFields(n.Pipe, out)
-		collectFields(n.List, out)
-		collectFields(n.ElseList, out)
-	case *parse.WithNode:
-		collectFields(n.Pipe, out)
-		collectFields(n.List, out)
-		collectFields(n.ElseList, out)
-	case *parse.TemplateNode:
-		if n.Pipe != nil {
-			collectFields(n.Pipe, out)
-		}
-	case *parse.VariableNode:
-		for _, ident := range n.Ident {
-			out[ident] = struct{}{}
-		}
-	}
-}
-
-// name renders the predictable name of a message.
-func (n *nameTemplate) name(dialogID int64, msgID int) string {
-	out, err := n.execute(&fileTemplate{DialogID: dialogID, MessageID: msgID})
-	if err != nil {
-		return ""
-	}
-
-	return out
 }
 
 // tplFuncMap returns the template helpers shared with the regular downloader.
@@ -207,12 +116,12 @@ func newIter(pool dcpool.Pool, manager *peers.Manager, dialog peers.Peer, dir st
 
 	include := make(map[string]struct{}, len(opts.include))
 	for _, e := range opts.include {
-		include[strings.ToLower(e)] = struct{}{}
+		include[strings.ToLower(fsutil.AddPrefixDot(e))] = struct{}{}
 	}
 
 	exclude := make(map[string]struct{}, len(opts.exclude))
 	for _, e := range opts.exclude {
-		exclude[strings.ToLower(e)] = struct{}{}
+		exclude[strings.ToLower(fsutil.AddPrefixDot(e))] = struct{}{}
 	}
 
 	ids = append([]int(nil), ids...)
@@ -346,10 +255,14 @@ func (i *iter) push(ctx context.Context, from peers.Peer, msg *tg.Message) bool 
 		return false
 	}
 
-	path := filepath.Join(i.dir, name)
+	path, err := fsutil.JoinWithin(i.dir, name)
+	if err != nil {
+		i.err = err
+		return false
+	}
 	if stat, err := os.Stat(path); err == nil && stat.Mode().IsRegular() && stat.Size() == item.Size {
-		// the iterator only sees ids that passed the pre-filter in Runner.missing,
-		// so this is just a safety net for files that appeared meanwhile
+		// Only trust a pre-existing file after resolving the message in a batch
+		// and comparing it with Telegram's authoritative size.
 		i.markDone(id)
 		return false
 	}

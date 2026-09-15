@@ -16,6 +16,26 @@ func TestParseLink(t *testing.T) {
 		want Link
 	}{
 		{
+			name: "public channel without message",
+			raw:  "https://t.me/English_Channel",
+			want: Link{Chat: "English_Channel"},
+		},
+		{
+			name: "public channel without message or scheme",
+			raw:  "t.me/EnglishChannel",
+			want: Link{Chat: "EnglishChannel"},
+		},
+		{
+			name: "public preview channel",
+			raw:  "https://t.me/s/EnglishChannel",
+			want: Link{Chat: "EnglishChannel"},
+		},
+		{
+			name: "public preview post",
+			raw:  "https://t.me/s/EnglishChannel/123",
+			want: Link{Chat: "EnglishChannel", MessageID: 123},
+		},
+		{
 			name: "public channel",
 			raw:  "https://t.me/shunv667/5639",
 			want: Link{Chat: "shunv667", MessageID: 5639},
@@ -200,15 +220,6 @@ func TestLoadConfigErrors(t *testing.T) {
 		assert.Error(t, err, "a range job without a range must be rejected")
 	})
 
-	t.Run("unknown field", func(t *testing.T) {
-		path := filepath.Join(dir, "unknown.json")
-		body := `{"jobs":[{"chat_url":"https://t.me/a/1","start_comment":1,"end_comment":2,"start_commment":1}]}`
-		require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
-
-		_, err := LoadConfig(path)
-		assert.Error(t, err)
-	})
-
 	t.Run("subdir escapes download base", func(t *testing.T) {
 		path := filepath.Join(dir, "escape.json")
 		body := `{"jobs":[{"chat_url":"https://t.me/a/1","start_comment":1,"end_comment":2,"subdir":"../outside"}]}`
@@ -246,6 +257,25 @@ func TestLoadConfigErrors(t *testing.T) {
 		_, err := LoadConfig(path)
 		assert.Error(t, err)
 	})
+}
+
+func TestLoadConfigIgnoresUnknownFields(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "unknown.json")
+	body := `{
+  "unused_top_level": {"enabled": true},
+  "jobs": [{
+    "chat_url": "https://t.me/EnglishChannel",
+    "start_comment": 1,
+    "end_comment": 2,
+    "unused_job_field": "kept for another tool"
+  }]
+}`
+	require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+
+	cfg, err := LoadConfig(path)
+	require.NoError(t, err)
+	require.Len(t, cfg.Jobs, 1)
+	assert.Equal(t, "https://t.me/EnglishChannel", cfg.Jobs[0].ChatURL)
 }
 
 func TestIntValueRejectsLossyNumbers(t *testing.T) {

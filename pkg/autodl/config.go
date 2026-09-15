@@ -52,8 +52,8 @@ const (
 
 // Config is the python-compatible config.json.
 //
-// Only "jobs" is required. Unknown fields are rejected so a typo does not
-// silently download nothing.
+// Only "jobs" is required. Unknown fields are ignored for compatibility with
+// config generators that also store settings used by other tools.
 type Config struct {
 	// Namespace is the tdl namespace (account) to use. It maps to -n/--ns and
 	// defaults to "default" when empty.
@@ -141,7 +141,6 @@ func loadConfig(path string, forceIncremental bool) (*Config, error) {
 
 	var c Config
 	dec := yaml.NewDecoder(bytes.NewReader(b))
-	dec.KnownFields(true)
 	if err = dec.Decode(&c); err != nil {
 		return nil, errors.Wrapf(err, "parse config %s", path)
 	}
@@ -328,6 +327,7 @@ type Link struct {
 	// links.
 	Chat string
 	// MessageID is the target post id in Chat.
+	// It is zero when the link identifies only a public channel.
 	MessageID int
 	// Comment is the comment id when the link points into the discussion
 	// group, zero otherwise.
@@ -339,6 +339,7 @@ func (l Link) CommentMode() bool { return l.Comment > 0 }
 
 // ParseLink parses the telegram links the python script accepts:
 //
+//	https://t.me/channel
 //	https://t.me/channel/123
 //	https://t.me/c/123456789/123
 //	https://t.me/channel/123?comment=456
@@ -365,8 +366,20 @@ func ParseLink(raw string) (Link, error) {
 	}
 
 	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) < 2 || parts[0] == "" {
+	if len(parts) == 0 || parts[0] == "" {
 		return l, errors.Errorf("invalid telegram link %q", raw)
+	}
+	for _, part := range parts {
+		if part == "" {
+			return l, errors.Errorf("invalid telegram link %q", raw)
+		}
+	}
+	// Public preview links add an /s/ prefix, but identify the same channel.
+	if strings.EqualFold(parts[0], "s") {
+		parts = parts[1:]
+		if len(parts) == 0 {
+			return l, errors.Errorf("invalid telegram link %q", raw)
+		}
 	}
 
 	if strings.EqualFold(parts[0], "c") { // private channel: /c/<id>/<msg>
@@ -379,16 +392,18 @@ func ParseLink(raw string) (Link, error) {
 			return l, errors.Wrapf(err, "invalid message id in %q", raw)
 		}
 	} else {
-		if len(parts) != 2 && len(parts) != 3 {
+		if len(parts) > 3 {
 			return l, errors.Errorf("invalid telegram link %q", raw)
 		}
 		l.Chat = parts[0]
-		messagePart := parts[len(parts)-1]
-		if l.MessageID, err = strconv.Atoi(messagePart); err != nil {
-			return l, errors.Wrapf(err, "invalid message id in %q", raw)
+		if len(parts) > 1 {
+			messagePart := parts[len(parts)-1]
+			if l.MessageID, err = strconv.Atoi(messagePart); err != nil {
+				return l, errors.Wrapf(err, "invalid message id in %q", raw)
+			}
 		}
 	}
-	if l.MessageID <= 0 {
+	if len(parts) > 1 && l.MessageID <= 0 {
 		return l, errors.Errorf("message id in %q must be positive", raw)
 	}
 

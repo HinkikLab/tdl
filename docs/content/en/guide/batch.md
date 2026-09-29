@@ -83,6 +83,38 @@ accepted as an alias of `download_base`.
 | `export_all` | also export non-media messages in incremental mode |
 | `topic_id` | keep only messages of one forum topic |
 | `reply_post_id` | scan the comment section of one post (`messages.getReplies`) |
+| `tag` / `tags` | one hashtag or an array of hashtags matched against photo/video captions; use instead of a message ID range |
+| `tag_match` | `any` (default) selects posts with any requested tag; `all` requires every tag |
+| `max_posts` | optionally stop after this many matching posts; `0` (the default) scans the full history |
+
+### Archive photo and video posts by hashtag
+
+For a tag job, `chat_url` is the chat's home URL and no message range is needed:
+
+```json
+{
+  "namespace": "default",
+  "download_base": "downloads",
+  "jobs": [
+    {
+      "chat_url": "https://t.me/AVMYS/",
+      "tags": ["#绝区零", "#原神"],
+      "tag_match": "any",
+      "subdir": "AVMYS"
+    }
+  ]
+}
+```
+
+Run `tdl batch -c config.json --check-only` to count matches, then
+`tdl batch -c config.json -y` to download. Each matching Telegram album or
+individual media post goes into `downloads/AVMYS/<chat-id>/<matched-tag> <caption> [id]/` with
+its photos/videos, the original caption in `message.txt`, and IDs, captions and
+source link in `message.json`. The directory name removes every hashtag and
+illegal path character and limits the tag plus caption to 64 characters. If
+several tags match, the first matching tag in config order becomes the prefix. A caption on
+any album member selects the whole
+album. Reruns skip completed files by size and resume partial downloads.
 
 ## Command line
 

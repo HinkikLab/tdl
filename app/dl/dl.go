@@ -38,6 +38,14 @@ type Options struct {
 	Desc       bool
 	Takeout    bool
 	Group      bool // auto detect grouped message
+	// GroupDirByMessage assigns an output directory to each media message ID.
+	// It is used by chat tag archives and is not a command-line option.
+	GroupDirByMessage map[int]string
+	Threads           int // optional per-run override
+	Limit             int // optional per-run override
+	PoolSize          int // optional per-run override
+	PoolSizeSet       bool
+	Pool              dcpool.Pool // optional shared pool for batch jobs
 
 	// resume opts
 	Continue, Restart bool
@@ -53,10 +61,17 @@ type parser struct {
 }
 
 func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Options) (rerr error) {
-	pool := dcpool.NewPool(c,
-		int64(viper.GetInt(consts.FlagPoolSize)),
-		tclient.NewDefaultMiddlewares(ctx, viper.GetDuration(consts.FlagReconnectTimeout))...)
-	defer multierr.AppendInvoke(&rerr, multierr.Close(pool))
+	pool := opts.Pool
+	if pool == nil {
+		poolSize := opts.PoolSize
+		if !opts.PoolSizeSet {
+			poolSize = viper.GetInt(consts.FlagPoolSize)
+		}
+		pool = dcpool.NewPool(c,
+			int64(poolSize),
+			tclient.NewDefaultMiddlewares(ctx, viper.GetDuration(consts.FlagReconnectTimeout))...)
+		defer multierr.AppendInvoke(&rerr, multierr.Close(pool))
+	}
 
 	parsers := []parser{
 		{Data: opts.URLs, Parser: tmessage.FromURL(ctx, pool, kvd, opts.URLs)},
@@ -103,13 +118,20 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 		prog.EnablePS(ctx, dlProgress)
 	}
 
+	threads := opts.Threads
+	if threads <= 0 {
+		threads = viper.GetInt(consts.FlagThreads)
+	}
 	options := downloader.Options{
 		Pool:     pool,
-		Threads:  viper.GetInt(consts.FlagThreads),
+		Threads:  threads,
 		Iter:     it,
 		Progress: newProgress(dlProgress, it, opts),
 	}
-	limit := viper.GetInt(consts.FlagLimit)
+	limit := opts.Limit
+	if limit <= 0 {
+		limit = viper.GetInt(consts.FlagLimit)
+	}
 
 	downloader := downloader.New(options)
 	// keep the partial temp file of a failed element so the next run only

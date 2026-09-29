@@ -84,6 +84,13 @@ type Job struct {
 	// ChatURL is the telegram message link, e.g.
 	// https://t.me/channel/123 or https://t.me/channel/1?comment=456.
 	ChatURL string `json:"chat_url" yaml:"chat_url"`
+	// Tag selects captioned photo/video posts from the whole chat history.
+	// A tag job needs a chat URL but no numeric message range.
+	Tag      string   `json:"tag" yaml:"tag"`
+	Tags     []string `json:"tags" yaml:"tags"`
+	TagMatch string   `json:"tag_match" yaml:"tag_match"`
+	// MaxPosts limits tag jobs for a bounded preview; zero scans all history.
+	MaxPosts int `json:"max_posts" yaml:"max_posts"`
 	// Chat optionally overrides the chat used for export in incremental mode.
 	Chat string `json:"chat" yaml:"chat"`
 	// Subdir is the directory under DownloadBase for this job.
@@ -234,6 +241,37 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 		return errors.New("overlap_seconds must not be negative")
 	}
 
+	if j.IsTagJob() {
+		if j.Tag != "" && strings.TrimSpace(j.Tag) == "" {
+			return errors.New("tag must not be blank")
+		}
+		link, err := ParseLink(j.ChatURL)
+		if err != nil {
+			return err
+		}
+		if link.MessageID != 0 || link.Comment != 0 {
+			return errors.New("tag job chat_url must identify a chat, not a message")
+		}
+		if j.StartComment != nil || j.EndComment != nil || j.Comment != nil || j.TopicID != nil || j.ReplyPostID != nil {
+			return errors.New("tag job cannot also select a message/comment range or topic")
+		}
+		if j.MaxPosts < 0 {
+			return errors.New("max_posts must not be negative")
+		}
+		if j.TagMatch != "" && j.TagMatch != "any" && j.TagMatch != "all" {
+			return errors.New("tag_match must be any or all")
+		}
+		if j.Tag == "" && len(j.Tags) == 0 {
+			return errors.New("tag or tags is required")
+		}
+		for _, tag := range j.Tags {
+			if strings.TrimSpace(tag) == "" {
+				return errors.New("tags must not contain blanks")
+			}
+		}
+		return nil
+	}
+
 	if !j.UsesIncremental(globalIncremental) {
 		if j.StartComment == nil || j.EndComment == nil {
 			// a range job needs both ends; incremental jobs get ids from the
@@ -251,6 +289,8 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 
 	return nil
 }
+
+func (j *Job) IsTagJob() bool { return j.Tag != "" || len(j.Tags) > 0 }
 
 // UsesIncremental reports whether the job runs in incremental mode with the
 // given config wide default. A job level setting always wins.

@@ -138,6 +138,27 @@ func TestLoadConfigPythonFormat(t *testing.T) {
 	assert.Equal(t, filepath.Join("downloads", "example_post_48334"), job.Dir())
 }
 
+func TestLoadConfigTagJobNeedsNoRange(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{"download_base":"downloads","jobs":[{"chat_url":"https://t.me/AVMYS/","tag":"#绝区零","subdir":"AVMYS"}]}`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	cfg, err := LoadConfig(path)
+	require.NoError(t, err)
+	require.Len(t, cfg.Jobs, 1)
+	assert.Equal(t, "#绝区零", cfg.Jobs[0].Tag)
+	assert.Equal(t, filepath.Join("downloads", "AVMYS"), cfg.Jobs[0].Dir())
+}
+
+func TestLoadConfigMultipleTags(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	content := `{"jobs":[{"chat_url":"https://t.me/AVMYS/","tags":["#绝区零","#原神"],"tag_match":"any"}]}`
+	require.NoError(t, os.WriteFile(path, []byte(content), 0o644))
+	cfg, err := LoadConfig(path)
+	require.NoError(t, err)
+	assert.Equal(t, []string{"#绝区零", "#原神"}, cfg.Jobs[0].Tags)
+	assert.True(t, cfg.Jobs[0].IsTagJob())
+}
+
 func TestLoadConfigIntCommentImpliesStart(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "config.json")

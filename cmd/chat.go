@@ -26,8 +26,35 @@ func NewChat() *cobra.Command {
 		GroupID: groupTools.ID,
 	}
 
-	cmd.AddCommand(NewChatList(), NewChatExport(), NewChatUsers())
+	cmd.AddCommand(NewChatList(), NewChatExport(), NewChatUsers(), NewChatDownloadTag())
 
+	return cmd
+}
+
+// NewChatDownloadTag archives photo and video posts whose caption contains a
+// Telegram hashtag. All members of a matching album share one directory.
+func NewChatDownloadTag() *cobra.Command {
+	var opts chat.TagOptions
+	cmd := &cobra.Command{
+		Use:   "download-tag",
+		Short: "Download photo/video posts matching a caption hashtag",
+		Args:  cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return tRun(cmd.Context(), func(ctx context.Context, c *telegram.Client, kvd storage.Storage) error {
+				return chat.DownloadTag(ctx, c, kvd, opts)
+			}, limiter)
+		},
+	}
+	cmd.Flags().StringVarP(&opts.Chat, "chat", "c", "", "public Telegram chat URL or username")
+	cmd.Flags().StringVar(&opts.Tag, "tag", "", "hashtag in the media caption, with or without #")
+	cmd.Flags().StringSliceVar(&opts.Tags, "tags", nil, "multiple hashtags; a comma-separated list is accepted")
+	cmd.Flags().StringVar(&opts.TagMatch, "tag-match", "any", "match mode for multiple tags: any or all")
+	cmd.Flags().StringVarP(&opts.Dir, "dir", "d", "downloads", "archive directory")
+	cmd.Flags().BoolVar(&opts.CheckOnly, "check-only", false, "list matching posts without writing files")
+	cmd.Flags().BoolVar(&opts.Takeout, "takeout", false, "use a Telegram takeout session for downloads")
+	cmd.Flags().IntVar(&opts.MaxPosts, "max-posts", 0, "stop after this many matching posts (0 scans all history)")
+	_ = cmd.MarkFlagRequired("chat")
+	_ = cmd.MarkFlagDirname("dir")
 	return cmd
 }
 

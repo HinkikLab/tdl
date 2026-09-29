@@ -79,6 +79,38 @@ tdl
 | `export_all` | 增量模式导出非媒体消息（默认只导出媒体） |
 | `topic_id` | 只保留该话题（topic）下的消息 |
 | `reply_post_id` | 只扫描该帖子的评论区（`messages.getReplies`） |
+| `tag` / `tags` | 一个 tag 或多个 tag 数组；按图片/视频说明文字中的完整 hashtag 筛选，与消息 ID 范围任务二选一 |
+| `tag_match` | 多 tag 匹配方式：`any`（默认，命中任意一个）或 `all`（全部命中） |
+| `max_posts` | tag 任务最多匹配多少组，默认 `0` 表示扫描全部历史；可用于先做小规模验证 |
+
+### 按 tag 归档图片和视频
+
+tag 任务的 `chat_url` 填群组或频道主页链接，无须填写消息 ID 范围：
+
+```json
+{
+  "namespace": "default",
+  "download_base": "downloads",
+  "jobs": [
+    {
+      "chat_url": "https://t.me/AVMYS/",
+      "tags": ["#绝区零", "#原神"],
+      "tag_match": "any",
+      "subdir": "AVMYS"
+    }
+  ]
+}
+```
+
+先运行 `tdl batch -c config.json --check-only` 查看匹配数量，再运行
+`tdl batch -c config.json -y` 下载。输出结构为
+`downloads/AVMYS/<chat-id>/<命中的tag> <清理后的说明> [消息ID]/`；目录名会移除
+说明中的所有 hashtag 和非法字符，并将 tag 加说明限制为 64 个字符。
+同时命中多个 tag 时，使用配置顺序中的第一个命中 tag 作为目录前缀。
+每组包含图片/视频、原始说明
+`message.txt` 与带所有成员消息 ID、说明和来源链接的 `message.json`。
+Telegram 相册只要有一条成员的说明包含 tag，就会下载整组。
+再次运行会按文件大小跳过已完成媒体，未完成文件可沿用下载器的分片续传。
 
 ## 命令行参数
 

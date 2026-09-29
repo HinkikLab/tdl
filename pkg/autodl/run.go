@@ -19,6 +19,7 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
+	"github.com/iyear/tdl/app/chat"
 	"github.com/iyear/tdl/core/dcpool"
 	tdl "github.com/iyear/tdl/core/downloader"
 	"github.com/iyear/tdl/core/logctx"
@@ -80,8 +81,11 @@ type Options struct {
 
 // Runner executes a batch config against one authorized telegram client.
 type Runner struct {
-	opts Options
-	cfg  *Config
+	opts     Options
+	cfg      *Config
+	client   *telegram.Client
+	storage  storage.Storage
+	poolSize int
 
 	pool    dcpool.Pool
 	manager *peers.Manager
@@ -115,6 +119,9 @@ func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Conf
 	}
 
 	for i := range cfg.Jobs {
+		if cfg.Jobs[i].IsTagJob() {
+			continue
+		}
 		mode, err := cfg.Jobs[i].ResolveMode(opts.Mode)
 		if err != nil {
 			return errors.Wrapf(err, "job %d", i+1)
@@ -135,7 +142,7 @@ func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Conf
 	threads := pick(opts.Threads, num(cfg.Threads), DefaultThreads)
 	limit := pick(opts.Limit, num(cfg.Limit), DefaultLimit)
 
-	r := &Runner{opts: opts, cfg: cfg}
+	r := &Runner{opts: opts, cfg: cfg, client: c, storage: kvd, poolSize: poolSize}
 	r.pool = dcpool.NewPool(c, int64(poolSize),
 		tclient.NewDefaultMiddlewares(ctx, 5*time.Minute)...)
 	defer multierr.AppendInvoke(&rerr, multierr.Close(r.pool))
@@ -191,6 +198,17 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 	dir := job.Dir()
 	if r.opts.Dir != "" {
 		dir = filepath.Join(r.opts.Dir, job.Subdir)
+	}
+	if job.IsTagJob() {
+		return chat.DownloadTag(ctx, r.client, r.storage, chat.TagOptions{
+			Chat: job.ChatURL, Tag: job.Tag, Tags: job.Tags,
+			TagMatch: job.TagMatch, Dir: dir,
+			CheckOnly: r.opts.CheckOnly, Takeout: r.opts.Takeout,
+			Threads: threads, Limit: limit, PoolSize: r.poolSize,
+			PoolSizeSet: true,
+			Pool:        r.pool,
+			MaxPosts:    job.MaxPosts,
+		})
 	}
 
 	if err = os.MkdirAll(dir, 0o755); err != nil {

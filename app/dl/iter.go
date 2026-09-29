@@ -38,6 +38,7 @@ const tempExt = ".tmp"
 type fileTemplate struct {
 	DialogID     int64
 	MessageID    int
+	GroupDir     string
 	MessageDate  int64
 	FileName     string
 	FileCaption  string
@@ -239,6 +240,7 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 	err := i.tpl.Execute(&toName, &fileTemplate{
 		DialogID:     from.ID(),
 		MessageID:    message.ID,
+		GroupDir:     i.opts.GroupDirByMessage[message.ID],
 		MessageDate:  int64(message.Date),
 		FileName:     item.Name,
 		FileCaption:  message.Message,

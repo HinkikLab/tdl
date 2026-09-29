@@ -325,10 +325,12 @@ func matchAlbum(pending []tagMedia, tags []string, mode string, chatID int64, ch
 	return post, true
 }
 
-// postDirectory uses the caption as the visible folder name and keeps the
-// first message ID as a stable, unique suffix for repeated captions.
+// postDirectory uses the caption as the visible folder name. A caption made
+// only of hashtags uses those hashtags in their original order, without #.
+// The first message ID remains a unique suffix for repeated captions.
 func postDirectory(caption string, id int, matchedTag string) string {
 	var out strings.Builder
+	var captionTags []string
 	for i := 0; i < len(caption); {
 		r, size := utf8.DecodeRuneInString(caption[i:])
 		if r == '#' {
@@ -341,6 +343,7 @@ func postDirectory(caption string, id int, matchedTag string) string {
 				end += n
 			}
 			if end > i+size {
+				captionTags = append(captionTags, caption[i+size:end])
 				out.WriteRune(' ')
 				i = end
 				continue
@@ -355,6 +358,12 @@ func postDirectory(caption string, id int, matchedTag string) string {
 	}
 	title := strings.Join(strings.Fields(out.String()), " ")
 	title = strings.Trim(title, " ._-")
+	tagOnly := len(captionTags) > 0 && strings.TrimFunc(title, func(r rune) bool {
+		return unicode.IsPunct(r) || unicode.IsSpace(r)
+	}) == ""
+	if tagOnly {
+		title = strings.Join(captionTags, " ")
+	}
 	runes := []rune(title)
 	if len(runes) > 64 {
 		title = strings.Trim(string(runes[:64]), " ._-")
@@ -362,7 +371,7 @@ func postDirectory(caption string, id int, matchedTag string) string {
 	if title == "" {
 		title = "post"
 	}
-	if matchedTag != "" {
+	if matchedTag != "" && !tagOnly {
 		title = strings.TrimPrefix(matchedTag, "#") + " " + title
 	}
 	runes = []rune(title)

@@ -112,8 +112,10 @@ individual media post goes into `downloads/AVMYS/<chat-id>/<matched-tag> <captio
 its photos/videos, the original caption in `message.txt`, and IDs, captions and
 source link in `message.json`. The directory name removes every hashtag and
 illegal path character and limits the tag plus caption to 64 characters. If
-several tags match, the first matching tag in config order becomes the prefix. A caption on
-any album member selects the whole
+several tags match, the first matching tag in config order becomes the prefix.
+If a caption consists only of hashtags, the folder uses every hashtag in its
+original order without `#` and keeps the message ID suffix to avoid collisions.
+A caption on any album member selects the whole
 album. Reruns skip completed files by size and resume partial downloads.
 
 ## Command line

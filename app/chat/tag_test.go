@@ -43,7 +43,10 @@ func TestPostDirectoryRemovesTagsAndUnsafeCharacters(t *testing.T) {
 	name := postDirectory("#绝区零 #摄影\n作品：夏日/海边? *2026*", 42, "#绝区零")
 	assert.Equal(t, "绝区零 作品：夏日 海边 2026 [42]", name)
 	assert.LessOrEqual(t, len([]rune(postDirectory(strings.Repeat("很长的说明", 30), 42, "#绝区零"))), 69)
-	assert.Equal(t, "绝区零 post [42]", postDirectory("#绝区零 #摄影", 42, "#绝区零"))
+	assert.Equal(t, "绝区零 摄影 [42]", postDirectory("#绝区零 #摄影", 42, "#绝区零"))
+	assert.Equal(t, "绝区零 [42]", postDirectory("#绝区零", 42, "#绝区零"))
+	assert.Equal(t, "tag1 tag2 tag3 [42]", postDirectory("#tag1 #tag2\n#tag3", 42, "#tag2"))
+	assert.Equal(t, "tag1 tag2 [42]", postDirectory("#tag1, #tag2", 42, "#tag2"))
 }
 
 func TestTagChatNameRejectsMessageLink(t *testing.T) {

@@ -100,6 +100,9 @@ func New() *cobra.Command {
 			return NewBatch().RunE(cmd, nil)
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Annotations[batchInitAnnotation] == "true" {
+				return nil
+			}
 			// init logger
 			debug, level := viper.GetBool(consts.FlagDebug), zap.InfoLevel
 			if debug {
@@ -142,6 +145,9 @@ func New() *cobra.Command {
 			return nil
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
+			if cmd.Annotations[batchInitAnnotation] == "true" {
+				return nil
+			}
 			return multierr.Combine(
 				kv.From(cmd.Context()).Close(),
 				logctx.From(cmd.Context()).Sync(),

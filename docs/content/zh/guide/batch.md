@@ -5,18 +5,26 @@ weight: 35
 
 # 批量下载
 
-`tdl batch` 是 `python/run_unified.py` 脚本的原生实现：读取**同一个 `config.json`**，
-支持评论下载、直接消息下载、增量模式与断点续传，但不再为每个批次 fork 一个 `tdl`
-进程，而是直接复用 tdl 内置下载器 —— 全程只有一个连接池、一个客户端，消息也按批
-量请求解析。
+`tdl batch` 是 `python/run_unified.py` 脚本的原生实现，保留其 `config.json` 基础字段，
+支持直接消息、评论、增量扫描、说明标签归档和预览帖链接资源归档。
+所有任务复用一个 Telegram 客户端和连接池，并支持文件分片续传。
 
 ## 快速开始
 
-1. 在下载目录放置 `config.json`（格式见下）。
-2. 执行：
+1. 一键生成带说明的示例配置，无须登录或连接 Telegram：
 
 {{< command >}}
-tdl batch
+tdl batch init
+{{< /command >}}
+
+2. 编辑生成的 `config.json`：保留需要的 job，删除其他示例，将 `example_channel`、
+   `example_discussion`、`example_forum`、消息 ID 和标签替换为自己的内容；
+   `namespace` 填已登录账号的命名空间。
+3. 先检查，再下载：
+
+{{< command >}}
+tdl batch -c config.json --check-only
+tdl batch -c config.json
 {{< /command >}}
 
 如果当前目录存在合法的 `config.json`，并且已经登录（`tdl login`），
@@ -30,22 +38,82 @@ tdl
 设置环境变量 `TDL_NO_BATCH=1` 可以禁用这个自动行为，让 `tdl` 始终只打印帮助。
 {{< /hint >}}
 
+## 一键生成示例配置
+
+{{< command >}}
+tdl batch init
+tdl batch init -c examples/config.json
+tdl batch init -c config.json --force
+{{< /command >}}
+
+默认写入当前目录的 `config.json`，也可用 `-c/--config` 指定输出路径；缺少的父目录
+会自动创建。文件已存在时会报告错误并保留原内容，`--force` 明确允许替换。
+生成只操作配置文件，不初始化账号存储、不发起机器人请求，也不执行示例中的 job。
+
+文件是标准 UTF-8 JSON，说明使用额外的 **`_comment`** 字段，解析器会忽略该字段。
+**`comment` 是评论模式配置，不能填说明文字。** 不要在 JSON 中添加 `//` 或尾随逗号。
+配置解析器也接受 YAML；未指定 `-c` 时依次查找 `config.json`、`config.yaml`、`config.yml`。
+所有相对路径以**执行命令的当前目录**为基准，不是配置文件所在目录。
+
+内置模板位于 `pkg/autodl/config.example.json`，包含以下 11 个 job。
+每个示例使用独立 `subdir`，避免不同任务共用消息级状态文件：
+
+| 示例 | 用途 | 核心配置 |
+| --- | --- | --- |
+| 01 | 频道/群组消息范围 | `comment: false`，`start_comment` / `end_comment` |
+| 02 | 关联讨论组评论 ID 范围 | `comment: true`，范围为讨论组内 ID |
+| 03 | 对话历史增量下载 | `incremental: true` |
+| 04 | 论坛指定话题增量下载 | `incremental: true`，`topic_id` |
+| 05 | 单篇帖子评论增量下载 | `incremental: true`，`chat`，`reply_post_id` |
+| 06 | 单个说明标签归档 | `tag` |
+| 07 | 多个标签命中任意一个 | `tags`，`tag_match: "any"` |
+| 08 | 多个标签全部命中 | `tags`，`tag_match: "all"` |
+| 09 | 单个主帖的链接资源归档 | 主帖 URL，`follow_links: true`，完整 `link_options` |
+| 10 | 扫描主频道并从评论中找入口 | 主页 URL，`follow_links: true`，`scan_comments: true` |
+| 11 | 按主帖范围和标签筛选链接资源 | 主页 URL，`follow_links: true`，范围、标签及机器人等待参数 |
+
+模板中的 URL 与 ID 是占位示例，须修改后使用。`max_posts: 1` 便于首次检查，
+改为 `0` 才会扫描全部历史；它仅用于标签和链接资源归档。
+
+## 选择模式
+
+每个 job 的执行顺序是：先判断 `follow_links`，再判断 `tag` / `tags`，
+其他 job 按 `incremental` 选择时间窗口或消息 ID 范围。
+任务按 `jobs` 数组顺序执行，可以在同一配置中混用各类 job。
+
+| 模式 | `chat_url` | ID 含义及限制 |
+| --- | --- | --- |
+| 直接范围 | 频道/群组主页或帖子 URL | 必填左闭右开范围；URL 的帖子 ID 不会自动变成下载范围 |
+| 评论范围 | 主频道帖子 URL，`comment: true` | 范围是关联讨论组的消息 ID；按 ID 下载，不自动限定为这篇主帖的回复 |
+| 增量 | 对话主页或主帖 URL | 不需要范围；`topic_id` / `reply_post_id` 仅在增量扫描中生效 |
+| 标签归档 | 频道/群组主页 | 不填 `comment`、范围、`topic_id`、`reply_post_id`；使用独立历史扫描与文件检查，增量参数不改变其行为 |
+| 链接资源归档 | 主频道主页或某篇主帖 | 可加主帖标签；主页可加主帖 ID 范围；不能与时间戳增量、`comment: true`、topic/reply 选择器组合 |
+
+`--mode auto` 是默认值，范围/增量任务按 `comment` 和 URL 的 `?comment=N`
+判断是否使用讨论组。`--mode comment` / `--mode direct` 覆盖任务的 `comment` 开关，
+但 URL 自带的 `?comment=N` 仍会选择讨论组；切回频道直接下载时也要移除该查询参数。
+这两个选项不改变标签或链接资源归档的模式。混合配置通常保持 `--mode auto`。
+`--incremental` 会强制所有 job 的增量开关，含链接资源 job 的配置会因此校验失败；
+混合配置请在各 job 中单独设置 `incremental`。
+
 ## 配置文件
 
-与 Python 版本完全兼容，`download_dir` 也可以作为 `download_base` 的别名：
+保留 Python 脚本的基础字段；标签和链接资源模式属于原生 batch 的扩展。
+最小的直接下载示例如下，下载消息 100 到 109：
 
 ```json
 {
-  "namespace": "",
+  "namespace": "default",
   "download_base": "downloads",
   "incremental": false,
   "jobs": [
     {
-      "chat_url": "https://t.me/shunv667/5639",
-      "comment": true,
-      "start_comment": 158865,
-      "end_comment": 159092,
-      "subdir": "example_post_48334"
+      "_comment": "直接下载消息 100 到 109",
+      "chat_url": "https://t.me/example_channel/100",
+      "comment": false,
+      "start_comment": 100,
+      "end_comment": 110,
+      "subdir": "direct"
     }
   ]
 }
@@ -53,37 +121,67 @@ tdl
 
 ### 顶层字段
 
-| 字段 | 说明 |
-| --- | --- |
-| `namespace` | 使用的 tdl 账号命名空间，等价于 `-n/--ns`，留空为 `default` |
-| `download_base` | 下载根目录，默认 `downloads` |
-| `incremental` | 全局开启增量模式（任务内的 `incremental` 优先） |
-| `state_file` | 状态文件路径，默认 `<下载目录>/tdl_state.json` |
-| `overlap_seconds` | 增量回看窗口秒数，默认 `3600` |
-| `jobs` | 任务列表，按顺序执行 |
-| `pool` / `threads` / `limit` | 可选的性能参数，等价于 `--pool` / `-t` / `-l` |
+| 字段 | 类型 / 默认值 | 说明 |
+| --- | --- | --- |
+| `_comment` | 字符串或数组，可省略 | 说明文字，忽略，不影响执行 |
+| `namespace` | 字符串，`default` | tdl 账号命名空间；显式 `-n/--ns` 优先 |
+| `download_base` | 字符串，`downloads` | 下载根目录；命令行 `-d` 可覆盖根目录，仍保留各 job 的 `subdir` |
+| `download_dir` | 字符串，可省略 | `download_base` 的旧版别名；后者非空时优先 |
+| `incremental` | 布尔值，`false` | 全局增量开关，job 可覆盖；混合模式建议保持 `false` |
+| `state_file` | 字符串，可省略 | 默认 `<download_base>/<subdir>/tdl_state.json`；仅消息范围/增量模式使用，混合任务建议保留默认独立路径 |
+| `overlap_seconds` | 非负整数，`3600` | 增量回看秒数；当前实现 `0` 会回落到其他层或默认值，不能用来关闭回看 |
+| `jobs` | 非空数组，必填 | 任务列表，按顺序执行 |
+| `pool` | 非负整数，`16` | 连接池大小；`0` 表示不限制连接池大小 |
+| `threads` | 正整数，`8` | 每个文件的最大下载线程数 |
+| `limit` | 正整数，`4` | 同时下载的文件数，不是同时执行的 job 数 |
 
 ### 任务字段
 
 | 字段 | 说明 |
 | --- | --- |
-| `chat_url` | 消息链接，支持 `https://t.me/user/123`、`https://t.me/c/123/456`、`https://t.me/user/123?comment=456` |
-| `chat` | 增量模式下用于导出的对话，留空则从链接推断 |
-| `subdir` | 该任务在 `download_base` 下的子目录 |
-| `comment` | `true` 表示评论模式：`start_comment`/`end_comment` 是**关联讨论组**里的评论 ID（等价于 tdl 的 `?comment=N`），写数字等价于同时指定 `start_comment` |
-| `start_comment` / `end_comment` | 下载范围，`start` 包含、`end` 不包含 |
+| `_comment` | 说明文字，忽略 |
+| `chat_url` | 必填。支持公开主页/帖子、私有 `https://t.me/c/1234567890/456`、`?comment=456`、不带协议及 `/s/` 预览链接；账号须有访问权限 |
+| `chat` | 增量扫描对话，可填用户名、数值 ID 或 Telegram URL；留空则从 `chat_url` 推断。覆盖扫描来源时须保证其消息 ID 与下载对话一致 |
+| `subdir` | job 的相对子目录；不能为绝对路径或通过 `..` 逃出下载根目录。不同任务使用独立子目录 |
+| `comment` | 默认 `false`；`true` 表示使用关联讨论组。旧版整数写法同时代表评论模式，且在未填 `start_comment` 时作为起始 ID。推荐使用布尔值及显式范围 |
+| `start_comment` / `end_comment` | 正整数，`start` 包含、`end` 不包含，`end > start`，范围最多 1,000,000 条。字段沿用旧名，直接模式仍填这两个字段 |
 | `incremental` | 覆盖全局增量开关 |
 | `overlap_seconds` | 覆盖全局增量回看窗口 |
 | `export_filter` | 增量模式的 expr 过滤表达式，等价于 `tdl chat export -f` |
 | `with_content` | 增量模式导出时附带 `date`/`text` |
 | `export_all` | 增量模式导出非媒体消息（默认只导出媒体） |
-| `topic_id` | 只保留该话题（topic）下的消息 |
-| `reply_post_id` | 只扫描该帖子的评论区（`messages.getReplies`） |
+| `topic_id` | 增量模式使用，正整数话题根消息 ID；URL 中的话题路径不会自动填入该字段 |
+| `reply_post_id` | 增量模式使用，扫描对话中的正整数回复根消息 ID；关联讨论组中应填转发根消息 ID，不是主频道帖子 ID |
 | `tag` / `tags` | 一个 tag 或多个 tag 数组；按图片/视频说明文字中的完整 hashtag 筛选，与消息 ID 范围任务二选一 |
 | `tag_match` | 多 tag 匹配方式：`any`（默认，命中任意一个）或 `all`（全部命中） |
 | `max_posts` | tag 任务最多匹配多少组，默认 `0` 表示扫描全部历史；可用于先做小规模验证 |
 | `follow_links` | 开启预览帖资源归档，从正文超链接或评论中追踪机器人/群组资源链接 |
 | `link_options` | 跳转、机器人等待、重新请求与会话消息清理参数，见下文 |
+
+`export_filter`、`with_content`、`export_all`、`topic_id`、`reply_post_id` 和增量
+`overlap_seconds` 不用于直接 ID 范围扫描。`export_all: true` 使非媒体消息也参与规划，
+不会把普通文本变成媒体文件；保留文字的归档请使用标签或链接资源模式。
+增量导出会保留在 `<job目录>/.tdl_tmp/` 中供排查。
+
+### 消息范围和评论范围
+
+直接下载某条消息 100：`comment: false`、`start_comment: 100`、`end_comment: 101`。
+评论范围示例：
+
+```json
+{
+  "chat_url": "https://t.me/example_channel/100",
+  "comment": true,
+  "start_comment": 900,
+  "end_comment": 910,
+  "subdir": "comments"
+}
+```
+
+这里 100 是主帖 ID，900 到 909 是讨论组的消息 ID。可从具体评论链接
+`https://t.me/example_channel/100?comment=900` 中取得评论 ID。
+范围任务不会按主帖过滤讨论组中的这些 ID；需要只扫描某一帖的评论时，
+采用示例 05 的增量 `reply_post_id`。
 
 ### 按 tag 归档图片和视频
 
@@ -95,10 +193,11 @@ tag 任务的 `chat_url` 填群组或频道主页链接，无须填写消息 ID 
   "download_base": "downloads",
   "jobs": [
     {
-      "chat_url": "https://t.me/AVMYS/",
-      "tags": ["#绝区零", "#原神"],
+      "chat_url": "https://t.me/example_channel",
+      "tags": ["#教程", "#示例"],
       "tag_match": "any",
-      "subdir": "AVMYS"
+      "max_posts": 1,
+      "subdir": "tags"
     }
   ]
 }
@@ -106,7 +205,7 @@ tag 任务的 `chat_url` 填群组或频道主页链接，无须填写消息 ID 
 
 先运行 `tdl batch -c config.json --check-only` 查看匹配数量，再运行
 `tdl batch -c config.json -y` 下载。输出结构为
-`downloads/AVMYS/<chat-id>/<命中的tag> <清理后的说明> [消息ID]/`；目录名会移除
+`downloads/tags/<chat-id>/<命中的tag> <清理后的说明> [消息ID]/`；目录名会移除
 说明中的所有 hashtag 和非法字符，并将 tag 加说明限制为 64 个字符。
 同时命中多个 tag 时，使用配置顺序中的第一个命中 tag 作为目录前缀。
 如果原始说明只有 hashtag，目录名使用说明中按顺序出现的全部 tag，去掉 `#`，
@@ -115,6 +214,12 @@ tag 任务的 `chat_url` 填群组或频道主页链接，无须填写消息 ID 
 `message.txt` 与带所有成员消息 ID、说明和来源链接的 `message.json`。
 Telegram 相册只要有一条成员的说明包含 tag，就会下载整组。
 再次运行会按文件大小跳过已完成媒体，未完成文件可沿用下载器的分片续传。
+
+标签可带或不带 `#`，支持 Unicode 字母、数字及下划线，匹配不区分大小写，
+并按完整 hashtag 匹配，`#教程` 不匹配 `#教程合集`。`tag` 和 `tags` 同时填写时合并
+并去重；`all` 可由同一相册不同成员的说明共同满足。只扫描图片/视频说明，不匹配
+独立文本帖或其他附件的文字。标签归档使用固定命名规则，`--template`、
+`--include` / `--exclude` 当前不影响此模式。
 
 ### 归档预览帖链接中的实际资源
 
@@ -147,7 +252,8 @@ Telegram 相册只要有一条成员的说明包含 tag，就会下载整组。
 }
 ```
 
-仓库根目录的 `config.linked.example.json` 包含完整参数示例。替换频道名和
+`tdl batch init` 的示例 09 包含完整参数；仓库根目录的
+`config.linked.example.json` 也保留单模式示例。替换频道名和
 账号 namespace 后运行 `tdl batch -c config.json --check-only` 预览主帖与评论中的
 入口链接，再运行 `tdl batch -c config.json` 下载。
 `--check-only` 不请求机器人、不下载文件、不删除消息，也不验证入口后的跳转链。
@@ -180,6 +286,15 @@ Telegram 相册只要有一条成员的说明包含 tag，就会下载整组。
 | `flood_wait_seconds` | `30` | 明确限流提示没有时长时的等待秒数 |
 | `max_flood_wait_seconds` | `3600` | 机器人文本限流的最大自动等待秒数，超出时报告失败 |
 
+数值 `0` 在大多数 `link_options` 字段中表示使用默认值；只有
+`rerequest_limit` / `flood_retries` 的 `0` 表示禁用对应重试。
+`scan_comments`、`include_previews`、`cleanup_bot_messages` 均可显式设为 `false`。
+其他上限为：timeout `3600` 秒、idle `300` 秒、poll `60000` 毫秒、
+bot messages / comment limit `10000`、rerequest `10` 次、flood retries `20` 次、
+fallback wait `3600` 秒、maximum wait `86400` 秒。
+`bot_idle_seconds < bot_timeout_seconds`，轮询间隔也须小于 timeout；
+`flood_wait_seconds` 不能大于 `max_flood_wait_seconds`。
+
 机器人会按主帖顺序请求，资源下载使用 batch 的连接池、线程数和文件并发数。
 收到“请求频繁/冷却/Too many requests”等提示后，识别秒、分钟、小时并自动等待
 再请求；只有明确限流且没有时长的提示才使用默认等待。普通“正在处理”提示继续等
@@ -201,8 +316,28 @@ topic/reply 选择器混用。群组链接须指向账号可访问的具体消�
 
 ## 命令行参数
 
-除了 `-c/--config`、`--check-only`、`-y/--yes`、`--mode`、`--incremental`、
-`--state-file`、`--overlap-seconds` 这些与 Python 版本对应的参数外，还提供了：
+生成示例使用 `tdl batch init`；下表用于执行 `tdl batch`：
+
+| 参数 | 默认值 / 作用 |
+| --- | --- |
+| `-c`, `--config` | 当前目录自动查找配置；显式路径优先 |
+| `--check-only` | 预览规划，不下载媒体、不推进增量时间戳；范围模式只报告 ID 计划，不验证文件可用性；标签/链接模式扫描入口 |
+| `-y`, `--yes` | 自动回答运行中的确认，不允许推进尚未完成的增量窗口 |
+| `--mode auto/comment/direct` | 默认 `auto`；覆盖范围/增量 job 的 `comment` 开关 |
+| `--incremental` | 强制所有 job 开启增量；混合链接资源 job 时不要使用 |
+| `--state-file` | 覆盖所有范围/增量 job 的状态路径；多 job 应保持独立路径，避免 scope 冲突 |
+| `--overlap-seconds` | 覆盖增量回看窗口；不传为 `-1`，使用配置/默认值，`0` 回落到其他层 |
+| `--retry-skipped` | 重试记录为无媒体/已删除的消息；只用于范围/增量状态 |
+| `-d`, `--dir` | 覆盖下载根目录，仍追加每个 job 的 `subdir` |
+| `--template` | 范围/增量媒体文件名模板，默认 `{{ .DialogID }}_{{ .MessageID }}_{{ filenamify .FileName }}`；参见[模板指南](../template/) |
+| `-i`, `--include` / `-e`, `--exclude` | 逗号分隔扩展名，互斥；用于范围/增量和链接资源模式 |
+| `--takeout` | 使用 Telegram takeout 下载会话 |
+| `--batch-threads` | 每文件线程数，正数覆盖其他层，默认 `0` 不覆盖 |
+| `--batch-limit` | 文件并发数，正数覆盖其他层，默认 `0` 不覆盖 |
+| `--batch-pool` | 连接池大小，显式 `0` 表示不限制 |
+| `-n`, `--ns` | 全局账号命名空间；显式指定时覆盖配置 |
+| `-t`, `--threads` / `-l`, `--limit` / `--pool` | 全局性能覆盖；仅显式指定时覆盖配置 |
+| `--delay` | 全局每文件任务间隔，例如 `1s`，默认 `0` |
 
 {{< command >}}
 tdl batch -c config.json -y --check-only
@@ -211,6 +346,11 @@ tdl batch -d /path/to/downloads -i mp4,jpg
 tdl batch --batch-threads 8 --batch-limit 4 --batch-pool 16
 tdl batch --retry-skipped
 {{< /command >}}
+
+`--check-only` 仍需登录并读取 Telegram（普通范围计划可能无需查询消息）；
+范围/增量任务可能创建本地目录或增量导出文件。
+不要与 `--retry-skipped` 一起用于只读检查，后者会更新状态中的不可用记录。
+无账号、离线生成配置请用 `tdl batch init`。
 
 {{< hint info >}}
 `--batch-threads` / `--batch-limit` / `--batch-pool` 优先于全局的 `-t` / `-l` / `--pool`，
@@ -278,6 +418,49 @@ tdl batch --incremental --overlap-seconds 3600
 
 时间戳只有在窗口内所有消息都下载完成（或被标记为不可用）之后才会推进，
 所以失败的消息下次运行仍会重试。加 `--check-only` 可以只预览不下载、也不推进时间戳。
+
+首次运行没有 `last_ts`，会从历史起点扫描，而非只扫描最近一小时；单个增量窗口
+最多扫描 100,000 条消息，超过会失败并保留原时间戳。之后扫描
+`[last_ts - overlap_seconds, 当前时间]`，已完成消息由状态去重。
+配置中不要填写范围来限制增量任务，增量执行会从时间窗口获取 ID。
+
+只扫描一个论坛话题：
+
+```json
+{
+  "chat_url": "https://t.me/example_forum",
+  "incremental": true,
+  "topic_id": 200,
+  "subdir": "topic-200"
+}
+```
+
+只扫描一篇频道帖的评论：
+
+```json
+{
+  "chat_url": "https://t.me/example_channel/100",
+  "chat": "https://t.me/example_discussion",
+  "comment": true,
+  "incremental": true,
+  "reply_post_id": 900,
+  "with_content": true,
+  "subdir": "post-100-comments"
+}
+```
+
+900 必须是关联讨论组中的转发根消息 ID。若已经使用讨论组自身的 URL 作为
+`chat_url`，可改用直接模式（省略 `comment` 或设 `false`），并省略 `chat`。
+获取转发根消息的链接后，使用其讨论组消息 ID；不要将频道的 100 直接作为 900 使用。
+`export_filter` 的表达式语法和消息字段见[导出消息](../tools/export-messages/)。
+
+### 状态文件冲突
+
+出现 `state ... belongs to ...; use a distinct subdir or state file` 时，说明不同来源、
+topic/reply、模式、下载目录或文件命名/过滤规则共用了状态路径。
+为每个任务指定不同 `subdir`，并避免给多种任务指定一个顶层 `state_file` 或
+`--state-file`。改变输出规则后使用新的子目录或状态文件；保留原状态便于恢复原任务。
+标签和链接资源任务使用文件/归档清单续跑，不使用这个消息级状态文件。
 
 ## 性能
 

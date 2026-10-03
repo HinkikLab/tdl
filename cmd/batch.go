@@ -130,17 +130,18 @@ func NewBatch() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "batch",
-		Short: "Batch download from a run_unified.py compatible config.json",
-		Long: `Batch download a list of telegram messages or comments described by a
-config.json, using the same format as python/run_unified.py.
+		Short: "Batch download messages, comments, caption tags or linked resources",
+		Long: `Batch download Telegram messages, comments, caption-tag archives or
+linked resources described by config.json. Run "tdl batch init" to generate
+annotated examples of all modes, compatible with the native batch parser.
 
 Without --config, config.json in the working directory is used. Running bare
 ` + "`tdl`" + ` (without any argument) starts this command automatically when such a
 config exists and the account is logged in.
 
-Every job is resumable: finished messages are recorded in a state file next to
-the downloads, and partially downloaded files keep their parts so only the
-missing ones are fetched again.`,
+Range and incremental jobs record finished messages in a state file. Caption
+and linked-resource archives validate their saved files; partial downloads
+keep their parts so only missing parts are fetched again.`,
 		GroupID: groupTools.ID,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -228,6 +229,7 @@ missing ones are fetched again.`,
 
 	_ = cmd.MarkFlagDirname("dir")
 	cmd.MarkFlagsMutuallyExclusive("include", "exclude")
+	cmd.AddCommand(NewBatchInit())
 
 	return cmd
 }

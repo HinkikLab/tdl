@@ -6,19 +6,26 @@ weight: 35
 # Batch download
 
 `tdl batch` is a native port of the `python/run_unified.py` helper. It reads the
-**same `config.json`** and supports comment downloads, direct message
-downloads, incremental mode and resume, but it no longer spawns one `tdl`
-process per batch. Instead it drives tdl's own downloader, so the whole run
-shares one connection pool, one Telegram client and batched message
-resolution.
+**same base `config.json` fields** and adds caption-tag and linked-resource
+archives. Direct messages, comments, incremental jobs and archives share one
+Telegram client and connection pool, with resumable file downloads.
 
 ## Quick start
 
-1. Put a `config.json` next to your downloads (see below).
-2. Run:
+1. Generate an annotated configuration without logging in or connecting to Telegram:
 
 {{< command >}}
-tdl batch
+tdl batch init
+{{< /command >}}
+
+2. Keep the jobs you need and remove the other examples. Replace
+   `example_channel`, `example_discussion`, `example_forum`, message IDs and
+   hashtags. Set `namespace` to your logged-in account.
+3. Preview the plan, then download:
+
+{{< command >}}
+tdl batch -c config.json --check-only
+tdl batch -c config.json
 {{< /command >}}
 
 When the working directory holds a valid `config.json` **and** you are logged in
@@ -33,23 +40,90 @@ Set `TDL_NO_BATCH=1` to disable that automatic start and always get the help
 output instead.
 {{< /hint >}}
 
+## Generate example configuration
+
+{{< command >}}
+tdl batch init
+tdl batch init -c examples/config.json
+tdl batch init -c config.json --force
+{{< /command >}}
+
+The default destination is `config.json` in the working directory. `-c/--config`
+selects another output path, and missing parent directories are created.
+Existing files are preserved unless `--force` explicitly allows replacement.
+Generation only writes the configuration; it does not initialize account
+storage, contact bots or execute any jobs.
+
+The output is standard UTF-8 JSON. Extra **`_comment`** fields contain notes
+and are ignored by the parser. **`comment` selects comment mode and must not
+be used for descriptive text.** Do not add `//` comments or trailing commas.
+The parser also accepts YAML. Without `-c`, batch searches for `config.json`,
+`config.yaml`, then `config.yml`. Relative paths are based on the **working
+directory**, including when the configuration lives elsewhere.
+
+The embedded template at `pkg/autodl/config.example.json` includes 11 jobs.
+Each uses its own `subdir` to keep message-level resume state separate:
+
+| Example | Purpose | Main settings |
+| --- | --- | --- |
+| 01 | Direct channel/group message range | `comment: false`, `start_comment` / `end_comment` |
+| 02 | Linked discussion group comment ID range | `comment: true`, discussion group IDs |
+| 03 | Incremental chat history | `incremental: true` |
+| 04 | Incremental forum topic | `incremental: true`, `topic_id` |
+| 05 | Incremental replies to one post | `incremental: true`, `chat`, `reply_post_id` |
+| 06 | Single caption hashtag archive | `tag` |
+| 07 | Any requested caption hashtag | `tags`, `tag_match: "any"` |
+| 08 | All requested caption hashtags | `tags`, `tag_match: "all"` |
+| 09 | Linked resources from one main post | Post URL, `follow_links: true`, complete `link_options` |
+| 10 | Preview history with comment links | Home URL, `follow_links: true`, `scan_comments: true` |
+| 11 | Linked resources filtered by main-post range and tags | Home URL, `follow_links: true`, range, tags and bot timing |
+
+URLs and IDs are placeholders; edit them before use. Archive examples use
+`max_posts: 1` for an initial preview. Set it to `0` to scan all history.
+This limit applies only to caption-tag and linked-resource archives.
+
+## Select a mode
+
+For each job, batch checks `follow_links` first, then `tag` / `tags`. Other
+jobs use either an incremental time window or an explicit ID range.
+Jobs run in array order; one configuration can contain several modes.
+
+| Mode | `chat_url` | ID meaning and constraints |
+| --- | --- | --- |
+| Direct range | Channel/group home or post | Both range endpoints are required; the post ID in the URL does not automatically select a download range |
+| Comment range | Main channel post, `comment: true` | Range IDs belong to the linked discussion group; these IDs are not automatically restricted to replies to that post |
+| Incremental | Chat home or main post | No range required; `topic_id` / `reply_post_id` apply only to incremental scanning |
+| Caption-tag archive | Channel/group home | Omit `comment`, ranges and topic/reply selectors; its own history scan and file validation are independent of incremental settings |
+| Linked-resource archive | Main channel home or one post | Optional main-post tags; home URLs may use a main-post ID range; cannot combine with timestamp incremental mode, `comment: true` or topic/reply selectors |
+
+`--mode auto` is the default. Range/incremental jobs choose the discussion
+group from `comment` or `?comment=N` in the URL. `--mode comment/direct`
+overrides the job's `comment` setting, but a URL containing `?comment=N`
+still selects the discussion group. Remove that query parameter when switching
+to direct channel downloads. These flags do not change tag/linked archive modes.
+Use `auto` for mixed configurations. `--incremental` forces the setting on
+all jobs and fails validation if a linked-resource job is present; configure
+incremental jobs individually instead.
+
 ## Configuration
 
-The format is fully compatible with the python script. `download_dir` is
-accepted as an alias of `download_base`.
+The base fields remain compatible with the Python script. Tag and linked
+archives are native batch extensions. This minimal direct job downloads
+messages 100 through 109:
 
 ```json
 {
-  "namespace": "",
+  "namespace": "default",
   "download_base": "downloads",
   "incremental": false,
   "jobs": [
     {
-      "chat_url": "https://t.me/shunv667/5639",
-      "comment": true,
-      "start_comment": 158865,
-      "end_comment": 159092,
-      "subdir": "example_post_48334"
+      "_comment": "Download messages 100 through 109 directly",
+      "chat_url": "https://t.me/example_channel/100",
+      "comment": false,
+      "start_comment": 100,
+      "end_comment": 110,
+      "subdir": "direct"
     }
   ]
 }
@@ -57,37 +131,68 @@ accepted as an alias of `download_base`.
 
 ### Top level fields
 
-| Field | Description |
-| --- | --- |
-| `namespace` | tdl namespace (account) to use, same as `-n/--ns`. Empty means `default` |
-| `download_base` | download root, defaults to `downloads` |
-| `incremental` | enable incremental mode for every job (a job may override it) |
-| `state_file` | resume/incremental state path, defaults to `<download dir>/tdl_state.json` |
-| `overlap_seconds` | incremental lookback window in seconds, defaults to `3600` |
-| `jobs` | the download tasks, processed in order |
-| `pool` / `threads` / `limit` | optional performance settings, same as `--pool` / `-t` / `-l` |
+| Field | Type / default | Description |
+| --- | --- | --- |
+| `_comment` | Optional string/array | Documentation only; ignored |
+| `namespace` | String, `default` | Account namespace; explicit `-n/--ns` takes precedence |
+| `download_base` | String, `downloads` | Download root; `-d` overrides it while preserving job subdirectories |
+| `download_dir` | Optional string | Legacy alias; nonempty `download_base` wins |
+| `incremental` | Boolean, `false` | Global incremental switch, overridden per job; keep false for mixed examples |
+| `state_file` | Optional string | Default `<download_base>/<subdir>/tdl_state.json`; used by range/incremental jobs; prefer distinct default paths |
+| `overlap_seconds` | Nonnegative integer, `3600` | Incremental lookback; currently `0` falls back to another layer/default rather than disabling lookback |
+| `jobs` | Required nonempty array | Download tasks, processed in order |
+| `pool` | Nonnegative integer, `16` | Connection pool size; `0` is unlimited |
+| `threads` | Positive integer, `8` | Maximum threads for one file |
+| `limit` | Positive integer, `4` | Concurrent files, not concurrent jobs |
 
 ### Job fields
 
 | Field | Description |
 | --- | --- |
-| `chat_url` | message link: `https://t.me/user/123`, `https://t.me/c/123/456` or `https://t.me/user/123?comment=456` |
-| `chat` | chat used for the export in incremental mode, inferred from the link when empty |
-| `subdir` | directory under `download_base` for this job |
-| `comment` | `true` selects comment mode: `start_comment`/`end_comment` are comment ids in the **linked discussion group** (tdl's `?comment=N`); a number also sets `start_comment` |
-| `start_comment` / `end_comment` | id range, `start` inclusive, `end` exclusive |
+| `_comment` | Documentation only; ignored |
+| `chat_url` | Required. Public home/post, private `https://t.me/c/1234567890/456`, comment links, links without a scheme and `/s/` preview links are accepted; the account must have access |
+| `chat` | Incremental scan source: username, numeric ID or Telegram URL; inferred when omitted. Its IDs must belong to the dialog used for downloading |
+| `subdir` | Relative job directory under `download_base`; absolute paths and escaping `..` paths are rejected; use distinct directories for distinct jobs |
+| `comment` | Default false; true selects the linked discussion group. A legacy integer also selects comment mode and sets the start ID if omitted. Prefer a boolean with explicit endpoints |
+| `start_comment` / `end_comment` | Positive integers, start inclusive, end exclusive, end greater than start; maximum range 1,000,000. Direct jobs use these same legacy field names |
 | `incremental` | per job override of the global incremental switch |
 | `overlap_seconds` | per job override of the lookback window |
 | `export_filter` | expr filter for incremental mode, same as `tdl chat export -f` |
 | `with_content` | include `date`/`text` in the incremental export |
 | `export_all` | also export non-media messages in incremental mode |
-| `topic_id` | keep only messages of one forum topic |
-| `reply_post_id` | scan the comment section of one post (`messages.getReplies`) |
+| `topic_id` | Incremental only: positive topic root ID; topic IDs in URLs do not automatically populate this selector |
+| `reply_post_id` | Incremental only: positive reply root ID in the scan dialog; use the forwarded root ID in the discussion group, not the original channel post ID |
 | `tag` / `tags` | one hashtag or an array of hashtags matched against photo/video captions; use instead of a message ID range |
 | `tag_match` | `any` (default) selects posts with any requested tag; `all` requires every tag |
 | `max_posts` | optionally stop after this many matching posts; `0` (the default) scans the full history |
 | `follow_links` | archive resources reached through links in preview posts or their comments |
 | `link_options` | bounded resolution, bot waiting, reissue and cleanup settings described below |
+
+`export_filter`, `with_content`, `export_all`, topic/reply selectors and
+incremental lookback are not used by direct ID-range scanning.
+`export_all: true` includes non-media messages in the plan; it does not turn
+text into downloadable files. Use an archive mode to preserve post descriptions.
+Incremental export files are retained under `<job directory>/.tdl_tmp/`.
+
+### Message and comment ranges
+
+To download message 100 alone, set `comment: false`, `start_comment: 100`
+and `end_comment: 101`. A comment range looks like this:
+
+```json
+{
+  "chat_url": "https://t.me/example_channel/100",
+  "comment": true,
+  "start_comment": 900,
+  "end_comment": 910,
+  "subdir": "comments"
+}
+```
+
+100 is the main post ID; 900–909 are discussion group message IDs. The comment
+ID can be read from `https://t.me/example_channel/100?comment=900`.
+Range jobs fetch those discussion IDs without filtering by the main post.
+Use the incremental `reply_post_id` example to scan replies to one root.
 
 ### Archive photo and video posts by hashtag
 
@@ -99,10 +204,11 @@ For a tag job, `chat_url` is the chat's home URL and no message range is needed:
   "download_base": "downloads",
   "jobs": [
     {
-      "chat_url": "https://t.me/AVMYS/",
-      "tags": ["#绝区零", "#原神"],
+      "chat_url": "https://t.me/example_channel",
+      "tags": ["#tutorial", "#example"],
       "tag_match": "any",
-      "subdir": "AVMYS"
+      "max_posts": 1,
+      "subdir": "tags"
     }
   ]
 }
@@ -110,7 +216,7 @@ For a tag job, `chat_url` is the chat's home URL and no message range is needed:
 
 Run `tdl batch -c config.json --check-only` to count matches, then
 `tdl batch -c config.json -y` to download. Each matching Telegram album or
-individual media post goes into `downloads/AVMYS/<chat-id>/<matched-tag> <caption> [id]/` with
+individual media post goes into `downloads/tags/<chat-id>/<matched-tag> <caption> [id]/` with
 its photos/videos, the original caption in `message.txt`, and IDs, captions and
 source link in `message.json`. The directory name removes every hashtag and
 illegal path character and limits the tag plus caption to 64 characters. If
@@ -119,6 +225,14 @@ If a caption consists only of hashtags, the folder uses every hashtag in its
 original order without `#` and keeps the message ID suffix to avoid collisions.
 A caption on any album member selects the whole
 album. Reruns skip completed files by size and resume partial downloads.
+
+Tags may include or omit `#`; Unicode letters, digits and underscores are
+accepted. Matching is case-insensitive and requires a complete hashtag:
+`#tutorial` does not match `#tutorials`. `tag` and `tags` are merged and
+deduplicated. In `all` mode, different members of one album may satisfy
+different tags. Only photo/video captions are scanned, not separate text posts
+or other attachment types. This archive uses fixed names; `--template` and
+`--include` / `--exclude` currently do not affect caption-tag jobs.
 
 ### Archive linked resources from preview posts
 
@@ -149,7 +263,8 @@ range and preserve any matching album in full; `comment: true` is not used.
 }
 ```
 
-See `config.linked.example.json` in the repository root for every setting.
+Example 09 from `tdl batch init` contains every setting. The repository root
+also contains the single-mode `config.linked.example.json`.
 `tdl batch -c config.json --check-only` discovers main-post and comment entry
 links without requesting bots, downloading, writing archives or deleting
 messages. It does not verify the chain beyond those entry links.
@@ -184,6 +299,15 @@ partial files even when their message IDs change.
 | `flood_wait_seconds` | `30` | wait when an explicit rate-limit message gives no duration |
 | `max_flood_wait_seconds` | `3600` | maximum automatic wait for textual bot rate limits |
 
+Zero selects defaults for most numeric `link_options`; only
+`rerequest_limit` / `flood_retries` use `0` to disable retries.
+`scan_comments`, `include_previews` and `cleanup_bot_messages` can be set false.
+Other upper bounds are: timeout 3600 seconds, idle 300 seconds, polling 60000 ms,
+bot messages / comment limit 10000, reissues 10, flood retries 20, fallback
+wait 3600 seconds and maximum wait 86400 seconds.
+Idle and polling intervals must be shorter than the timeout, and
+`flood_wait_seconds` must not exceed `max_flood_wait_seconds`.
+
 English/Chinese rate-limit messages with seconds, minutes or hours trigger a
 cancellation-aware wait followed by a fresh request. Progress notifications
 keep waiting on the current request. This bot-specific backoff does not apply
@@ -209,9 +333,28 @@ executed. Unrecognized custom rate-limit text results in a response timeout.
 
 ## Command line
 
-Besides the flags that map one to one onto the python arguments (`-c/--config`,
-`--check-only`, `-y/--yes`, `--mode`, `--incremental`, `--state-file`,
-`--overlap-seconds`), the command adds:
+Use `tdl batch init` to generate examples. The following flags execute batch jobs:
+
+| Flag | Default / effect |
+| --- | --- |
+| `-c`, `--config` | Auto-discovered in the working directory; explicit paths win |
+| `--check-only` | Preview without media downloads or advancing timestamps; range jobs report ID plans without proving availability, tag/linked jobs scan entries |
+| `-y`, `--yes` | Answer runtime confirmations; cannot advance incomplete incremental windows |
+| `--mode auto/comment/direct` | Default auto; override range/incremental jobs' comment switch |
+| `--incremental` | Force incremental on all jobs; avoid in mixed configurations containing linked archives |
+| `--state-file` | Override all range/incremental state paths; distinct jobs need separate paths to avoid scope conflicts |
+| `--overlap-seconds` | Incremental lookback override; default -1 uses configuration/defaults, 0 falls back to another layer |
+| `--retry-skipped` | Retry IDs recorded as unavailable; range/incremental state only |
+| `-d`, `--dir` | Override root while keeping each job's subdir |
+| `--template` | Range/incremental filename template; default `{{ .DialogID }}_{{ .MessageID }}_{{ filenamify .FileName }}`; see [templates](../template/) |
+| `-i`, `--include` / `-e`, `--exclude` | Comma-separated extensions, mutually exclusive; range/incremental and linked-resource modes |
+| `--takeout` | Download through Telegram takeout sessions |
+| `--batch-threads` | Per-file threads; positive values override other layers, default 0 is no override |
+| `--batch-limit` | Concurrent files; positive values override other layers, default 0 is no override |
+| `--batch-pool` | Connection pool size; explicit 0 is unlimited |
+| `-n`, `--ns` | Global namespace; explicit values override configuration |
+| `-t`, `--threads` / `-l`, `--limit` / `--pool` | Global performance settings; override configuration only when explicitly supplied |
+| `--delay` | Global per-file delay, e.g. `1s`, default 0 |
 
 {{< command >}}
 tdl batch -c config.json -y --check-only
@@ -220,6 +363,12 @@ tdl batch -d /path/to/downloads -i mp4,jpg
 tdl batch --batch-threads 8 --batch-limit 4 --batch-pool 16
 tdl batch --retry-skipped
 {{< /command >}}
+
+`--check-only` still requires a logged-in client and may read Telegram; an
+ordinary range plan may not query messages. Range/incremental jobs can create
+local directories or export files. Do not combine it with `--retry-skipped`
+for a read-only check, since that flag modifies unavailable-message state.
+Use `tdl batch init` for offline generation without an account.
 
 {{< hint info >}}
 `--batch-threads` / `--batch-limit` / `--batch-pool` win over the global
@@ -299,6 +448,54 @@ tdl batch --incremental --overlap-seconds 3600
 The timestamp only advances once every message of the window is downloaded (or
 marked as unavailable), so failures are retried by the next run. Combine with
 `--check-only` to preview the window without downloading or advancing it.
+
+Without a saved `last_ts`, the first run scans from the beginning of history,
+not just the last hour. A window scans at most 100,000 messages; exceeding
+that limit fails and preserves the timestamp. Later runs use
+`[last_ts - overlap_seconds, now]`, with completed IDs deduplicated by state.
+ID range fields do not limit an incremental job.
+
+A forum-topic job:
+
+```json
+{
+  "chat_url": "https://t.me/example_forum",
+  "incremental": true,
+  "topic_id": 200,
+  "subdir": "topic-200"
+}
+```
+
+Replies to one channel post:
+
+```json
+{
+  "chat_url": "https://t.me/example_channel/100",
+  "chat": "https://t.me/example_discussion",
+  "comment": true,
+  "incremental": true,
+  "reply_post_id": 900,
+  "with_content": true,
+  "subdir": "post-100-comments"
+}
+```
+
+900 must be the forwarded root ID in the linked discussion group. If
+`chat_url` already names that discussion group, use direct mode (omit
+`comment` or set it false) and omit `chat`. Copy the discussion root's
+message link to identify its ID; the channel ID 100 is not a substitute.
+See [export messages](../tools/export-messages/) for `export_filter`
+expression syntax and available message fields.
+
+### State path conflicts
+
+`state ... belongs to ...; use a distinct subdir or state file` means different
+sources, topic/reply selectors, modes, output directories or naming/extension
+rules share a state path. Assign distinct `subdir` values, and avoid a shared
+top-level `state_file` or `--state-file` for multiple jobs. When changing output
+rules, use a new directory/state path and preserve old state for the old job.
+Tag and linked archives resume through files/manifests, not this message-level
+state file.
 
 ## Performance
 

@@ -123,10 +123,7 @@ func (d *Downloader) download(ctx context.Context, elem Elem) error {
 	logctx.From(ctx).Debug("Start download elem",
 		zap.Any("elem", elem))
 
-	client := d.opts.Pool.Client(ctx, elem.File().DC())
-	if elem.AsTakeout() {
-		client = d.opts.Pool.Takeout(ctx, elem.File().DC())
-	}
+	client := d.client(ctx, elem)
 
 	threads := max(1, tutil.BestThreads(elem.File().Size(), d.opts.Threads))
 

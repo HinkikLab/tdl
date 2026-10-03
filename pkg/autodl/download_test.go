@@ -14,6 +14,7 @@ import (
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
+	"github.com/gotd/td/tgerr"
 	pw "github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap"
@@ -130,6 +131,94 @@ func TestBatchDownloadFailureAndResume(t *testing.T) {
 	loaded, err := LoadState(store.path)
 	require.NoError(t, err)
 	require.True(t, loaded.IsFinished(2))
+}
+
+func TestBatchRefreshesExpiredFileReference(t *testing.T) {
+	for _, mode := range []string{"fresh", "resume", "changed media"} {
+		t.Run(mode, func(t *testing.T) {
+			dir := t.TempDir()
+			path := filepath.Join(dir, "7.bin")
+			data := bytes.Repeat([]byte{0xAB}, 2*downloader.MaxPartSize+13)
+			store, state, err := LoadStateStore(filepath.Join(dir, "state.json"))
+			require.NoError(t, err)
+			if mode == "resume" {
+				previous := newTestElem(path, int64(len(data)))
+				require.NoError(t, previous.start(false))
+				_, err = previous.to.WriteAt(data[:downloader.MaxPartSize], 0)
+				require.NoError(t, err)
+				previous.store.PartDone(0)
+				require.NoError(t, previous.closeFile())
+			}
+			metadataCalls := 0
+			var offsets []int64
+			api := tg.NewClient(batchRPC(func(ctx context.Context, in bin.Encoder, out bin.Decoder) error {
+				switch req := in.(type) {
+				case *tg.ChannelsGetMessagesRequest:
+					metadataCalls++
+					ref := []byte("old")
+					id := int64(42)
+					if metadataCalls > 1 {
+						ref = []byte("fresh")
+						if mode == "changed media" {
+							id++
+						}
+					}
+					msg := &tg.Message{ID: 7, PeerID: &tg.PeerChannel{ChannelID: 123}}
+					msg.SetMedia(&tg.MessageMediaDocument{Document: &tg.Document{ID: id, DCID: 2, Size: int64(len(data)), FileReference: ref, MimeType: "application/octet-stream"}})
+					return encodeResult(&tg.MessagesChannelMessages{Messages: []tg.MessageClass{msg}}, out)
+				case *tg.UploadGetFileRequest:
+					offsets = append(offsets, req.Offset)
+					if req.Offset >= downloader.MaxPartSize && string(req.Location.(*tg.InputDocumentFileLocation).FileReference) == "old" {
+						return tgerr.New(400, "FILE_REFERENCE_EXPIRED")
+					}
+					end := min(int64(len(data)), req.Offset+int64(req.Limit))
+					return encodeResult(&tg.UploadFile{Type: &tg.StorageFileUnknown{}, Bytes: data[req.Offset:end]}, out)
+				default:
+					return fmt.Errorf("unexpected RPC %T", in)
+				}
+			}))
+			manager := peers.Options{}.Build(api)
+			dialog := manager.Channel(&tg.Channel{ID: 123, AccessHash: 456})
+			it, err := newIter(batchPool{api}, manager, dialog, dir, []int{7}, &iterOptions{template: `{{.MessageID}}.bin`})
+			require.NoError(t, err)
+			defer it.Drain()
+			p := newJobProgress(pw.NewWriter(), &jobContext{state: state, store: store, logger: zap.NewNop()})
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			err = downloader.New(downloader.Options{Pool: batchPool{api}, Threads: 1, Iter: it, Progress: p, SkipParts: true}).Download(ctx, 1)
+			require.Equal(t, 2, metadataCalls, "initial metadata plus one refresh")
+			done, failed, _ := p.Stats()
+			if mode == "changed media" {
+				require.ErrorContains(t, err, "media changed during download")
+				require.False(t, state.IsFinished(7))
+				require.Zero(t, done)
+				require.Equal(t, 1, failed)
+				require.FileExists(t, path+tempExt)
+				require.NoFileExists(t, path)
+				return
+			}
+			require.NoError(t, err)
+			require.True(t, state.IsFinished(7))
+			require.Equal(t, 1, done)
+			require.Zero(t, failed)
+			require.NoFileExists(t, path+tempExt)
+			require.NoFileExists(t, downloader.PartsPath(path+tempExt))
+			got, err := os.ReadFile(path)
+			require.NoError(t, err)
+			require.Equal(t, data, got)
+			count := 0
+			for _, offset := range offsets {
+				if offset == 0 {
+					count++
+				}
+			}
+			if mode == "resume" {
+				require.Zero(t, count)
+			} else {
+				require.Equal(t, 1, count)
+			}
+		})
+	}
 }
 
 func TestIterBatchesMetadataAndOpensFilesOnDemand(t *testing.T) {

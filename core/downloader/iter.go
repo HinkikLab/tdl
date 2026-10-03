@@ -25,3 +25,9 @@ type File interface {
 	Size() int64
 	DC() int
 }
+
+// FileSource is an optional Elem extension identifying the message to fetch
+// again when Telegram rejects an expired file reference.
+type FileSource interface {
+	FileSource() (peer tg.InputPeerClass, messageID int)
+}

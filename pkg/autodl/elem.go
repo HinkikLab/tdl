@@ -118,6 +118,13 @@ func (e *elem) To() io.WriterAt { return e.to }
 // AsTakeout implements downloader.Elem.
 func (e *elem) AsTakeout() bool { return e.takeout }
 
+func (e *elem) FileSource() (tg.InputPeerClass, int) {
+	if e.dialog == nil {
+		return nil, 0
+	}
+	return e.dialog.InputPeer(), e.msgID
+}
+
 // mediaFile adapts a telegram media item to downloader.File.
 type mediaFile struct {
 	media *tmedia.Media

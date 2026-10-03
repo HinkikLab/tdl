@@ -38,3 +38,10 @@ func (i *iterElem) Name() string { return i.file.Name }
 func (i *iterElem) Size() int64 { return i.file.Size }
 
 func (i *iterElem) DC() int { return i.file.DC }
+
+func (i *iterElem) FileSource() (tg.InputPeerClass, int) {
+	if i.from == nil || i.fromMsg == nil {
+		return nil, 0
+	}
+	return i.from.InputPeer(), i.fromMsg.ID
+}

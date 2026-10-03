@@ -31,3 +31,12 @@ type File interface {
 type FileSource interface {
 	FileSource() (peer tg.InputPeerClass, messageID int)
 }
+
+// FileRefresher lets an expiring source request the attachment again, for
+// example through a bot deep link after its original message was deleted.
+// The downloader validates file identity, size and DC before using it.
+// The supplied location is the currently rejected reference, including any
+// previous refresh, so repeated expirations can be handled safely.
+type FileRefresher interface {
+	RefreshFile(context.Context, tg.InputFileLocationClass) (File, error)
+}

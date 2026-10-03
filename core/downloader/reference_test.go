@@ -23,6 +23,15 @@ type sourceElem struct {
 	peer tg.InputPeerClass
 }
 
+type reissuedElem struct {
+	*testElem
+	refresh func(context.Context) (File, error)
+}
+
+func (e *reissuedElem) RefreshFile(ctx context.Context, _ tg.InputFileLocationClass) (File, error) {
+	return e.refresh(ctx)
+}
+
 func (e *sourceElem) FileSource() (tg.InputPeerClass, int) { return e.peer, 7 }
 
 type referenceProgress struct {
@@ -286,6 +295,45 @@ func TestRefreshMessageFileValidatesAttachment(t *testing.T) {
 				} else {
 					require.ErrorContains(t, err, "media changed")
 				}
+			}
+		})
+	}
+}
+
+func TestReissuedFileRefresherValidatesReplacement(t *testing.T) {
+	for _, mode := range []string{"valid", "nil", "changed ID", "changed size", "changed type", "same reference"} {
+		t.Run(mode, func(t *testing.T) {
+			old := &testElem{size: 20, loc: &tg.InputDocumentFileLocation{ID: 42, FileReference: []byte("old")}}
+			fresh := &testElem{size: 20, loc: &tg.InputDocumentFileLocation{ID: 42, FileReference: []byte("fresh")}}
+			switch mode {
+			case "changed ID":
+				fresh.loc.(*tg.InputDocumentFileLocation).ID++
+			case "changed size":
+				fresh.size++
+			case "changed type":
+				fresh.loc = &tg.InputPhotoFileLocation{ID: 42}
+			case "same reference":
+				fresh.loc.(*tg.InputDocumentFileLocation).FileReference = []byte("old")
+			}
+			elem := &reissuedElem{testElem: old, refresh: func(context.Context) (File, error) {
+				if mode == "nil" {
+					return nil, nil
+				}
+				return fresh, nil
+			}}
+			api := tg.NewClient(rpcFunc(func(_ context.Context, in bin.Encoder, out bin.Decoder) error {
+				req := in.(*tg.UploadGetFileRequest)
+				if string(fileReference(req.Location)) == "old" {
+					return tgerr.New(400, "FILE_REFERENCE_EXPIRED")
+				}
+				return referenceResult(&tg.UploadFile{Type: &tg.StorageFileUnknown{}, Bytes: []byte("ok")}, out)
+			}))
+			client := New(Options{Pool: testPool{api}}).client(context.Background(), elem)
+			_, err := client.UploadGetFile(context.Background(), &tg.UploadGetFileRequest{Location: old.loc, Limit: MaxPartSize})
+			if mode == "valid" {
+				require.NoError(t, err)
+			} else {
+				require.Error(t, err)
 			}
 		})
 	}

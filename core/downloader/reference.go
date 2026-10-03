@@ -35,6 +35,23 @@ func (d *Downloader) client(ctx context.Context, elem Elem) *tg.Client {
 	if elem.AsTakeout() {
 		client = d.opts.Pool.Takeout(ctx, file.DC())
 	}
+	if refresher, ok := elem.(FileRefresher); ok {
+		invoker := &referenceInvoker{next: client.Invoker(), location: file.Location()}
+		invoker.fetch = func(ctx context.Context) (tg.InputFileLocationClass, error) {
+			invoker.mu.Lock()
+			current := invoker.location
+			invoker.mu.Unlock()
+			fresh, err := refresher.RefreshFile(ctx, current)
+			if err != nil {
+				return nil, err
+			}
+			if fresh == nil || !sameFileLocation(file.Location(), fresh.Location()) || file.Size() != fresh.Size() || file.DC() != fresh.DC() {
+				return nil, errors.New("reissued attachment changed during download")
+			}
+			return fresh.Location(), nil
+		}
+		return tg.NewClient(invoker)
+	}
 	source, ok := elem.(FileSource)
 	if !ok {
 		return client

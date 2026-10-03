@@ -77,6 +77,7 @@ type Options struct {
 
 	// Middlewares are extra telegram middlewares.
 	Middlewares []telegram.Middleware
+	BotUpdates  *chat.BotUpdates
 }
 
 // Runner executes a batch config against one authorized telegram client.
@@ -119,7 +120,7 @@ func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Conf
 	}
 
 	for i := range cfg.Jobs {
-		if cfg.Jobs[i].IsTagJob() {
+		if cfg.Jobs[i].IsTagJob() || cfg.Jobs[i].FollowLinks {
 			continue
 		}
 		mode, err := cfg.Jobs[i].ResolveMode(opts.Mode)
@@ -198,6 +199,19 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 	dir := job.Dir()
 	if r.opts.Dir != "" {
 		dir = filepath.Join(r.opts.Dir, job.Subdir)
+	}
+	if job.FollowLinks {
+		start, end := 0, 0
+		if job.StartComment != nil {
+			start, end = *job.StartComment, *job.EndComment
+		}
+		return chat.DownloadLinked(ctx, r.client, r.storage, chat.LinkedOptions{
+			Chat: job.ChatURL, Dir: dir, Tag: job.Tag, Tags: job.Tags, TagMatch: job.TagMatch,
+			StartID: start, EndID: end, MaxPosts: job.MaxPosts, CheckOnly: r.opts.CheckOnly,
+			Takeout: r.opts.Takeout, Threads: threads, Limit: limit, Pool: r.pool, Links: job.LinkOptions,
+			Include: r.opts.Include, Exclude: r.opts.Exclude,
+			BotUpdates: r.opts.BotUpdates,
+		})
 	}
 	if job.IsTagJob() {
 		return chat.DownloadTag(ctx, r.client, r.storage, chat.TagOptions{

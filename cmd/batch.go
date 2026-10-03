@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-faster/errors"
 	"github.com/gotd/td/telegram"
+	"github.com/iyear/tdl/app/chat"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -187,8 +188,18 @@ missing ones are fetched again.`,
 
 			opts := f.options(cmd)
 			opts.ConfigPath = cfg
+			for _, job := range parsed.Jobs {
+				if job.FollowLinks {
+					opts.BotUpdates = &chat.BotUpdates{}
+					break
+				}
+			}
 
-			return tRun(cmd.Context(), func(ctx context.Context, c *telegram.Client, kvd storage.Storage) error {
+			var updates telegram.UpdateHandler
+			if opts.BotUpdates != nil {
+				updates = opts.BotUpdates
+			}
+			return tRunWithUpdates(cmd.Context(), updates, func(ctx context.Context, c *telegram.Client, kvd storage.Storage) error {
 				return autodl.Run(logctx.Named(ctx, "batch"), c, kvd, opts)
 			})
 		},

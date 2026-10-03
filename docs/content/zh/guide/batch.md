@@ -82,6 +82,8 @@ tdl
 | `tag` / `tags` | 一个 tag 或多个 tag 数组；按图片/视频说明文字中的完整 hashtag 筛选，与消息 ID 范围任务二选一 |
 | `tag_match` | 多 tag 匹配方式：`any`（默认，命中任意一个）或 `all`（全部命中） |
 | `max_posts` | tag 任务最多匹配多少组，默认 `0` 表示扫描全部历史；可用于先做小规模验证 |
+| `follow_links` | 开启预览帖资源归档，从正文超链接或评论中追踪机器人/群组资源链接 |
+| `link_options` | 跳转、机器人等待、重新请求与会话消息清理参数，见下文 |
 
 ### 按 tag 归档图片和视频
 
@@ -113,6 +115,89 @@ tag 任务的 `chat_url` 填群组或频道主页链接，无须填写消息 ID 
 `message.txt` 与带所有成员消息 ID、说明和来源链接的 `message.json`。
 Telegram 相册只要有一条成员的说明包含 tag，就会下载整组。
 再次运行会按文件大小跳过已完成媒体，未完成文件可沿用下载器的分片续传。
+
+### 归档预览帖链接中的实际资源
+
+将任务的 `follow_links` 设为 `true`。`chat_url` 可以是主频道首页或某一篇
+主帖链接；首页默认扫描全部历史，`max_posts` 可限制候选帖子数。
+可选 `tags` / `tag_match` 仍匹配主帖原始说明。首页也可设置
+`start_comment` / `end_comment`，此时表示**主频道帖子 ID** 的左闭右开范围，
+命中相册任意成员会保留整组。不需要设置 `comment: true`。
+
+```json
+{
+  "namespace": "default",
+  "download_base": "downloads",
+  "jobs": [
+    {
+      "chat_url": "https://t.me/example_channel",
+      "follow_links": true,
+      "subdir": "resources",
+      "max_posts": 1,
+      "link_options": {
+        "cleanup_bot_messages": true,
+        "scan_comments": true,
+        "max_depth": 8,
+        "rerequest_limit": 3,
+        "flood_retries": 5,
+        "flood_wait_seconds": 30
+      }
+    }
+  ]
+}
+```
+
+仓库根目录的 `config.linked.example.json` 包含完整参数示例。替换频道名和
+账号 namespace 后运行 `tdl batch -c config.json --check-only` 预览主帖与评论中的
+入口链接，再运行 `tdl batch -c config.json` 下载。
+`--check-only` 不请求机器人、不下载文件、不删除消息，也不验证入口后的跳转链。
+
+正文链接包括普通 URL、文字背后的 Telegram 超链接和内联 URL 按钮。
+主帖无资源入口时查找关联讨论组中的评论。支持 `t.me/bot?start=...`、
+`tg://resolve?...`、公开/私有消息链接、评论链接和完整资源相册。
+机器人返回的中转链接可继续指向其他机器人或群组消息，受深度和链接数量限制。
+主帖和资源说明不会混用：输出保持为
+`<download_base>/<subdir>/<主群ID>/<主帖说明 [主帖ID]>/`，
+其中保存实际资源、整组预览媒体（默认开启）、原始 `message.txt` 和
+包含主帖、入口、跳转链、资源身份与完成状态的 `message.json`。
+目录沿用标签归档规则，另移除可见 URL。资源文件名包含稳定 Telegram 文件 ID，
+所以机器人重新发送后消息 ID 变化仍可沿用原文件和 `.tmp.parts`。
+
+| `link_options` 字段 | 默认值 | 说明 |
+| --- | --- | --- |
+| `scan_comments` | `true` | 主帖/中间群组消息无入口时，读取关联评论中的链接 |
+| `comment_limit` | `100` | 每个评论区最多读取最近多少条消息 |
+| `include_previews` | `true` | 同时保留主帖整组预览媒体 |
+| `cleanup_bot_messages` | `true` | 本帖下载结束后清理本次各层机器人的请求及回复消息 |
+| `max_depth` | `8` | 最大跳转层数，上限 `32` |
+| `max_links` | `100` | 每篇主帖最多解析多少个不同入口，上限 `1000` |
+| `bot_timeout_seconds` | `60` | `/start` 成功后等待完整回复的时间，Telegram RPC 限流等待沿用现有中间件 |
+| `bot_idle_seconds` | `3` | 收到文件/下一层链接后，连续无新增或编辑消息多久认为回复已稳定 |
+| `poll_interval_ms` | `500` | 历史查询间隔，配合实时更新捕获已自删的消息 |
+| `max_bot_messages` | `500` | 单次请求允许接收的回复条数上限 |
+| `rerequest_limit` | `3` | 每篇帖子中文件引用失效后完整链的重新请求次数；`0` 禁用 |
+| `flood_retries` | `5` | 机器人文本限流后重新请求次数；`0` 禁用 |
+| `flood_wait_seconds` | `30` | 明确限流提示没有时长时的等待秒数 |
+| `max_flood_wait_seconds` | `3600` | 机器人文本限流的最大自动等待秒数，超出时报告失败 |
+
+机器人会按主帖顺序请求，资源下载使用 batch 的连接池、线程数和文件并发数。
+收到“请求频繁/冷却/Too many requests”等提示后，识别秒、分钟、小时并自动等待
+再请求；只有明确限流且没有时长的提示才使用默认等待。普通“正在处理”提示继续等
+当前请求。群组消息跳转不使用机器人文本退避。
+文件引用过期时先刷新原消息；原消息已删或引用未更新时重新走完整链，
+仅在 Telegram 文件 ID、大小和 DC 一致时继续写入原文件。
+失败不会将归档标为完成；完整归档再次运行会校验所有资源文件的大小，并跳过机器人请求。
+
+清理只使用本次收集到的机器人私聊消息 ID，不删除整个会话或群组帖子。
+包括中转、限流重试、文件重新请求以及一次发送的多条回复。
+正常取消/失败也会尝试清理，失败会报告错误；强制结束进程时清理无法执行。
+运行期间避免手动向同一机器人发送其他请求，以免无关联信息的机器人回复混入。
+分批发送间隔较长的机器人应调大 `bot_idle_seconds` 与 `bot_timeout_seconds`。
+
+此模式使用每帖归档清单续跑，不能与时间戳 `incremental`、评论范围模式或
+topic/reply 选择器混用。群组链接须指向账号可访问的具体消息；邀请链接、
+仅有群首页、验证码、付费门槛、回调按钮和外部网页跳转不会自动执行。
+自定义限流提示若不包含可识别关键词，会在等待超时后报告失败。
 
 ## 命令行参数
 

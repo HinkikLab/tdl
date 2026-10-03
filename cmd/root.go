@@ -260,10 +260,15 @@ func tOptions(ctx context.Context) (tclient.Options, error) {
 }
 
 func tRun(ctx context.Context, f func(ctx context.Context, c *telegram.Client, kvd storage.Storage) error, middlewares ...telegram.Middleware) error {
+	return tRunWithUpdates(ctx, nil, f, middlewares...)
+}
+
+func tRunWithUpdates(ctx context.Context, updates telegram.UpdateHandler, f func(ctx context.Context, c *telegram.Client, kvd storage.Storage) error, middlewares ...telegram.Middleware) error {
 	o, err := tOptions(ctx)
 	if err != nil {
 		return errors.Wrap(err, "build telegram options")
 	}
+	o.UpdateHandler = updates
 
 	client, err := tclient.New(ctx, o, false, middlewares...)
 	if err != nil {

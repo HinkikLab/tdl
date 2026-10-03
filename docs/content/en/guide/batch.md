@@ -86,6 +86,8 @@ accepted as an alias of `download_base`.
 | `tag` / `tags` | one hashtag or an array of hashtags matched against photo/video captions; use instead of a message ID range |
 | `tag_match` | `any` (default) selects posts with any requested tag; `all` requires every tag |
 | `max_posts` | optionally stop after this many matching posts; `0` (the default) scans the full history |
+| `follow_links` | archive resources reached through links in preview posts or their comments |
+| `link_options` | bounded resolution, bot waiting, reissue and cleanup settings described below |
 
 ### Archive photo and video posts by hashtag
 
@@ -117,6 +119,93 @@ If a caption consists only of hashtags, the folder uses every hashtag in its
 original order without `#` and keeps the message ID suffix to avoid collisions.
 A caption on any album member selects the whole
 album. Reruns skip completed files by size and resume partial downloads.
+
+### Archive linked resources from preview posts
+
+Set `follow_links: true` on a job. The source `chat_url` may identify a main chat
+or one post. A home URL scans all history unless `max_posts` is set. Optional
+`tags` / `tag_match` filter original main-post captions. On a home URL,
+`start_comment` / `end_comment` select an inclusive/exclusive **main-post ID**
+range and preserve any matching album in full; `comment: true` is not used.
+
+```json
+{
+  "namespace": "default",
+  "download_base": "downloads",
+  "jobs": [{
+    "chat_url": "https://t.me/example_channel",
+    "follow_links": true,
+    "subdir": "resources",
+    "max_posts": 1,
+    "link_options": {
+      "cleanup_bot_messages": true,
+      "scan_comments": true,
+      "max_depth": 8,
+      "rerequest_limit": 3,
+      "flood_retries": 5,
+      "flood_wait_seconds": 30
+    }
+  }]
+}
+```
+
+See `config.linked.example.json` in the repository root for every setting.
+`tdl batch -c config.json --check-only` discovers main-post and comment entry
+links without requesting bots, downloading, writing archives or deleting
+messages. It does not verify the chain beyond those entry links.
+
+Resolution handles plain URLs, hidden text URLs and inline URL buttons, bot
+start links, `tg://` links, public/private message links, comment links and whole
+resource albums. When a post has no resource link, its associated comments are
+searched. Bots may return further links to bots or group messages.
+Each post is resolved and downloaded before the next one is requested.
+
+Files go into `<download_base>/<subdir>/<main-chat-id>/<main caption [post ID]>/`
+with the complete preview album by default, original `message.txt` and
+`message.json` containing entry links, hops, resource identities and completion
+status. Folder names reuse hashtag archive rules and remove visible URLs.
+Stable Telegram file IDs in filenames let reissued messages resume the same
+partial files even when their message IDs change.
+
+| `link_options` field | Default | Meaning |
+| --- | --- | --- |
+| `scan_comments` | `true` | search comments when a main/intermediate post has no entry link |
+| `comment_limit` | `100` | maximum recent comments per thread |
+| `include_previews` | `true` | retain every media member of the main preview album |
+| `cleanup_bot_messages` | `true` | delete this post's bot requests and responses after downloads settle |
+| `max_depth` | `8` | maximum chain depth, at most `32` |
+| `max_links` | `100` | maximum distinct resolved links per post, at most `1000` |
+| `bot_timeout_seconds` | `60` | response collection timeout after a successful start RPC; existing middleware handles Telegram RPC flood waits |
+| `bot_idle_seconds` | `3` | quiet interval after receiving media or another entry link |
+| `poll_interval_ms` | `500` | history polling interval, alongside live updates that retain self-deleted messages |
+| `max_bot_messages` | `500` | maximum responses to one bot request |
+| `rerequest_limit` | `3` | full-chain reissues per post after expired file references; `0` disables |
+| `flood_retries` | `5` | retries after a bot's textual rate limit; `0` disables |
+| `flood_wait_seconds` | `30` | wait when an explicit rate-limit message gives no duration |
+| `max_flood_wait_seconds` | `3600` | maximum automatic wait for textual bot rate limits |
+
+English/Chinese rate-limit messages with seconds, minutes or hours trigger a
+cancellation-aware wait followed by a fresh request. Progress notifications
+keep waiting on the current request. This bot-specific backoff does not apply
+to group message links. Expired references first refresh the original message,
+then reissue the full chain if necessary. Identity, size and DC must match
+before the downloader uses a replacement reference. Failed posts remain
+incomplete. Reruns validate every complete resource by size before skipping
+bot requests.
+
+Cleanup deletes only collected bot private-chat message IDs, including relay
+responses, retries and multiple replies. It never deletes whole dialogs or
+group posts. Failure and normal cancellation also attempt bounded cleanup;
+cleanup errors are reported. Force-killing the process prevents cleanup.
+Avoid concurrent manual requests to the same bot because many bots do not
+correlate their replies to a request. Increase the idle interval and timeout
+when a bot sends several batches with long pauses.
+
+This mode resumes through archive manifests and cannot use timestamp
+`incremental`, comment-range mode or topic/reply selectors. Group links must
+identify accessible messages. Invite links, group home links, external web
+redirects, callback buttons, captcha and payment steps are not automatically
+executed. Unrecognized custom rate-limit text results in a response timeout.
 
 ## Command line
 

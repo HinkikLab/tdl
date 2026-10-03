@@ -442,3 +442,27 @@ func TestFormatIDs(t *testing.T) {
 	assert.Equal(t, "1-3 (3)", formatIDs([]int{1, 2, 3}))
 	assert.Equal(t, "1...5 (3)", formatIDs([]int{1, 3, 5}))
 }
+
+func TestLinkedArchiveConfig(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"namespace":"default","jobs":[{"chat_url":"https://t.me/course","follow_links":true,"tags":["#notes"],"max_posts":2,"link_options":{"max_depth":5,"rerequest_limit":0,"scan_comments":true}},{"chat_url":"https://t.me/course/42","follow_links":true}]}`), 0o644))
+	cfg, err := LoadConfig(path)
+	require.NoError(t, err)
+	require.True(t, cfg.Jobs[0].FollowLinks)
+	require.Equal(t, 5, cfg.Jobs[0].LinkOptions.MaxDepth)
+	require.Zero(t, *cfg.Jobs[0].LinkOptions.ReRequestLimit)
+	require.Equal(t, 8, cfg.Jobs[1].LinkOptions.MaxDepth)
+	for _, fields := range []string{
+		`"incremental":true`, `"comment":true`, `"topic_id":1`, `"start_comment":2`,
+		`"start_comment":2,"end_comment":1`, `"max_posts":-1`, `"tag_match":"bad"`, `"tags":[" "]`,
+		`"link_options":{"max_depth":-1}`, `"link_options":{"max_depth":33}`, `"link_options":{"rerequest_limit":-1}`,
+		`"link_options":{"bot_timeout_seconds":2,"bot_idle_seconds":3}`, `"link_options":{"bot_timeout_seconds":2,"bot_idle_seconds":1,"poll_interval_ms":3000}`,
+	} {
+		require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"chat_url":"https://t.me/course","follow_links":true,`+fields+`}]}`), 0o644))
+		_, err := LoadConfig(path)
+		require.Error(t, err, fields)
+	}
+	require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"chat_url":"https://t.me/course","follow_links":true,"start_comment":2,"end_comment":5}]}`), 0o644))
+	_, err = LoadConfig(path)
+	require.NoError(t, err)
+}

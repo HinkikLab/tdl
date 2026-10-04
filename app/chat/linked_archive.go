@@ -44,6 +44,7 @@ type LinkedOptions struct {
 	Include, Exclude         []string
 	BotUpdates               *BotUpdates
 	WriteMetadata            *bool // nil enables meta.json output
+	OnResolved               func(string)
 }
 
 type archivedResource struct {
@@ -87,6 +88,7 @@ func DownloadLinked(ctx context.Context, c *telegram.Client, kvd storage.Storage
 	if err != nil {
 		return err
 	}
+	announceTarget(TargetName(peer, 0, "", source.ID == 0), opts.OnResolved)
 	backend := &telegramLinkBackend{api: c.API(), manager: manager, opts: opts.Links, updates: opts.BotUpdates}
 	defer func() { rerr = multierr.Append(rerr, cleanupLinked(ctx, backend)) }()
 	resolver := &linkResolver{backend: backend, opts: opts.Links}

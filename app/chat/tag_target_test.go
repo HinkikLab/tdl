@@ -90,8 +90,13 @@ func TestTagHistorySelectsOnlyConfirmedTopic(t *testing.T) {
 					return fmt.Errorf("unexpected RPC %T", in)
 				}
 			}))
-			history, err := tagHistory(context.Background(), api, peer, topicID)
+			history, topic, err := tagHistory(context.Background(), api, peer, topicID)
 			require.NoError(t, err)
+			if topicID == 0 {
+				require.Nil(t, topic)
+			} else {
+				require.Equal(t, "Topic", topic.Title)
+			}
 			it := messages.NewIterator(history, 100)
 			require.False(t, it.Next(context.Background()))
 			require.NoError(t, it.Err())
@@ -121,7 +126,7 @@ func TestTagHistoryRefusesOrdinaryMessagesDeletedTopicsAndRPCFailures(t *testing
 				}
 				return linkedReply(&tg.MessagesForumTopics{Topics: test.topics}, out)
 			}))
-			_, err := tagHistory(context.Background(), api, &tg.InputPeerChannel{ChannelID: 42}, 41872)
+			_, _, err := tagHistory(context.Background(), api, &tg.InputPeerChannel{ChannelID: 42}, 41872)
 			require.Error(t, err)
 			if test.err != nil {
 				require.ErrorIs(t, err, sentinel)
@@ -168,7 +173,7 @@ func TestTagTopicPaginationKeepsTheSameThread(t *testing.T) {
 			return fmt.Errorf("unexpected RPC %T", in)
 		}
 	}))
-	history, err := tagHistory(context.Background(), api, peer, 41872)
+	history, _, err := tagHistory(context.Background(), api, peer, 41872)
 	require.NoError(t, err)
 	it := messages.NewIterator(history, 100)
 	var ids []int
@@ -180,4 +185,35 @@ func TestTagTopicPaginationKeepsTheSameThread(t *testing.T) {
 	require.Equal(t, 3, pages)
 	require.Equal(t, 42102, ids[0])
 	require.Equal(t, 42001, ids[101])
+}
+
+func TestWholeChatHistoryKeepsMessagesFromDifferentTopics(t *testing.T) {
+	peer := &tg.InputPeerChannel{ChannelID: 2255983776, AccessHash: 7}
+	pages := 0
+	api := tg.NewClient(linkedRPC(func(_ context.Context, in bin.Encoder, out bin.Decoder) error {
+		req, ok := in.(*tg.MessagesGetHistoryRequest)
+		require.True(t, ok, "whole-chat scans must not select a single thread")
+		require.Equal(t, peer, req.Peer)
+		pages++
+		if pages > 1 {
+			return linkedReply(&tg.MessagesChannelMessages{Count: 2}, out)
+		}
+		var batch []tg.MessageClass
+		for _, id := range []int{41872, 34506} {
+			m := &tg.Message{ID: id + 1, PeerID: &tg.PeerChannel{ChannelID: peer.ChannelID}}
+			m.SetReplyTo(&tg.MessageReplyHeader{ForumTopic: true, ReplyToMsgID: id})
+			batch = append(batch, m)
+		}
+		return linkedReply(&tg.MessagesChannelMessages{Count: 2, Messages: batch}, out)
+	}))
+	history, topic, err := tagHistory(context.Background(), api, peer, 0)
+	require.NoError(t, err)
+	require.Nil(t, topic)
+	it := messages.NewIterator(history, 100)
+	var ids []int
+	for it.Next(context.Background()) {
+		ids = append(ids, it.Value().Msg.GetID())
+	}
+	require.NoError(t, it.Err())
+	require.Equal(t, []int{41873, 34507}, ids)
 }

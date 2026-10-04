@@ -439,6 +439,7 @@ func (l Link) CommentMode() bool { return l.Comment > 0 }
 //
 //	https://t.me/channel
 //	https://t.me/channel/123
+//	https://t.me/c/123456789/
 //	https://t.me/c/123456789/123
 //	https://t.me/channel/123?comment=456
 //	t.me/channel/123?thread=99
@@ -480,14 +481,17 @@ func ParseLink(raw string) (Link, error) {
 		}
 	}
 
-	if strings.EqualFold(parts[0], "c") { // private channel: /c/<id>/<msg>
-		if len(parts) != 3 && len(parts) != 4 {
+	messagePart := ""
+	if strings.EqualFold(parts[0], "c") { // private chat: /c/<id>[/<topic>/<msg>]
+		if len(parts) < 2 || len(parts) > 4 {
 			return l, errors.Errorf("invalid private channel link %q", raw)
 		}
 		l.Chat = parts[1]
-		messagePart := parts[len(parts)-1]
-		if l.MessageID, err = strconv.Atoi(messagePart); err != nil {
-			return l, errors.Wrapf(err, "invalid message id in %q", raw)
+		if id, e := strconv.ParseInt(l.Chat, 10, 64); e != nil || id <= 0 {
+			return l, errors.Errorf("private chat ID in %q must be a positive integer", raw)
+		}
+		if len(parts) > 2 {
+			messagePart = parts[len(parts)-1]
 		}
 	} else {
 		if len(parts) > 3 {
@@ -495,14 +499,16 @@ func ParseLink(raw string) (Link, error) {
 		}
 		l.Chat = parts[0]
 		if len(parts) > 1 {
-			messagePart := parts[len(parts)-1]
-			if l.MessageID, err = strconv.Atoi(messagePart); err != nil {
-				return l, errors.Wrapf(err, "invalid message id in %q", raw)
-			}
+			messagePart = parts[len(parts)-1]
 		}
 	}
-	if len(parts) > 1 && l.MessageID <= 0 {
-		return l, errors.Errorf("message id in %q must be positive", raw)
+	if messagePart != "" {
+		if l.MessageID, err = strconv.Atoi(messagePart); err != nil {
+			return l, errors.Wrapf(err, "invalid message id in %q", raw)
+		}
+		if l.MessageID <= 0 {
+			return l, errors.Errorf("message id in %q must be positive", raw)
+		}
 	}
 
 	if c := u.Query().Get("comment"); c != "" {

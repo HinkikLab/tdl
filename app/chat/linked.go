@@ -186,13 +186,14 @@ func parseResourceLink(raw string) (resourceLink, error) {
 			return l, fmt.Errorf("missing chat")
 		}
 		if p[0] == "c" {
-			if len(p) != 3 && len(p) != 4 {
-				return l, fmt.Errorf("invalid private post link")
+			if len(p) < 2 || len(p) > 4 {
+				return l, fmt.Errorf("invalid private chat/post link")
 			}
 			l.Chat = p[1]
 			if n, e := strconv.ParseInt(l.Chat, 10, 64); e != nil || n <= 0 {
 				return l, fmt.Errorf("invalid channel ID")
 			}
+			p = p[1:]
 		} else {
 			if len(p) > 3 {
 				return l, fmt.Errorf("invalid message link")

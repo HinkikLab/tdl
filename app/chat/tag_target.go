@@ -110,11 +110,20 @@ func ParseTagTarget(raw string, topicID int) (TagTarget, error) {
 	return target, nil
 }
 
-func tagHistory(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, topicID int) (messages.Query, error) {
+func tagHistory(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, topicID int) (messages.Query, *tg.ForumTopic, error) {
 	q := query.NewQuery(api).Messages()
 	if topicID == 0 {
-		return q.GetHistory(peer), nil
+		return q.GetHistory(peer), nil, nil
 	}
+	topic, err := ResolveForumTopic(ctx, api, peer, topicID)
+	if err != nil {
+		return nil, nil, err
+	}
+	return q.GetReplies(peer).MsgID(topicID), topic, nil
+}
+
+// ResolveForumTopic confirms the selector and returns the title from Telegram.
+func ResolveForumTopic(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, topicID int) (*tg.ForumTopic, error) {
 	topics, err := api.MessagesGetForumTopicsByID(ctx, &tg.MessagesGetForumTopicsByIDRequest{
 		Peer: peer, Topics: []int{topicID},
 	})
@@ -123,7 +132,7 @@ func tagHistory(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, top
 	}
 	for _, value := range topics.Topics {
 		if topic, ok := value.(*tg.ForumTopic); ok && topic.ID == topicID {
-			return q.GetReplies(peer).MsgID(topicID), nil
+			return topic, nil
 		}
 	}
 	return nil, fmt.Errorf("chat_url/topic_id does not identify an accessible forum topic (%d); use the chat home URL to scan the whole chat", topicID)

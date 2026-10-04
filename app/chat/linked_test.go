@@ -79,6 +79,14 @@ func TestResourceLinkEntitiesAndButtons(t *testing.T) {
 }
 
 func TestResourceLinkParsing(t *testing.T) {
+	for _, raw := range []string{"https://t.me/c/2255983776/", "t.me/c/2255983776", "https://telegram.me/c/2255983776/"} {
+		l, err := parseResourceLink(raw)
+		require.NoError(t, err)
+		require.Equal(t, "chat", l.Kind)
+		require.Equal(t, "2255983776", l.Chat)
+		require.Zero(t, l.ID)
+	}
+	require.Empty(t, messageResourceLinks(&tg.Message{Message: "https://t.me/c/2255983776/"}), "home links remain non-actionable resource entries")
 	for _, raw := range []string{"t.me/files/13", "https://telegram.me/s/files/4/13", "tg://resolve?domain=files&post=13", "https://t.me/c/42/2/13?single", "tg://privatepost?channel=42&post=13&single"} {
 		l, err := parseResourceLink(raw)
 		require.NoError(t, err)
@@ -89,7 +97,7 @@ func TestResourceLinkParsing(t *testing.T) {
 	b, err := parseResourceLink("tg://resolve?domain=mybot&start=Case_Sensitive")
 	require.NoError(t, err)
 	require.Equal(t, a.key(), b.key())
-	for _, raw := range []string{"https://example.com/files/3", "https://t.me/c/nope/3", "https://t.me/files/0", "https://t.me/files/3?comment=-1", "https://t.me/files/3?start=a", "file://t.me/files/3", "https://t.me:8080/files/3"} {
+	for _, raw := range []string{"https://example.com/files/3", "https://t.me/c/nope/3", "https://t.me/c/0/", "https://t.me/c/", "https://t.me/files/0", "https://t.me/files/3?comment=-1", "https://t.me/files/3?start=a", "file://t.me/files/3", "https://t.me:8080/files/3"} {
 		_, err := parseResourceLink(raw)
 		require.Error(t, err, raw)
 	}

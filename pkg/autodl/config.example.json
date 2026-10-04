@@ -5,7 +5,8 @@
     "Paths are relative to the working directory / 相对路径以执行命令的当前目录为基准，每个 job 使用独立 subdir 保存状态。",
     "Run tdl batch -c config.json --check-only before downloading / 修改后先检查，再执行 tdl batch -c config.json。",
     "pool=16, threads=8, limit=4; overlap_seconds=3600 / 性能默认值为 16/8/4，增量默认回看一小时。",
-    "Archive metadata defaults to meta.json; write_metadata=false disables it, and jobs can override / 归档默认仅输出 meta.json，write_metadata=false 关闭输出，各 job 可覆盖全局设置。"
+    "Archive metadata defaults to meta.json; write_metadata=false disables it, and jobs can override / 归档默认仅输出 meta.json，write_metadata=false 关闭输出，各 job 可覆盖全局设置。",
+    "Private forum home URLs such as https://t.me/c/2255983776/ scan all topics; job headings show resolved names and IDs / 私有群组主页不带话题选择器时扫描全部话题，任务标题显示群名和话题名并保留 ID。"
   ],
   "namespace": "default",
   "download_base": "downloads",

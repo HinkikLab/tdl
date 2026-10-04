@@ -151,7 +151,7 @@ messages 100 through 109:
 | Field | Description |
 | --- | --- |
 | `_comment` | Documentation only; ignored |
-| `chat_url` | Required. Public home/post, private `https://t.me/c/1234567890/456`, comment links, links without a scheme and `/s/` preview links are accepted; the account must have access |
+| `chat_url` | Required. Public home/post, private home `https://t.me/c/1234567890/` and post links, comment links, links without a scheme and `/s/` preview links are accepted; the account must have access |
 | `chat` | Incremental scan source: username, numeric ID or Telegram URL; inferred when omitted. Its IDs must belong to the dialog used for downloading |
 | `subdir` | Relative job directory under `download_base`; absolute paths and escaping `..` paths are rejected; use distinct directories for distinct jobs |
 | `comment` | Default false; true selects the linked discussion group. A legacy integer also selects comment mode and sets the start ID if omitted. Prefer a boolean with explicit endpoints |
@@ -175,6 +175,20 @@ incremental lookback are not used by direct ID-range scanning.
 `export_all: true` includes non-media messages in the plan; it does not turn
 text into downloadable files. Use an archive mode to preserve post descriptions.
 Incremental export files are retained under `<job directory>/.tdl_tmp/`.
+
+Private forum home URLs such as `https://t.me/c/2255983776/` are accepted by
+tag archives, linked-resource archives, incremental scans and message-range jobs.
+Without a topic selector, history scanning covers every topic. `max_posts: 0`
+scans the complete history; a positive limit stops after that many matching posts
+across the chat, rather than taking that many posts per topic. Tag jobs select a
+single topic using a topic link or `topic_id`; incremental jobs require explicit
+`topic_id`. Linked-resource jobs scan all topics from the home URL and still do
+not support topic selectors.
+
+After resolving the target, job headings show `Chat name (chat ID) / Topic name
+(topic ID)`. Whole-forum scans show `Chat name (chat ID) / all topics`, with the
+original configured URL on a separate line. Ordinary channels and single-post
+jobs show the chat name and ID; failed resolutions retain the original URL.
 
 ### Archive metadata
 

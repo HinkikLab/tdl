@@ -170,9 +170,17 @@ func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Conf
 
 		jobCtx := logctx.With(ctx, log.Named(fmt.Sprintf("job%d", idx+1)))
 
-		color.Blue("\n[%d/%d] %s", idx+1, len(cfg.Jobs), job.ChatURL)
-
-		if err := r.runJob(jobCtx, job, threads, limit); err != nil {
+		announced := false
+		announce := func(target string) {
+			color.Blue("\n[%d/%d] %s", idx+1, len(cfg.Jobs), target)
+			color.Cyan("Source: %s", job.ChatURL)
+			announced = true
+		}
+		err := r.runJob(jobCtx, job, threads, limit, announce)
+		if !announced {
+			announce(job.ChatURL)
+		}
+		if err != nil {
 			failed++
 			log.Error("Job failed", zap.Int("job", idx+1), zap.Error(err))
 			color.Red("Job %d failed: %s", idx+1, err)
@@ -188,7 +196,7 @@ func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Conf
 }
 
 // runJob processes a single config job.
-func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error {
+func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onResolved func(string)) error {
 	log := logctx.From(ctx)
 
 	dir := job.Dir()
@@ -208,6 +216,7 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 			Include: r.opts.Include, Exclude: r.opts.Exclude,
 			BotUpdates:    r.opts.BotUpdates,
 			WriteMetadata: &writeMetadata,
+			OnResolved:    onResolved,
 		})
 	}
 	if job.IsTagJob() {
@@ -221,18 +230,41 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 			Pool:          r.pool,
 			MaxPosts:      job.MaxPosts,
 			WriteMetadata: &writeMetadata,
+			OnResolved:    onResolved,
 		})
 	}
 	link, err := ParseLink(job.ChatURL)
 	if err != nil {
 		return err
 	}
+	incremental := job.UsesIncremental(r.cfg.Incremental)
+	var peer peers.Peer
+	if incremental {
+		peer, err = r.scanPeer(ctx, job, link)
+	} else {
+		peer, err = r.resolveDialog(ctx, job, link)
+	}
+	if err != nil {
+		return err
+	}
+	topicID, topicTitle := 0, ""
+	if incremental {
+		topicID = num(job.TopicID)
+	}
+	if topicID > 0 {
+		if topic, err := chat.ResolveForumTopic(ctx, r.pool.Default(ctx), peer.InputPeer(), topicID); err == nil {
+			topicTitle = topic.Title
+		} else {
+			log.Debug("Resolve topic title", zap.Error(err))
+		}
+	}
+	if onResolved != nil {
+		onResolved(chat.TargetName(peer, topicID, topicTitle, !incremental || (topicID == 0 && job.ReplyPostID == nil)))
+	}
 
 	if err = os.MkdirAll(dir, 0o755); err != nil {
 		return errors.Wrapf(err, "create download dir %s", dir)
 	}
-
-	incremental := job.UsesIncremental(r.cfg.Incremental)
 
 	statePath := r.statePath(job)
 	store, state, err := LoadStateStore(statePath, r.stateScope(job, link, dir))

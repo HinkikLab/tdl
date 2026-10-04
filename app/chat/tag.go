@@ -42,6 +42,7 @@ type TagOptions struct {
 	MaxPosts    int // zero scans the complete chat history
 
 	WriteMetadata *bool // nil enables meta.json output
+	OnResolved    func(string)
 }
 
 type tagMedia struct {
@@ -94,13 +95,15 @@ func DownloadTag(ctx context.Context, c *telegram.Client, kvd storage.Storage, o
 		return fmt.Errorf("resolve chat %q: %w", chat, err)
 	}
 
-	history, err := tagHistory(ctx, c.API(), peer.InputPeer(), target.TopicID)
+	history, topic, err := tagHistory(ctx, c.API(), peer.InputPeer(), target.TopicID)
 	if err != nil {
 		return err
 	}
-	if target.TopicID > 0 {
-		fmt.Printf("Scanning forum topic %d in %s.\n", target.TopicID, chat)
+	topicTitle := ""
+	if topic != nil {
+		topicTitle = topic.Title
 	}
+	announceTarget(TargetName(peer, target.TopicID, topicTitle, target.TopicID == 0), opts.OnResolved)
 	it := messages.NewIterator(history, 100)
 	var pending []tagMedia
 	var posts []tagPost

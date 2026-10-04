@@ -77,6 +77,16 @@ func TestParseLink(t *testing.T) {
 			want: Link{Chat: "shunv667", MessageID: 5639, Comment: 158865},
 		},
 		{
+			name: "private chat home",
+			raw:  "https://t.me/c/2255983776/",
+			want: Link{Chat: "2255983776"},
+		},
+		{
+			name: "private chat home without scheme or trailing slash",
+			raw:  "t.me/c/2255983776",
+			want: Link{Chat: "2255983776"},
+		},
+		{
 			name: "private channel",
 			raw:  "https://t.me/c/1697797156/151",
 			want: Link{Chat: "1697797156", MessageID: 151},
@@ -117,7 +127,9 @@ func TestParseLinkErrors(t *testing.T) {
 		"",
 		"https://example.com/channel/1",
 		"https://t.me/",
-		"https://t.me/c/123",
+		"https://t.me/c/",
+		"https://t.me/c/0/",
+		"https://t.me/c/nope/",
 		"https://t.me/channel/notanumber",
 		"https://t.me/channel/1?comment=abc",
 		"https://t.me/channel/0",
@@ -127,6 +139,23 @@ func TestParseLinkErrors(t *testing.T) {
 		t.Run(raw, func(t *testing.T) {
 			_, err := ParseLink(raw)
 			assert.Error(t, err)
+		})
+	}
+}
+
+func TestLoadConfigPrivateChatHomeInAllModes(t *testing.T) {
+	for _, fields := range []string{
+		`"tags": ["#tag"]`,
+		`"follow_links": true`,
+		`"incremental": true`,
+		`"start_comment": 1, "end_comment": 2`,
+	} {
+		t.Run(fields, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			body := fmt.Sprintf(`{"jobs": [{"chat_url": "https://t.me/c/2255983776/", %s}]}`, fields)
+			require.NoError(t, os.WriteFile(path, []byte(body), 0o644))
+			_, err := LoadConfig(path)
+			require.NoError(t, err)
 		})
 	}
 }

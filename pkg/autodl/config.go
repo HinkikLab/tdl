@@ -91,8 +91,8 @@ type Job struct {
 	// FollowLinks archives resources reached through main-post or comment links.
 	FollowLinks bool             `json:"follow_links" yaml:"follow_links"`
 	LinkOptions chat.LinkOptions `json:"link_options" yaml:"link_options"`
-	// Tag selects captioned photo/video posts from the whole chat history.
-	// A tag job needs a chat URL but no numeric message range.
+	// Tag selects captioned photo/video posts inside the job's scan window.
+	// Without a range or incremental mode, archive jobs scan all history.
 	Tag      string   `json:"tag" yaml:"tag"`
 	Tags     []string `json:"tags" yaml:"tags"`
 	TagMatch string   `json:"tag_match" yaml:"tag_match"`
@@ -262,16 +262,10 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 		if link.Comment != 0 || j.CommentMode() || j.TopicID != nil || j.ReplyPostID != nil {
 			return errors.New("follow_links source must be a main chat/post; comment/topic selectors are not supported")
 		}
-		if j.UsesIncremental(globalIncremental) {
-			return errors.New("follow_links uses archive manifests for resume; incremental timestamps are not supported")
+		if err := j.validateArchiveRange(globalIncremental); err != nil {
+			return err
 		}
-		if (j.StartComment == nil) != (j.EndComment == nil) {
-			return errors.New("follow_links ranges require both start_comment and end_comment")
-		}
-		if j.StartComment != nil && (*j.EndComment <= *j.StartComment || int64(*j.EndComment)-int64(*j.StartComment) > MaxRangeMessages) {
-			return errors.New("invalid follow_links message range")
-		}
-		if link.MessageID > 0 && j.StartComment != nil {
+		if !j.UsesIncremental(globalIncremental) && link.MessageID > 0 && j.StartComment != nil {
 			return errors.New("follow_links cannot combine a post URL and a range")
 		}
 		if j.MaxPosts < 0 {
@@ -301,8 +295,11 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 		if _, err := chat.ParseTagTarget(j.ChatURL, num(j.TopicID)); err != nil {
 			return err
 		}
-		if j.StartComment != nil || j.EndComment != nil || j.Comment != nil || j.ReplyPostID != nil {
-			return errors.New("tag job cannot also select a message/comment range or reply_post_id")
+		if j.CommentMode() || j.ReplyPostID != nil {
+			return errors.New("tag job cannot select comment mode or reply_post_id")
+		}
+		if err := j.validateArchiveRange(globalIncremental); err != nil {
+			return err
 		}
 		if j.MaxPosts < 0 {
 			return errors.New("max_posts must not be negative")
@@ -336,6 +333,19 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 		}
 	}
 
+	return nil
+}
+
+func (j *Job) validateArchiveRange(globalIncremental bool) error {
+	if j.UsesIncremental(globalIncremental) {
+		return nil // incremental mode takes precedence over ID ranges
+	}
+	if (j.StartComment == nil) != (j.EndComment == nil) {
+		return errors.New("archive ranges require both start_comment and end_comment")
+	}
+	if j.StartComment != nil && (*j.EndComment <= *j.StartComment || int64(*j.EndComment)-int64(*j.StartComment) > MaxRangeMessages) {
+		return errors.New("invalid archive message range")
+	}
 	return nil
 }
 

@@ -139,9 +139,9 @@ Without --config, config.json in the working directory is used. Running bare
 ` + "`tdl`" + ` (without any argument) starts this command automatically when such a
 config exists and the account is logged in.
 
-Range and incremental jobs record finished messages in a state file. Caption
-and linked-resource archives validate their saved files; partial downloads
-keep their parts so only missing parts are fetched again.`,
+All job types support ID ranges or incremental time windows. Message jobs
+record finished IDs; incremental archives record last_ts and validate saved files.
+Partial downloads keep their parts so only missing parts are fetched again.`,
 		GroupID: groupTools.ID,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {

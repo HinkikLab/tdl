@@ -240,7 +240,7 @@ func TestConfigErrorReportsFileJobURLAndCause(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.json")
 	for _, fields := range []string{
 		`"topic_id":0`, `"topic_id":-1`, `"topic_id":999`,
-		`"comment":true`, `"start_comment":1,"end_comment":2`, `"reply_post_id":41872`,
+		`"comment":true`, `"start_comment":1`, `"reply_post_id":41872`,
 	} {
 		require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"chat_url":"https://t.me/group","tags":["#ok"]},{"chat_url":"https://t.me/c/2255983776/41872/","tags":["#ok"],`+fields+`}]}`), 0o600))
 		_, err := LoadConfig(path)
@@ -552,7 +552,7 @@ func TestLinkedArchiveConfig(t *testing.T) {
 	require.Zero(t, *cfg.Jobs[0].LinkOptions.ReRequestLimit)
 	require.Equal(t, 8, cfg.Jobs[1].LinkOptions.MaxDepth)
 	for _, fields := range []string{
-		`"incremental":true`, `"comment":true`, `"topic_id":1`, `"start_comment":2`,
+		`"comment":true`, `"topic_id":1`, `"start_comment":2`,
 		`"start_comment":2,"end_comment":1`, `"max_posts":-1`, `"tag_match":"bad"`, `"tags":[" "]`,
 		`"link_options":{"max_depth":-1}`, `"link_options":{"max_depth":33}`, `"link_options":{"rerequest_limit":-1}`,
 		`"link_options":{"bot_timeout_seconds":2,"bot_idle_seconds":3}`, `"link_options":{"bot_timeout_seconds":2,"bot_idle_seconds":1,"poll_interval_ms":3000}`,
@@ -564,4 +564,39 @@ func TestLinkedArchiveConfig(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"chat_url":"https://t.me/course","follow_links":true,"start_comment":2,"end_comment":5}]}`), 0o644))
 	_, err = LoadConfig(path)
 	require.NoError(t, err)
+}
+
+func TestArchiveJobsAcceptRangeAndIncrementalSelection(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	for _, kind := range []string{`"tags":["#notes"]`, `"follow_links":true`} {
+		for _, selection := range []string{
+			`"start_comment":10,"end_comment":20`,
+			`"incremental":true`,
+			`"incremental":true,"start_comment":10`,
+		} {
+			body := `{"jobs":[{"chat_url":"https://t.me/course",` + kind + `,` + selection + `}]}`
+			require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+			_, err := LoadConfig(path)
+			require.NoError(t, err, body)
+		}
+		for _, selection := range []string{
+			`"start_comment":10`, `"end_comment":20`,
+			`"start_comment":20,"end_comment":10`,
+			`"start_comment":10,"end_comment":1000011`,
+		} {
+			body := `{"jobs":[{"chat_url":"https://t.me/course",` + kind + `,` + selection + `}]}`
+			require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+			_, err := LoadConfig(path)
+			require.Error(t, err, body)
+		}
+	}
+	for _, global := range []bool{false, true} {
+		body := fmt.Sprintf(`{"incremental":%t,"jobs":[{"chat_url":"https://t.me/course","tags":["#notes"]},{"chat_url":"https://t.me/course","follow_links":true}]}`, global)
+		require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+		cfg, err := LoadConfigForRun(path, !global)
+		require.NoError(t, err)
+		for _, job := range cfg.Jobs {
+			require.True(t, job.UsesIncremental(cfg.Incremental))
+		}
+	}
 }

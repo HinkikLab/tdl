@@ -88,9 +88,10 @@ type Runner struct {
 	storage  storage.Storage
 	poolSize int
 
-	pool    dcpool.Pool
-	manager *peers.Manager
-	dialogs map[string]peers.Peer
+	pool        dcpool.Pool
+	manager     *peers.Manager
+	dialogs     map[string]peers.Peer
+	unavailable *chat.UnavailableLinks
 }
 
 // Run executes the batch download described by path.
@@ -143,7 +144,7 @@ func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Conf
 	threads := pick(opts.Threads, num(cfg.Threads), DefaultThreads)
 	limit := pick(opts.Limit, num(cfg.Limit), DefaultLimit)
 
-	r := &Runner{opts: opts, cfg: cfg, client: c, storage: kvd, poolSize: poolSize}
+	r := &Runner{opts: opts, cfg: cfg, client: c, storage: kvd, poolSize: poolSize, unavailable: &chat.UnavailableLinks{}}
 	r.pool = dcpool.NewPool(c, int64(poolSize),
 		tclient.NewDefaultMiddlewares(ctx, 5*time.Minute)...)
 	defer multierr.AppendInvoke(&rerr, multierr.Close(r.pool))
@@ -205,32 +206,34 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 	}
 	writeMetadata := job.WritesMetadata(r.cfg.WriteMetadata)
 	if job.FollowLinks {
-		start, end := 0, 0
-		if job.StartComment != nil {
-			start, end = *job.StartComment, *job.EndComment
-		}
-		return chat.DownloadLinked(ctx, r.client, r.storage, chat.LinkedOptions{
-			Chat: job.ChatURL, Dir: dir, Tag: job.Tag, Tags: job.Tags, TagMatch: job.TagMatch,
-			StartID: start, EndID: end, MaxPosts: job.MaxPosts, CheckOnly: r.opts.CheckOnly,
-			Takeout: r.opts.Takeout, Threads: threads, Limit: limit, Pool: r.pool, Links: job.LinkOptions,
-			Include: r.opts.Include, Exclude: r.opts.Exclude,
-			BotUpdates:    r.opts.BotUpdates,
-			WriteMetadata: &writeMetadata,
-			OnResolved:    onResolved,
+		return r.runArchiveWindow(ctx, job, dir, func(window chat.ArchiveWindow) error {
+			return chat.DownloadLinked(ctx, r.client, r.storage, chat.LinkedOptions{
+				Chat: job.ChatURL, Dir: dir, Tag: job.Tag, Tags: job.Tags, TagMatch: job.TagMatch,
+				Window: window, MaxPosts: job.MaxPosts, CheckOnly: r.opts.CheckOnly,
+				Takeout: r.opts.Takeout, Threads: threads, Limit: limit, Pool: r.pool, Links: job.LinkOptions,
+				Include: r.opts.Include, Exclude: r.opts.Exclude,
+				BotUpdates:    r.opts.BotUpdates,
+				Unavailable:   r.unavailable,
+				WriteMetadata: &writeMetadata,
+				OnResolved:    onResolved,
+			})
 		})
 	}
 	if job.IsTagJob() {
-		return chat.DownloadTag(ctx, r.client, r.storage, chat.TagOptions{
-			Chat: job.ChatURL, Tag: job.Tag, Tags: job.Tags,
-			TopicID:  num(job.TopicID),
-			TagMatch: job.TagMatch, Dir: dir,
-			CheckOnly: r.opts.CheckOnly, Takeout: r.opts.Takeout,
-			Threads: threads, Limit: limit, PoolSize: r.poolSize,
-			PoolSizeSet:   true,
-			Pool:          r.pool,
-			MaxPosts:      job.MaxPosts,
-			WriteMetadata: &writeMetadata,
-			OnResolved:    onResolved,
+		return r.runArchiveWindow(ctx, job, dir, func(window chat.ArchiveWindow) error {
+			return chat.DownloadTag(ctx, r.client, r.storage, chat.TagOptions{
+				Chat: job.ChatURL, Tag: job.Tag, Tags: job.Tags,
+				TopicID:  num(job.TopicID),
+				TagMatch: job.TagMatch, Dir: dir,
+				CheckOnly: r.opts.CheckOnly, Takeout: r.opts.Takeout,
+				Threads: threads, Limit: limit, PoolSize: r.poolSize,
+				PoolSizeSet:   true,
+				Pool:          r.pool,
+				MaxPosts:      job.MaxPosts,
+				Window:        window,
+				WriteMetadata: &writeMetadata,
+				OnResolved:    onResolved,
+			})
 		})
 	}
 	link, err := ParseLink(job.ChatURL)

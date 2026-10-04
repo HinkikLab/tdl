@@ -19,7 +19,6 @@ import (
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/telegram/query"
-	"github.com/gotd/td/telegram/query/messages"
 	"github.com/gotd/td/tg"
 	pw "github.com/jedib0t/go-pretty/v6/progress"
 	"go.uber.org/multierr"
@@ -37,6 +36,8 @@ type LinkedOptions struct {
 	Chat, Dir, Tag, TagMatch string
 	Tags                     []string
 	StartID, EndID, MaxPosts int
+	Window                   ArchiveWindow
+	Unavailable              *UnavailableLinks
 	CheckOnly, Takeout       bool
 	Threads, Limit           int
 	Pool                     dcpool.Pool
@@ -70,6 +71,10 @@ type linkedPost struct {
 // DownloadLinked processes one source post at a time. Ephemeral bot messages
 // are requested just before download, rather than exported for a later pass.
 func DownloadLinked(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts LinkedOptions) (rerr error) {
+	return downloadLinked(ctx, c.API(), kvd, opts)
+}
+
+func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, opts LinkedOptions) (rerr error) {
 	if err := opts.Links.Normalize(); err != nil {
 		return err
 	}
@@ -83,15 +88,27 @@ func DownloadLinked(ctx context.Context, c *telegram.Client, kvd storage.Storage
 	if source.Kind == "bot" || source.Comment != 0 {
 		return fmt.Errorf("source must be a main chat or post")
 	}
-	manager := peers.Options{Storage: storage.NewPeers(kvd)}.Build(c.API())
+	if opts.Window == (ArchiveWindow{}) {
+		opts.Window = ArchiveWindow{StartID: opts.StartID, EndID: opts.EndID}
+	}
+	if err := opts.Window.Validate(); err != nil {
+		return err
+	}
+	if opts.MaxPosts < 0 {
+		return fmt.Errorf("max_posts must not be negative")
+	}
+	manager := peers.Options{Storage: storage.NewPeers(kvd)}.Build(api)
 	peer, err := tutil.GetInputPeer(ctx, manager, source.Chat)
 	if err != nil {
 		return err
 	}
 	announceTarget(TargetName(peer, 0, "", source.ID == 0), opts.OnResolved)
-	backend := &telegramLinkBackend{api: c.API(), manager: manager, opts: opts.Links, updates: opts.BotUpdates}
+	backend := &telegramLinkBackend{api: api, manager: manager, opts: opts.Links, updates: opts.BotUpdates}
 	defer func() { rerr = multierr.Append(rerr, cleanupLinked(ctx, backend)) }()
-	resolver := &linkResolver{backend: backend, opts: opts.Links}
+	if opts.Unavailable == nil {
+		opts.Unavailable = &UnavailableLinks{}
+	}
+	resolver := &linkResolver{backend: backend, opts: opts.Links, unavailable: opts.Unavailable}
 	var tags []string
 	if opts.Tag != "" || len(opts.Tags) > 0 {
 		tags, err = normalizeTags(opts.Tag, opts.Tags)
@@ -114,16 +131,8 @@ func DownloadLinked(ctx context.Context, c *telegram.Client, kvd storage.Storage
 			return nil
 		}
 		sort.Slice(album, func(i, j int) bool { return album[i].ID < album[j].ID })
-		if opts.StartID > 0 || opts.EndID > 0 {
-			inRange := false
-			for _, m := range album {
-				if (opts.StartID == 0 || m.ID >= opts.StartID) && (opts.EndID == 0 || m.ID < opts.EndID) {
-					inRange = true
-				}
-			}
-			if !inRange {
-				return nil
-			}
+		if !opts.Window.matches(album) {
+			return nil
 		}
 		post, ok := linkedSourcePost(album, tags, mode, peer.ID(), source.Chat)
 		if !ok {
@@ -149,15 +158,28 @@ func DownloadLinked(ctx context.Context, c *telegram.Client, kvd storage.Storage
 			skipped++
 			return nil
 		}
+		for _, link := range links {
+			if err := opts.Unavailable.lookup(link); err != nil {
+				skipped++
+				fmt.Printf("Post %d skipped: %s\n", post.MessageID, err)
+				return nil
+			}
+		}
 		selected++
 		fmt.Printf("Post %d: %d resource link(s) -> %s\n", post.MessageID, len(links), post.Directory)
 		if opts.CheckOnly {
 			return nil
 		}
 		err := archiveLinkedPost(ctx, root, post, album, peer.InputPeer(), links, resolver, opts)
+		if isUnavailableResource(err) {
+			selected--
+			skipped++
+			fmt.Printf("Post %d skipped: %s\n", post.MessageID, err)
+			err = nil
+		}
 		return multierr.Append(err, cleanupLinked(ctx, backend))
 	}
-	runPost := func(album []*tg.Message) {
+	runPost := func(album []*tg.Message) (bool, error) {
 		before := selected
 		if err := process(album); err != nil {
 			if selected == before {
@@ -166,7 +188,9 @@ func DownloadLinked(ctx context.Context, c *telegram.Client, kvd storage.Storage
 			failures = multierr.Append(failures, err)
 			fmt.Printf("Linked post failed: %s\n", err)
 		}
+		return opts.MaxPosts == 0 || selected < opts.MaxPosts, ctx.Err()
 	}
+	complete := true
 	if source.ID > 0 {
 		album, err := backend.messageAlbum(ctx, peer.InputPeer(), source.ID, false)
 		if err != nil {
@@ -176,55 +200,18 @@ func DownloadLinked(ctx context.Context, c *telegram.Client, kvd storage.Storage
 		for _, m := range album {
 			main = append(main, m.Message)
 		}
-		runPost(main)
+		if _, err := runPost(main); err != nil {
+			return err
+		}
 	} else {
-		q := query.NewQuery(c.API()).Messages().GetHistory(peer.InputPeer())
-		if opts.EndID > 0 {
-			q = q.OffsetID(opts.EndID + 10)
-		} // include album members at the boundary
-		it := messages.NewIterator(q, 100)
-		var pending []*tg.Message
-		for it.Next(ctx) {
-			m, ok := it.Value().Msg.(*tg.Message)
-			if !ok {
-				continue
-			}
-			if len(pending) > 0 && (m.GroupedID == 0 || pending[0].GroupedID != m.GroupedID) {
-				runPost(pending)
-				pending = nil
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				if opts.MaxPosts > 0 && selected >= opts.MaxPosts {
-					break
-				}
-				if opts.StartID > 0 && m.ID < opts.StartID {
-					break
-				}
-			}
-			pending = append(pending, m)
-			if m.GroupedID == 0 {
-				runPost(pending)
-				pending = nil
-				if ctx.Err() != nil {
-					return ctx.Err()
-				}
-				if opts.MaxPosts > 0 && selected >= opts.MaxPosts {
-					break
-				}
-				if opts.StartID > 0 && m.ID < opts.StartID {
-					break
-				}
-			}
-		}
-		if err := it.Err(); err != nil {
-			failures = multierr.Append(failures, err)
-		}
-		if len(pending) > 0 && (opts.MaxPosts == 0 || selected < opts.MaxPosts) {
-			runPost(pending)
-		}
+		q := query.NewQuery(api).Messages().GetHistory(peer.InputPeer())
+		complete, err = scanArchiveHistory(ctx, q, opts.Window, runPost)
+		failures = multierr.Append(failures, err)
 	}
-	fmt.Printf("Linked archive: %d selected post(s), %d without resource links.\n", selected, skipped)
+	if !complete && err == nil && opts.Window.Until > 0 && !opts.CheckOnly {
+		failures = multierr.Append(failures, fmt.Errorf("max_posts truncated the incremental archive window; keeping last_ts"))
+	}
+	fmt.Printf("Linked archive: %d selected post(s), %d skipped (no links or unavailable targets).\n", selected, skipped)
 	return failures
 }
 
@@ -366,6 +353,10 @@ func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*
 		fmt.Printf("Post %d: archive already complete\n", post.MessageID)
 		return nil
 	}
+	files, hops, err := resolver.Resolve(ctx, roots)
+	if isUnavailableResource(err) {
+		return err
+	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return err
 	}
@@ -375,7 +366,6 @@ func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	files, hops, err := resolver.Resolve(ctx, roots)
 	meta := linkedPost{tagPost: post, Version: 1, LinkHash: hash, Hops: hops}
 	for _, l := range roots {
 		meta.Links = append(meta.Links, l.URL())

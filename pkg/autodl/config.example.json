@@ -71,20 +71,23 @@
       "subdir": "06-tag-single"
     },
     {
-      "_comment": "7. Any caption hashtag / 多标签任意匹配：命中 #教程 或 #示例 即归档；不要同时填写 comment 或消息范围。write_metadata=false 演示仅保存媒体，不输出 meta.json。",
+      "_comment": "7. Any caption hashtag in an ID range / 多标签范围归档：[100,110) 内命中 #教程 或 #示例 即保留整组相册。write_metadata=false 仅保存媒体。",
       "chat_url": "https://t.me/example_channel",
       "tags": ["#教程", "#示例"],
       "tag_match": "any",
+      "start_comment": 100,
+      "end_comment": 110,
       "write_metadata": false,
       "max_posts": 1,
       "subdir": "07-tags-any"
     },
     {
-      "_comment": "8. All caption hashtags / 多标签全部匹配：同一帖或相册的说明需要包含全部指定标签；max_posts=0 可处理所有匹配组。",
+      "_comment": "8. Incremental caption hashtags / 多标签增量归档：同一帖或相册说明须包含全部标签；完成整个窗口后推进 last_ts，max_posts=0 避免截断窗口。",
       "chat_url": "https://t.me/example_channel",
       "tags": ["#教程", "#示例"],
       "tag_match": "all",
-      "max_posts": 1,
+      "incremental": true,
+      "max_posts": 0,
       "subdir": "08-tags-all"
     },
     {
@@ -112,11 +115,11 @@
       }
     },
     {
-      "_comment": "10. Linked resources from chat history/comments / 扫描主频道预览帖：正文没有入口时读取评论；不要设置 comment=true，max_posts=1 限制一个候选帖，0 扫描全部历史。",
+      "_comment": "10. Incremental linked resources from history/comments / 增量归档主频道预览帖：正文没有入口时读取评论；max_posts=0 处理完整窗口，确认失效的机器人/群组在本次 batch 内自动跳过。",
       "chat_url": "https://t.me/example_channel",
       "follow_links": true,
-      "incremental": false,
-      "max_posts": 1,
+      "incremental": true,
+      "max_posts": 0,
       "subdir": "10-linked-comments",
       "link_options": {
         "scan_comments": true,

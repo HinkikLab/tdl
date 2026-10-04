@@ -66,19 +66,21 @@ tdl batch init -c config.json --force
 | 04 | 论坛指定话题增量下载 | `incremental: true`，`topic_id` |
 | 05 | 单篇帖子评论增量下载 | `incremental: true`，`chat`，`reply_post_id` |
 | 06 | 单个说明标签归档 | `tag` |
-| 07 | 多个标签命中任意一个 | `tags`，`tag_match: "any"` |
-| 08 | 多个标签全部命中 | `tags`，`tag_match: "all"` |
+| 07 | 范围内命中任意标签 | `tags`，`tag_match: "any"`，消息 ID 范围 |
+| 08 | 增量窗口内命中全部标签 | `tags`，`tag_match: "all"`，`incremental: true` |
 | 09 | 单个主帖的链接资源归档 | 主帖 URL，`follow_links: true`，完整 `link_options` |
-| 10 | 扫描主频道并从评论中找入口 | 主页 URL，`follow_links: true`，`scan_comments: true` |
+| 10 | 增量扫描主频道并从评论中找入口 | 主页 URL，`follow_links: true`，`incremental: true` |
 | 11 | 按主帖范围和标签筛选链接资源 | 主页 URL，`follow_links: true`，范围、标签及机器人等待参数 |
 
 模板中的 URL 与 ID 是占位示例，须修改后使用。`max_posts: 1` 便于首次检查，
-改为 `0` 才会扫描全部历史；它仅用于标签和链接资源归档。
+改为 `0` 才会扫描完整窗口；增量示例已使用 `0`，避免窗口被截断。
+它仅用于标签和链接资源归档。
 
 ## 选择模式
 
-每个 job 的执行顺序是：先判断 `follow_links`，再判断 `tag` / `tags`，
-其他 job 按 `incremental` 选择时间窗口或消息 ID 范围。
+每个 job 先按 `incremental` 选择增量时间窗口或消息 ID 范围，再按
+`follow_links`、`tag` / `tags` 或直接/评论模式处理选中的消息。
+归档任务不设置范围且关闭增量时，仍可扫描全部历史。
 任务按 `jobs` 数组顺序执行，可以在同一配置中混用各类 job。
 
 | 模式 | `chat_url` | ID 含义及限制 |
@@ -86,15 +88,15 @@ tdl batch init -c config.json --force
 | 直接范围 | 频道/群组主页或帖子 URL | 必填左闭右开范围；URL 的帖子 ID 不会自动变成下载范围 |
 | 评论范围 | 主频道帖子 URL，`comment: true` | 范围是关联讨论组的消息 ID；按 ID 下载，不自动限定为这篇主帖的回复 |
 | 增量 | 对话主页或主帖 URL | 不需要范围；`topic_id` / `reply_post_id` 仅在增量扫描中生效 |
-| 标签归档 | 频道/群组主页或论坛话题链接 | 可用 `topic_id` 限定话题；不填 `comment`、范围、`reply_post_id`；使用独立历史扫描与文件检查，增量参数不改变其行为 |
-| 链接资源归档 | 主频道主页或某篇主帖 | 可加主帖标签；主页可加主帖 ID 范围；不能与时间戳增量、`comment: true`、topic/reply 选择器组合 |
+| 标签归档 | 频道/群组主页或论坛话题链接 | 支持消息 ID 范围或时间戳增量；可用 `topic_id` 限定话题；不支持评论模式或 `reply_post_id` |
+| 链接资源归档 | 主频道主页或某篇主帖 | 支持主帖 ID 范围或时间戳增量，可加主帖标签；不支持 `comment: true` 或 topic/reply 选择器 |
 
 `--mode auto` 是默认值，范围/增量任务按 `comment` 和 URL 的 `?comment=N`
 判断是否使用讨论组。`--mode comment` / `--mode direct` 覆盖任务的 `comment` 开关，
 但 URL 自带的 `?comment=N` 仍会选择讨论组；切回频道直接下载时也要移除该查询参数。
 这两个选项不改变标签或链接资源归档的模式。混合配置通常保持 `--mode auto`。
-`--incremental` 会强制所有 job 的增量开关，含链接资源 job 的配置会因此校验失败；
-混合配置请在各 job 中单独设置 `incremental`。
+`--incremental` 会强制所有 job（包括标签和链接资源归档）开启增量。
+增量优先于 ID 范围；仅需部分任务增量时，在各 job 中设置 `incremental`。
 
 ## 配置文件
 
@@ -129,7 +131,7 @@ tdl batch init -c config.json --force
 | `download_dir` | 字符串，可省略 | `download_base` 的旧版别名；后者非空时优先 |
 | `incremental` | 布尔值，`false` | 全局增量开关，job 可覆盖；混合模式建议保持 `false` |
 | `write_metadata` | 布尔值，`true` | 标签/链接资源归档输出每帖的 `meta.json`；`false` 关闭，job 可覆盖 |
-| `state_file` | 字符串，可省略 | 默认 `<download_base>/<subdir>/tdl_state.json`；仅消息范围/增量模式使用，混合任务建议保留默认独立路径 |
+| `state_file` | 字符串，可省略 | 默认 `<download_base>/<subdir>/tdl_state.json`；消息任务及增量归档使用，混合任务建议保留默认独立路径 |
 | `overlap_seconds` | 非负整数，`3600` | 增量回看秒数；当前实现 `0` 会回落到其他层或默认值，不能用来关闭回看 |
 | `jobs` | 非空数组，必填 | 任务列表，按顺序执行 |
 | `pool` | 非负整数，`16` | 连接池大小；`0` 表示不限制连接池大小 |
@@ -142,19 +144,19 @@ tdl batch init -c config.json --force
 | --- | --- |
 | `_comment` | 说明文字，忽略 |
 | `chat_url` | 必填。支持公开主页/帖子、私有主页 `https://t.me/c/1234567890/` 及帖子链接、`?comment=456`、不带协议及 `/s/` 预览链接；账号须有访问权限 |
-| `chat` | 增量扫描对话，可填用户名、数值 ID 或 Telegram URL；留空则从 `chat_url` 推断。覆盖扫描来源时须保证其消息 ID 与下载对话一致 |
+| `chat` | 普通消息任务的增量扫描对话，可填用户名、数值 ID 或 Telegram URL；留空则从 `chat_url` 推断。归档始终使用 `chat_url` |
 | `subdir` | job 的相对子目录；不能为绝对路径或通过 `..` 逃出下载根目录。不同任务使用独立子目录 |
 | `comment` | 默认 `false`；`true` 表示使用关联讨论组。旧版整数写法同时代表评论模式，且在未填 `start_comment` 时作为起始 ID。推荐使用布尔值及显式范围 |
 | `start_comment` / `end_comment` | 正整数，`start` 包含、`end` 不包含，`end > start`，范围最多 1,000,000 条。字段沿用旧名，直接模式仍填这两个字段 |
 | `incremental` | 覆盖全局增量开关 |
 | `write_metadata` | 覆盖全局归档元数据输出开关；省略时继承全局设置 |
 | `overlap_seconds` | 覆盖全局增量回看窗口 |
-| `export_filter` | 增量模式的 expr 过滤表达式，等价于 `tdl chat export -f` |
-| `with_content` | 增量模式导出时附带 `date`/`text` |
-| `export_all` | 增量模式导出非媒体消息（默认只导出媒体） |
+| `export_filter` | 普通消息增量任务的 expr 过滤表达式，等价于 `tdl chat export -f`；归档使用标签/链接筛选 |
+| `with_content` | 普通消息增量任务导出时附带 `date`/`text` |
+| `export_all` | 普通消息增量任务导出非媒体消息（默认只导出媒体）；归档自行保留说明 |
 | `topic_id` | 正整数话题根消息 ID；用于增量或标签扫描。标签任务也能从话题链接推导，显式值须与链接一致；增量任务仍需显式填写 |
 | `reply_post_id` | 增量模式使用，扫描对话中的正整数回复根消息 ID；关联讨论组中应填转发根消息 ID，不是主频道帖子 ID |
-| `tag` / `tags` | 一个 tag 或多个 tag 数组；按图片/视频说明文字中的完整 hashtag 筛选，与消息 ID 范围任务二选一 |
+| `tag` / `tags` | 一个 tag 或多个 tag 数组；按图片/视频说明文字中的完整 hashtag 筛选，可叠加消息 ID 范围或增量窗口 |
 | `tag_match` | 多 tag 匹配方式：`any`（默认，命中任意一个）或 `all`（全部命中） |
 | `max_posts` | tag 任务最多匹配多少组，默认 `0` 表示扫描全部历史；可用于先做小规模验证 |
 | `follow_links` | 开启预览帖资源归档，从正文超链接或评论中追踪机器人/群组资源链接 |
@@ -362,10 +364,39 @@ fallback wait `3600` 秒、maximum wait `86400` 秒。
 运行期间避免手动向同一机器人发送其他请求，以免无关联信息的机器人回复混入。
 分批发送间隔较长的机器人应调大 `bot_idle_seconds` 与 `bot_timeout_seconds`。
 
-此模式使用每帖归档清单续跑，不能与时间戳 `incremental`、评论范围模式或
-topic/reply 选择器混用。群组链接须指向账号可访问的具体消息；邀请链接、
+此模式使用每帖归档清单校验文件，并可用 `incremental` 限制主帖时间窗口；
+不支持评论范围模式或 topic/reply 选择器。群组链接须指向账号可访问的具体消息；邀请链接、
 仅有群首页、验证码、付费门槛、回调按钮和外部网页跳转不会自动执行。
 自定义限流提示若不包含可识别关键词，会在等待超时后报告失败。
+
+机器人不存在、被删除，或群组无效/不可访问时，本帖自动跳过；本次 batch 的
+所有任务共享失效目标缓存，后续同一机器人（即使 `start` 不同）或同一群组
+（即使帖子 ID 不同）的链接不再请求。多层跳转只缓存实际失效的目标。
+网络超时、限流、单条消息删除或 `start` 参数无效仍作为失败报告，不封禁整个目标。
+下次 batch 运行重新探测，恢复的目标可以再次使用。
+
+### 归档的范围与增量窗口
+
+标签归档和链接资源归档都可使用 `start_comment` / `end_comment` 选择源消息：
+
+```json
+{
+  "jobs": [{
+    "chat_url": "https://t.me/example_channel",
+    "tags": ["#教程"],
+    "start_comment": 100,
+    "end_comment": 110,
+    "subdir": "tag-range"
+  }]
+}
+```
+
+需要解析链接时再加 `"follow_links": true`。范围是源群组的消息 ID，
+不是资源群组或机器人的消息 ID；命中相册任一成员就归档整组，边界不会拆散相册。
+改为 `"incremental": true` 后，范围字段被忽略，按 `last_ts` 和回看秒数扫描。
+首次扫描全部历史，完整成功后才写入窗口结束时间；失败、取消、扫描超出 100000 条
+或 `max_posts` 截断窗口时保留 `last_ts`，下次运行通过文件/清单检查继续处理。
+`--check-only` 不推进时间戳。归档增量建议 `max_posts: 0`，每个 job 保持独立 `subdir`。
 
 ## 命令行参数
 
@@ -377,8 +408,8 @@ topic/reply 选择器混用。群组链接须指向账号可访问的具体消�
 | `--check-only` | 预览规划，不下载媒体、不推进增量时间戳；范围模式只报告 ID 计划，不验证文件可用性；标签/链接模式扫描入口 |
 | `-y`, `--yes` | 自动回答运行中的确认，不允许推进尚未完成的增量窗口 |
 | `--mode auto/comment/direct` | 默认 `auto`；覆盖范围/增量 job 的 `comment` 开关 |
-| `--incremental` | 强制所有 job 开启增量；混合链接资源 job 时不要使用 |
-| `--state-file` | 覆盖所有范围/增量 job 的状态路径；多 job 应保持独立路径，避免 scope 冲突 |
+| `--incremental` | 强制所有 job 开启增量，包括标签和链接资源归档 |
+| `--state-file` | 覆盖消息任务及增量归档的状态路径；多 job 应保持独立路径，避免 scope 冲突 |
 | `--overlap-seconds` | 覆盖增量回看窗口；不传为 `-1`，使用配置/默认值，`0` 回落到其他层 |
 | `--retry-skipped` | 重试记录为无媒体/已删除的消息；只用于范围/增量状态 |
 | `-d`, `--dir` | 覆盖下载根目录，仍追加每个 job 的 `subdir` |
@@ -513,7 +544,8 @@ tdl batch --incremental --overlap-seconds 3600
 topic/reply、模式、下载目录或文件命名/过滤规则共用了状态路径。
 为每个任务指定不同 `subdir`，并避免给多种任务指定一个顶层 `state_file` 或
 `--state-file`。改变输出规则后使用新的子目录或状态文件；保留原状态便于恢复原任务。
-标签和链接资源任务使用文件/归档清单续跑，不使用这个消息级状态文件。
+标签和链接资源任务使用文件/归档清单校验完成状态；开启增量时另用该状态文件
+保存 `last_ts`，不把消息 ID 记录为已下载。改变标签或链接选择规则会触发 scope 校验。
 
 ## 性能
 

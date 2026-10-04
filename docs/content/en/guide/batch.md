@@ -72,20 +72,22 @@ Each uses its own `subdir` to keep message-level resume state separate:
 | 04 | Incremental forum topic | `incremental: true`, `topic_id` |
 | 05 | Incremental replies to one post | `incremental: true`, `chat`, `reply_post_id` |
 | 06 | Single caption hashtag archive | `tag` |
-| 07 | Any requested caption hashtag | `tags`, `tag_match: "any"` |
-| 08 | All requested caption hashtags | `tags`, `tag_match: "all"` |
+| 07 | Any caption hashtag inside an ID range | `tags`, `tag_match: "any"`, ID range |
+| 08 | All caption hashtags in an incremental window | `tags`, `tag_match: "all"`, `incremental: true` |
 | 09 | Linked resources from one main post | Post URL, `follow_links: true`, complete `link_options` |
-| 10 | Preview history with comment links | Home URL, `follow_links: true`, `scan_comments: true` |
+| 10 | Incremental preview history with comment links | Home URL, `follow_links: true`, `incremental: true` |
 | 11 | Linked resources filtered by main-post range and tags | Home URL, `follow_links: true`, range, tags and bot timing |
 
 URLs and IDs are placeholders; edit them before use. Archive examples use
-`max_posts: 1` for an initial preview. Set it to `0` to scan all history.
+`max_posts: 1` for an initial preview. Incremental examples use `0` to process
+the complete window; set it to `0` for an unrestricted archive scan.
 This limit applies only to caption-tag and linked-resource archives.
 
 ## Select a mode
 
-For each job, batch checks `follow_links` first, then `tag` / `tags`. Other
-jobs use either an incremental time window or an explicit ID range.
+For each job, batch selects an incremental time window or an explicit ID range,
+then processes the selected messages using links, caption tags or direct/comment
+downloads. Archives without either selector continue to scan full history.
 Jobs run in array order; one configuration can contain several modes.
 
 | Mode | `chat_url` | ID meaning and constraints |
@@ -93,17 +95,17 @@ Jobs run in array order; one configuration can contain several modes.
 | Direct range | Channel/group home or post | Both range endpoints are required; the post ID in the URL does not automatically select a download range |
 | Comment range | Main channel post, `comment: true` | Range IDs belong to the linked discussion group; these IDs are not automatically restricted to replies to that post |
 | Incremental | Chat home or main post | No range required; `topic_id` / `reply_post_id` apply only to incremental scanning |
-| Caption-tag archive | Channel/group home or forum topic link | Optional `topic_id` limits the scan; omit `comment`, ranges and `reply_post_id`; its own history scan and file validation are independent of incremental settings |
-| Linked-resource archive | Main channel home or one post | Optional main-post tags; home URLs may use a main-post ID range; cannot combine with timestamp incremental mode, `comment: true` or topic/reply selectors |
+| Caption-tag archive | Channel/group home or forum topic link | Supports ID ranges or timestamp incremental scanning; optional `topic_id`; comment mode and `reply_post_id` are unsupported |
+| Linked-resource archive | Main channel home or one post | Supports main-post ID ranges or timestamp incremental scanning, with optional tags; comment mode and topic/reply selectors are unsupported |
 
 `--mode auto` is the default. Range/incremental jobs choose the discussion
 group from `comment` or `?comment=N` in the URL. `--mode comment/direct`
 overrides the job's `comment` setting, but a URL containing `?comment=N`
 still selects the discussion group. Remove that query parameter when switching
 to direct channel downloads. These flags do not change tag/linked archive modes.
-Use `auto` for mixed configurations. `--incremental` forces the setting on
-all jobs and fails validation if a linked-resource job is present; configure
-incremental jobs individually instead.
+Use `auto` for mixed configurations. `--incremental` forces the setting on all
+jobs, including tag and linked archives. Incremental selection takes precedence
+over ID ranges; use per-job settings when only some jobs should be incremental.
 
 ## Configuration
 
@@ -139,7 +141,7 @@ messages 100 through 109:
 | `download_dir` | Optional string | Legacy alias; nonempty `download_base` wins |
 | `incremental` | Boolean, `false` | Global incremental switch, overridden per job; keep false for mixed examples |
 | `write_metadata` | Boolean, `true` | Write per-post `meta.json` in tag/linked archives; `false` disables output, overridden per job |
-| `state_file` | Optional string | Default `<download_base>/<subdir>/tdl_state.json`; used by range/incremental jobs; prefer distinct default paths |
+| `state_file` | Optional string | Default `<download_base>/<subdir>/tdl_state.json`; used by message jobs and incremental archives; prefer distinct default paths |
 | `overlap_seconds` | Nonnegative integer, `3600` | Incremental lookback; currently `0` falls back to another layer/default rather than disabling lookback |
 | `jobs` | Required nonempty array | Download tasks, processed in order |
 | `pool` | Nonnegative integer, `16` | Connection pool size; `0` is unlimited |
@@ -152,19 +154,19 @@ messages 100 through 109:
 | --- | --- |
 | `_comment` | Documentation only; ignored |
 | `chat_url` | Required. Public home/post, private home `https://t.me/c/1234567890/` and post links, comment links, links without a scheme and `/s/` preview links are accepted; the account must have access |
-| `chat` | Incremental scan source: username, numeric ID or Telegram URL; inferred when omitted. Its IDs must belong to the dialog used for downloading |
+| `chat` | Incremental source for ordinary message jobs: username, numeric ID or Telegram URL. Archives always use `chat_url` |
 | `subdir` | Relative job directory under `download_base`; absolute paths and escaping `..` paths are rejected; use distinct directories for distinct jobs |
 | `comment` | Default false; true selects the linked discussion group. A legacy integer also selects comment mode and sets the start ID if omitted. Prefer a boolean with explicit endpoints |
 | `start_comment` / `end_comment` | Positive integers, start inclusive, end exclusive, end greater than start; maximum range 1,000,000. Direct jobs use these same legacy field names |
 | `incremental` | per job override of the global incremental switch |
 | `write_metadata` | per job override of archive metadata output; omission inherits the global setting |
 | `overlap_seconds` | per job override of the lookback window |
-| `export_filter` | expr filter for incremental mode, same as `tdl chat export -f` |
-| `with_content` | include `date`/`text` in the incremental export |
-| `export_all` | also export non-media messages in incremental mode |
+| `export_filter` | expr filter for ordinary incremental message jobs, same as `tdl chat export -f`; archives filter by tags/links |
+| `with_content` | include `date`/`text` in ordinary incremental message exports |
+| `export_all` | export non-media messages in ordinary incremental jobs; archives preserve captions themselves |
 | `topic_id` | Positive topic root ID for incremental or tag scanning. Tag jobs also infer it from topic URLs; explicit values must agree. Incremental jobs still require the explicit selector |
 | `reply_post_id` | Incremental only: positive reply root ID in the scan dialog; use the forwarded root ID in the discussion group, not the original channel post ID |
-| `tag` / `tags` | one hashtag or an array of hashtags matched against photo/video captions; use instead of a message ID range |
+| `tag` / `tags` | one hashtag or an array matched against photo/video captions; may combine with ID ranges or incremental windows |
 | `tag_match` | `any` (default) selects posts with any requested tag; `all` requires every tag |
 | `max_posts` | optionally stop after this many matching posts; `0` (the default) scans the full history |
 | `follow_links` | archive resources reached through links in preview posts or their comments |
@@ -390,11 +392,45 @@ Avoid concurrent manual requests to the same bot because many bots do not
 correlate their replies to a request. Increase the idle interval and timeout
 when a bot sends several batches with long pauses.
 
-This mode resumes through archive manifests and cannot use timestamp
-`incremental`, comment-range mode or topic/reply selectors. Group links must
+This mode validates files through archive manifests and supports timestamp
+`incremental` selection of source posts. Comment-range mode and topic/reply selectors
+are unsupported. Group links must
 identify accessible messages. Invite links, group home links, external web
 redirects, callback buttons, captcha and payment steps are not automatically
 executed. Unrecognized custom rate-limit text results in a response timeout.
+
+Nonexistent/deleted bots and invalid/inaccessible groups are skipped. All jobs
+in one batch share a cache by target, independent of bot start parameters and
+group message IDs. Recursive resolution caches only the target that failed.
+Timeouts, flood waits, deleted individual messages and invalid start parameters
+remain errors and never blacklist the whole target. The next batch run probes
+targets again so restored resources can recover.
+
+### Archive ranges and incremental windows
+
+Both tag and linked archives accept source message ranges:
+
+```json
+{
+  "jobs": [{
+    "chat_url": "https://t.me/example_channel",
+    "tags": ["#notes"],
+    "start_comment": 100,
+    "end_comment": 110,
+    "subdir": "tag-range"
+  }]
+}
+```
+
+Add `"follow_links": true` to resolve linked resources. IDs belong to the source
+chat, not a resource group or bot. Selecting any album member preserves the full
+album, including members outside the boundaries. With `"incremental": true`,
+ID fields are ignored; `last_ts` and overlap seconds select the source window.
+The first run scans full history. Only a complete successful window advances
+`last_ts`; failure, cancellation, the 100000-message scan limit or a `max_posts`
+cutoff preserves the timestamp. Reruns validate existing files/manifests.
+Check-only never advances timestamps. Use `max_posts: 0` for incremental
+archives and a distinct `subdir` for each job.
 
 ## Command line
 
@@ -406,8 +442,8 @@ Use `tdl batch init` to generate examples. The following flags execute batch job
 | `--check-only` | Preview without media downloads or advancing timestamps; range jobs report ID plans without proving availability, tag/linked jobs scan entries |
 | `-y`, `--yes` | Answer runtime confirmations; cannot advance incomplete incremental windows |
 | `--mode auto/comment/direct` | Default auto; override range/incremental jobs' comment switch |
-| `--incremental` | Force incremental on all jobs; avoid in mixed configurations containing linked archives |
-| `--state-file` | Override all range/incremental state paths; distinct jobs need separate paths to avoid scope conflicts |
+| `--incremental` | Force incremental on all jobs, including tag and linked archives |
+| `--state-file` | Override message-job and incremental-archive state paths; distinct jobs need separate paths to avoid scope conflicts |
 | `--overlap-seconds` | Incremental lookback override; default -1 uses configuration/defaults, 0 falls back to another layer |
 | `--retry-skipped` | Retry IDs recorded as unavailable; range/incremental state only |
 | `-d`, `--dir` | Override root while keeping each job's subdir |
@@ -559,8 +595,9 @@ sources, topic/reply selectors, modes, output directories or naming/extension
 rules share a state path. Assign distinct `subdir` values, and avoid a shared
 top-level `state_file` or `--state-file` for multiple jobs. When changing output
 rules, use a new directory/state path and preserve old state for the old job.
-Tag and linked archives resume through files/manifests, not this message-level
-state file.
+Tag and linked archives validate completion through files/manifests. Incremental
+archives also use this state file for `last_ts`, without marking IDs as downloaded.
+Changing tags or link selection rules triggers the scope check.
 
 ## Performance
 

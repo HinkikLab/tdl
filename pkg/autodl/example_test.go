@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -53,9 +54,15 @@ func TestExampleConfigCoversBatchModes(t *testing.T) {
 	require.Equal(t, "all", cfg.Jobs[7].TagMatch)
 	for _, i := range []int{8, 9, 10} {
 		require.True(t, cfg.Jobs[i].FollowLinks)
-		require.False(t, cfg.Jobs[i].UsesIncremental(true), "linked examples must opt out of global incremental mode")
 		require.True(t, *cfg.Jobs[i].LinkOptions.CleanupBotMessages)
 	}
+	require.True(t, cfg.Jobs[7].UsesIncremental(false))
+	require.True(t, cfg.Jobs[9].UsesIncremental(false))
+	require.Zero(t, cfg.Jobs[7].MaxPosts)
+	require.Zero(t, cfg.Jobs[9].MaxPosts)
+	require.False(t, cfg.Jobs[8].UsesIncremental(true))
+	require.False(t, cfg.Jobs[10].UsesIncremental(true))
+	require.Equal(t, 100, *cfg.Jobs[6].StartComment)
 	require.NotNil(t, cfg.Jobs[10].StartComment)
 	require.True(t, cfg.Jobs[10].IsTagJob())
 }
@@ -89,5 +96,27 @@ func TestWriteExampleConfigInvalidDestination(t *testing.T) {
 	require.NoError(t, err)
 	for _, entry := range entries {
 		require.NotContains(t, entry.Name(), ".tdl-config-")
+	}
+}
+
+func TestBatchDocumentationConfigs(t *testing.T) {
+	for _, language := range []string{"en", "zh"} {
+		t.Run(language, func(t *testing.T) {
+			b, err := os.ReadFile(filepath.Join("..", "..", "docs", "content", language, "guide", "batch.md"))
+			require.NoError(t, err)
+			blocks := regexp.MustCompile("(?s)```json\\r?\\n(.*?)```").FindAllSubmatch(b, -1)
+			require.NotEmpty(t, blocks)
+			for _, block := range blocks {
+				var value map[string]any
+				require.NoError(t, json.Unmarshal(block[1], &value))
+				if _, config := value["jobs"]; !config {
+					continue
+				}
+				path := filepath.Join(t.TempDir(), "config.json")
+				require.NoError(t, os.WriteFile(path, block[1], 0o600))
+				_, err := LoadConfig(path)
+				require.NoError(t, err, string(block[1]))
+			}
+		})
 	}
 }

@@ -14,7 +14,6 @@ import (
 
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/peers"
-	"github.com/gotd/td/telegram/query/messages"
 	"github.com/gotd/td/tg"
 
 	"github.com/iyear/tdl/app/dl"
@@ -40,6 +39,7 @@ type TagOptions struct {
 	PoolSizeSet bool
 	Pool        dcpool.Pool
 	MaxPosts    int // zero scans the complete chat history
+	Window      ArchiveWindow
 
 	WriteMetadata *bool // nil enables meta.json output
 	OnResolved    func(string)
@@ -70,6 +70,10 @@ type tagPost struct {
 // DownloadTag walks the chat history so album members are included even when
 // Telegram only places a caption on one photo or video in the album.
 func DownloadTag(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts TagOptions) error {
+	return downloadTag(ctx, c.API(), c, kvd, opts)
+}
+
+func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd storage.Storage, opts TagOptions) error {
 	target, err := ParseTagTarget(opts.Chat, opts.TopicID)
 	if err != nil {
 		return err
@@ -88,14 +92,14 @@ func DownloadTag(ctx context.Context, c *telegram.Client, kvd storage.Storage, o
 	if mode != "any" && mode != "all" {
 		return fmt.Errorf("tag match mode must be any or all")
 	}
-	manager := peers.Options{Storage: storage.NewPeers(kvd)}.Build(c.API())
+	manager := peers.Options{Storage: storage.NewPeers(kvd)}.Build(api)
 	chat := target.Chat
 	peer, err := tutil.GetInputPeer(ctx, manager, chat)
 	if err != nil {
 		return fmt.Errorf("resolve chat %q: %w", chat, err)
 	}
 
-	history, topic, err := tagHistory(ctx, c.API(), peer.InputPeer(), target.TopicID)
+	history, topic, err := tagHistory(ctx, api, peer.InputPeer(), target.TopicID)
 	if err != nil {
 		return err
 	}
@@ -104,53 +108,30 @@ func DownloadTag(ctx context.Context, c *telegram.Client, kvd storage.Storage, o
 		topicTitle = topic.Title
 	}
 	announceTarget(TargetName(peer, target.TopicID, topicTitle, target.TopicID == 0), opts.OnResolved)
-	it := messages.NewIterator(history, 100)
-	var pending []tagMedia
 	var posts []tagPost
 	scanned := 0
-	flush := func() {
-		if len(pending) == 0 {
-			return
-		}
-		if post, ok := matchAlbum(pending, tags, mode, peer.ID(), chat); ok {
-			posts = append(posts, post)
-		}
-		pending = nil
-	}
-	for it.Next(ctx) {
-		if opts.MaxPosts > 0 && len(posts) >= opts.MaxPosts {
-			break
-		}
-		m, ok := it.Value().Msg.(*tg.Message)
-		if !ok {
-			flush()
-			continue
-		}
-		scanned++
-		media, ok := photoOrVideo(m)
-		if !ok {
-			flush()
-			continue
-		}
-		groupID, _ := m.GetGroupedID()
-		if len(pending) > 0 && (groupID == 0 || pending[0].GroupedID != groupID) {
-			flush()
-			if opts.MaxPosts > 0 && len(posts) >= opts.MaxPosts {
-				break
+	complete, err := scanArchiveHistory(ctx, history, opts.Window, func(album []*tg.Message) (bool, error) {
+		var pending []tagMedia
+		for _, m := range album {
+			scanned++
+			if media, ok := photoOrVideo(m); ok {
+				pending = append(pending, tagMedia{ID: m.ID, Type: "message", File: media.Name,
+					Size: media.Size, Date: m.Date, Text: m.Message, GroupedID: m.GroupedID})
 			}
 		}
-		pending = append(pending, tagMedia{
-			ID: m.ID, Type: "message", File: media.Name, Size: media.Size, Date: m.Date,
-			Text: m.Message, GroupedID: groupID,
-		})
-		if groupID == 0 {
-			flush()
+		if len(pending) > 0 {
+			if post, ok := matchAlbum(pending, tags, mode, peer.ID(), chat); ok {
+				posts = append(posts, post)
+				if opts.MaxPosts > 0 && len(posts) >= opts.MaxPosts {
+					return false, nil
+				}
+			}
 		}
+		return true, nil
+	})
+	if err != nil {
+		return err
 	}
-	if err := it.Err(); err != nil {
-		return fmt.Errorf("scan chat history: %w", err)
-	}
-	flush()
 	fmt.Printf("Scanned %d messages; found %d posts matching %s (%s).\n", scanned, len(posts), strings.Join(tags, ", "), mode)
 	if opts.CheckOnly {
 		for _, post := range posts {
@@ -199,7 +180,7 @@ func DownloadTag(ctx context.Context, c *telegram.Client, kvd storage.Storage, o
 		return err
 	}
 	fmt.Printf("Archive: %s\n", root)
-	return dl.Run(ctx, c, kvd, dl.Options{
+	err = dl.Run(ctx, c, kvd, dl.Options{
 		Dir: root, Files: []string{manifestPath}, Continue: true,
 		SkipSame: true, Takeout: opts.Takeout,
 		Threads: opts.Threads, Limit: opts.Limit,
@@ -208,6 +189,10 @@ func DownloadTag(ctx context.Context, c *telegram.Client, kvd storage.Storage, o
 		Template:          `{{.GroupDir}}/{{.MessageID}}_{{filenamify .FileName}}`,
 		GroupDirByMessage: groupDirByMessage,
 	})
+	if err == nil && !complete && opts.Window.Until > 0 {
+		return fmt.Errorf("max_posts truncated the incremental archive window; keeping last_ts")
+	}
+	return err
 }
 
 func normalizeTag(raw string) (string, error) {

@@ -293,17 +293,24 @@ type linkHop struct {
 }
 
 type linkResolver struct {
-	backend linkBackend
-	opts    LinkOptions
+	backend     linkBackend
+	opts        LinkOptions
+	unavailable *UnavailableLinks
 }
 
 func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]linkedResource, []linkHop, error) {
+	if r.unavailable == nil {
+		r.unavailable = &UnavailableLinks{}
+	}
 	var files []linkedResource
 	var hops []linkHop
 	done, active, mediaSeen := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	var walk func(resourceLink, int) error
 	walk = func(l resourceLink, depth int) error {
 		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err := r.unavailable.lookup(l); err != nil {
 			return err
 		}
 		if active[l.key()] {
@@ -322,7 +329,7 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 		defer delete(active, l.key())
 		msgs, err := r.backend.Fetch(ctx, l)
 		if err != nil {
-			return fmt.Errorf("resolve %s: %w", l.URL(), err)
+			return fmt.Errorf("resolve %s: %w", l.URL(), r.unavailable.remember(l, err))
 		}
 		hop := linkHop{URL: l.URL(), Depth: depth}
 		var next []resourceLink
@@ -494,14 +501,25 @@ func waitLinked(ctx context.Context, d time.Duration) error {
 }
 
 func (b *telegramLinkBackend) Fetch(ctx context.Context, l resourceLink) ([]resourceMessage, error) {
-	peer, err := tutil.GetInputPeer(ctx, b.manager, l.Chat)
+	var peer peers.Peer
+	var err error
+	if id, parseErr := strconv.ParseInt(l.Chat, 10, 64); parseErr == nil && l.Kind != "bot" {
+		// /c/ links identify channels; keep the typed error instead of falling
+		// through user/chat resolvers, which would obscure an unavailable group.
+		peer, err = b.manager.ResolveChannelID(ctx, id)
+	} else {
+		peer, err = tutil.GetInputPeer(ctx, b.manager, l.Chat)
+	}
 	if err != nil {
 		return nil, err
 	}
 	if l.Kind == "bot" {
 		u, ok := peer.(peers.User)
 		if !ok || !u.Raw().Bot {
-			return nil, fmt.Errorf("start link does not target a bot")
+			return nil, tgerr.New(400, "BOT_INVALID")
+		}
+		if u.Raw().Deleted {
+			return nil, tgerr.New(400, "INPUT_USER_DEACTIVATED")
 		}
 		return b.requestBot(ctx, u, l.Start)
 	}

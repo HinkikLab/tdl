@@ -203,19 +203,19 @@ func TestLinkedArchiveReissuesChainAndResumesStableFile(t *testing.T) {
 	require.NotContains(t, offsets, int64(0), "completed part must not be downloaded again")
 	require.NoFileExists(t, path+".tmp")
 	require.NoFileExists(t, downloader.PartsPath(path+".tmp"))
-	caption, err := os.ReadFile(filepath.Join(dir, "message.txt"))
-	require.NoError(t, err)
-	require.Equal(t, preview.Message, string(caption))
-	require.True(t, completedLinkedPost(dir, post, linkedFingerprint([]resourceLink{link}, opts)))
-	metadata, err := os.ReadFile(filepath.Join(dir, "message.json"))
+	require.NoFileExists(t, filepath.Join(dir, "message.txt"))
+	require.NoFileExists(t, filepath.Join(dir, "message.json"))
+	require.NotNil(t, completedLinkedPost(dir, post, linkedFingerprint([]resourceLink{link}, opts)))
+	metadata, err := os.ReadFile(filepath.Join(dir, "meta.json"))
 	require.NoError(t, err)
 	var saved linkedPost
 	require.NoError(t, json.Unmarshal(metadata, &saved))
+	require.Equal(t, preview.Message, saved.Text)
 	require.Equal(t, 23, saved.Resources[0].MessageID, "manifest follows the final reissued source")
 	require.NoError(t, archiveLinkedPost(ctx, root, post, []*tg.Message{preview}, &tg.InputPeerChannel{ChannelID: 1}, []resourceLink{link}, r, opts))
 	require.Equal(t, 3, requests, "complete archive must not send another bot request")
 	require.NoError(t, os.Truncate(path, 1))
-	require.False(t, completedLinkedPost(dir, post, linkedFingerprint([]resourceLink{link}, opts)))
+	require.Nil(t, completedLinkedPost(dir, post, linkedFingerprint([]resourceLink{link}, opts)))
 }
 
 func TestLinkedSessionRejectsReplacedMediaAndBoundsRetries(t *testing.T) {
@@ -356,9 +356,9 @@ func TestLinkedMetadataAndNaming(t *testing.T) {
 	require.Less(t, len(name), 200)
 	require.Equal(t, name, filepath.Base(name))
 	require.True(t, strings.HasSuffix(name, ".zip"))
-	path := filepath.Join(t.TempDir(), "message.json")
-	require.NoError(t, saveLinkedJSON(path, linkedPost{tagPost: p, Version: 1}))
-	require.NoError(t, saveLinkedJSON(path, linkedPost{tagPost: p, Version: 1, Complete: true}))
+	path := filepath.Join(t.TempDir(), "meta.json")
+	require.NoError(t, writeArchiveJSON(path, linkedPost{tagPost: p, Version: 1}))
+	require.NoError(t, writeArchiveJSON(path, linkedPost{tagPost: p, Version: 1, Complete: true}))
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	var meta linkedPost

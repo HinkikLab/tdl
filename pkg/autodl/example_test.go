@@ -48,6 +48,8 @@ func TestExampleConfigCoversBatchModes(t *testing.T) {
 		require.True(t, cfg.Jobs[i].IsTagJob())
 	}
 	require.Equal(t, "any", cfg.Jobs[6].TagMatch)
+	require.True(t, cfg.Jobs[5].WritesMetadata(cfg.WriteMetadata))
+	require.False(t, cfg.Jobs[6].WritesMetadata(cfg.WriteMetadata))
 	require.Equal(t, "all", cfg.Jobs[7].TagMatch)
 	for _, i := range []int{8, 9, 10} {
 		require.True(t, cfg.Jobs[i].FollowLinks)

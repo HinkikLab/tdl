@@ -35,6 +35,8 @@ func NewChat() *cobra.Command {
 // Telegram hashtag. All members of a matching album share one directory.
 func NewChatDownloadTag() *cobra.Command {
 	var opts chat.TagOptions
+	var writeMetadata bool
+	opts.WriteMetadata = &writeMetadata
 	cmd := &cobra.Command{
 		Use:   "download-tag",
 		Short: "Download photo/video posts matching a caption hashtag",
@@ -52,6 +54,7 @@ func NewChatDownloadTag() *cobra.Command {
 	cmd.Flags().StringVar(&opts.TagMatch, "tag-match", "any", "match mode for multiple tags: any or all")
 	cmd.Flags().StringVarP(&opts.Dir, "dir", "d", "downloads", "archive directory")
 	cmd.Flags().BoolVar(&opts.CheckOnly, "check-only", false, "list matching posts without writing files")
+	cmd.Flags().BoolVar(&writeMetadata, "write-metadata", true, "write per-post meta.json metadata")
 	cmd.Flags().BoolVar(&opts.Takeout, "takeout", false, "use a Telegram takeout session for downloads")
 	cmd.Flags().IntVar(&opts.MaxPosts, "max-posts", 0, "stop after this many matching posts (0 scans all history)")
 	_ = cmd.MarkFlagRequired("chat")

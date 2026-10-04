@@ -128,6 +128,7 @@ tdl batch init -c config.json --force
 | `download_base` | 字符串，`downloads` | 下载根目录；命令行 `-d` 可覆盖根目录，仍保留各 job 的 `subdir` |
 | `download_dir` | 字符串，可省略 | `download_base` 的旧版别名；后者非空时优先 |
 | `incremental` | 布尔值，`false` | 全局增量开关，job 可覆盖；混合模式建议保持 `false` |
+| `write_metadata` | 布尔值，`true` | 标签/链接资源归档输出每帖的 `meta.json`；`false` 关闭，job 可覆盖 |
 | `state_file` | 字符串，可省略 | 默认 `<download_base>/<subdir>/tdl_state.json`；仅消息范围/增量模式使用，混合任务建议保留默认独立路径 |
 | `overlap_seconds` | 非负整数，`3600` | 增量回看秒数；当前实现 `0` 会回落到其他层或默认值，不能用来关闭回看 |
 | `jobs` | 非空数组，必填 | 任务列表，按顺序执行 |
@@ -146,6 +147,7 @@ tdl batch init -c config.json --force
 | `comment` | 默认 `false`；`true` 表示使用关联讨论组。旧版整数写法同时代表评论模式，且在未填 `start_comment` 时作为起始 ID。推荐使用布尔值及显式范围 |
 | `start_comment` / `end_comment` | 正整数，`start` 包含、`end` 不包含，`end > start`，范围最多 1,000,000 条。字段沿用旧名，直接模式仍填这两个字段 |
 | `incremental` | 覆盖全局增量开关 |
+| `write_metadata` | 覆盖全局归档元数据输出开关；省略时继承全局设置 |
 | `overlap_seconds` | 覆盖全局增量回看窗口 |
 | `export_filter` | 增量模式的 expr 过滤表达式，等价于 `tdl chat export -f` |
 | `with_content` | 增量模式导出时附带 `date`/`text` |
@@ -162,6 +164,37 @@ tdl batch init -c config.json --force
 `overlap_seconds` 不用于直接 ID 范围扫描。`export_all: true` 使非媒体消息也参与规划，
 不会把普通文本变成媒体文件；保留文字的归档请使用标签或链接资源模式。
 增量导出会保留在 `<job目录>/.tdl_tmp/` 中供排查。
+
+### 归档元数据
+
+标签和链接资源归档默认在每个帖子目录中仅输出一份 `meta.json`，包含原始说明、
+消息及资源信息，不再生成 `message.txt` 或 `message.json`。在顶层设置
+`"write_metadata": false` 可关闭所有归档任务的元数据输出；各 job 可以单独覆盖：
+
+```json
+{
+  "write_metadata": false,
+  "jobs": [
+    {
+      "chat_url": "https://t.me/example_channel",
+      "tags": ["#教程"],
+      "subdir": "media-only"
+    },
+    {
+      "chat_url": "https://t.me/example_channel/100",
+      "follow_links": true,
+      "write_metadata": true,
+      "subdir": "with-metadata"
+    }
+  ]
+}
+```
+
+关闭输出后仍按大小跳过已完成媒体并续传未完成文件。没有保存元数据的链接归档
+再次运行时会重新解析资源链；保存 `meta.json` 则可在解析前判断整帖已完成。
+旧 `message.json` 仍用于目录迁移和完成检查；切换配置不会删除已有文件。
+下载索引和续传状态独立于每帖元数据，仍正常使用。
+独立标签命令也可使用 `--write-metadata=false`。
 
 ### 消息范围和评论范围
 
@@ -218,8 +251,7 @@ tag 任务的 `chat_url` 填群组/频道主页或论坛话题链接，无须填
 同时命中多个 tag 时，使用配置顺序中的第一个命中 tag 作为目录前缀。
 如果原始说明只有 hashtag，目录名使用说明中按顺序出现的全部 tag，去掉 `#`，
 并保留消息 ID 后缀防止重名。
-每组包含图片/视频、原始说明
-`message.txt` 与带所有成员消息 ID、说明和来源链接的 `message.json`。
+每组包含图片/视频，默认另有带所有成员消息 ID、原始说明和来源链接的 `meta.json`。
 Telegram 相册只要有一条成员的说明包含 tag，就会下载整组。
 再次运行会按文件大小跳过已完成媒体，未完成文件可沿用下载器的分片续传。
 
@@ -275,8 +307,8 @@ Telegram 相册只要有一条成员的说明包含 tag，就会下载整组。
 机器人返回的中转链接可继续指向其他机器人或群组消息，受深度和链接数量限制。
 主帖和资源说明不会混用：输出保持为
 `<download_base>/<subdir>/<主群ID>/<主帖说明 [主帖ID]>/`，
-其中保存实际资源、整组预览媒体（默认开启）、原始 `message.txt` 和
-包含主帖、入口、跳转链、资源身份与完成状态的 `message.json`。
+其中保存实际资源、整组预览媒体（默认开启），并可输出包含主帖原始说明、入口、
+跳转链、资源身份与完成状态的 `meta.json`。
 目录沿用标签归档规则，另移除可见 URL。资源文件名包含稳定 Telegram 文件 ID，
 所以机器人重新发送后消息 ID 变化仍可沿用原文件和 `.tmp.parts`。
 

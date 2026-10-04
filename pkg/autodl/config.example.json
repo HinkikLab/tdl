@@ -4,11 +4,13 @@
     "_comment is documentation only / _comment 仅作说明；comment 是评论模式开关，不能用来填写说明文字。",
     "Paths are relative to the working directory / 相对路径以执行命令的当前目录为基准，每个 job 使用独立 subdir 保存状态。",
     "Run tdl batch -c config.json --check-only before downloading / 修改后先检查，再执行 tdl batch -c config.json。",
-    "pool=16, threads=8, limit=4; overlap_seconds=3600 / 性能默认值为 16/8/4，增量默认回看一小时。"
+    "pool=16, threads=8, limit=4; overlap_seconds=3600 / 性能默认值为 16/8/4，增量默认回看一小时。",
+    "Archive metadata defaults to meta.json; write_metadata=false disables it, and jobs can override / 归档默认仅输出 meta.json，write_metadata=false 关闭输出，各 job 可覆盖全局设置。"
   ],
   "namespace": "default",
   "download_base": "downloads",
   "incremental": false,
+  "write_metadata": true,
   "overlap_seconds": 3600,
   "pool": 16,
   "threads": 8,
@@ -68,10 +70,11 @@
       "subdir": "06-tag-single"
     },
     {
-      "_comment": "7. Any caption hashtag / 多标签任意匹配：命中 #教程 或 #示例 即归档；不要同时填写 comment 或消息范围。",
+      "_comment": "7. Any caption hashtag / 多标签任意匹配：命中 #教程 或 #示例 即归档；不要同时填写 comment 或消息范围。write_metadata=false 演示仅保存媒体，不输出 meta.json。",
       "chat_url": "https://t.me/example_channel",
       "tags": ["#教程", "#示例"],
       "tag_match": "any",
+      "write_metadata": false,
       "max_posts": 1,
       "subdir": "07-tags-any"
     },

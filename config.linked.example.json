@@ -1,6 +1,7 @@
 {
   "namespace": "default",
   "download_base": "downloads",
+  "write_metadata": true,
   "pool": 16,
   "threads": 8,
   "limit": 4,

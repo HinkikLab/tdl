@@ -43,6 +43,7 @@ type LinkedOptions struct {
 	Links                    LinkOptions
 	Include, Exclude         []string
 	BotUpdates               *BotUpdates
+	WriteMetadata            *bool // nil enables meta.json output
 }
 
 type archivedResource struct {
@@ -300,25 +301,25 @@ func linkedFingerprint(roots []resourceLink, opts LinkedOptions) string {
 	return fmt.Sprintf("%x", sum)
 }
 
-func completedLinkedPost(dir string, post tagPost, hash string) bool {
-	b, err := os.ReadFile(filepath.Join(dir, "message.json"))
+func completedLinkedPost(dir string, post tagPost, hash string) *linkedPost {
+	b, err := readArchiveMetadata(dir)
 	if err != nil {
-		return false
+		return nil
 	}
 	var saved linkedPost
 	if json.Unmarshal(b, &saved) != nil || saved.Version != 1 || !saved.Complete || saved.ChatID != post.ChatID || saved.MessageID != post.MessageID || saved.LinkHash != hash || len(saved.Resources) == 0 {
-		return false
+		return nil
 	}
 	for _, file := range saved.Resources {
 		if filepath.Base(file.File) != file.File {
-			return false
+			return nil
 		}
 		stat, err := os.Stat(filepath.Join(dir, file.File))
 		if err != nil || !stat.Mode().IsRegular() || stat.Size() != file.Size {
-			return false
+			return nil
 		}
 	}
-	return true
+	return &saved
 }
 
 func resourceFileName(md *tmedia.Media) (string, error) {
@@ -353,29 +354,13 @@ func linkedExtensionAllowed(name string, include, exclude []string) bool {
 	return (len(include) == 0 || contains(include)) && !contains(exclude)
 }
 
-func saveLinkedJSON(path string, value any) error {
-	b, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return err
-	}
-	f, err := os.CreateTemp(filepath.Dir(path), ".linked-*.tmp")
-	if err != nil {
-		return err
-	}
-	name := f.Name()
-	defer os.Remove(name)
-	_, writeErr := f.Write(append(b, '\n'))
-	closeErr := f.Close()
-	if err := multierr.Combine(writeErr, closeErr); err != nil {
-		return err
-	}
-	return os.Rename(name, path)
-}
-
 func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*tg.Message, peer tg.InputPeerClass, roots []resourceLink, resolver *linkResolver, opts LinkedOptions) error {
 	dir := filepath.Join(root, post.Directory)
 	hash := linkedFingerprint(roots, opts)
-	if completedLinkedPost(dir, post, hash) {
+	if saved := completedLinkedPost(dir, post, hash); saved != nil {
+		if err := writeArchiveMetadata(dir, saved, opts.WriteMetadata); err != nil {
+			return err
+		}
 		fmt.Printf("Post %d: archive already complete\n", post.MessageID)
 		return nil
 	}
@@ -388,16 +373,13 @@ func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	if err := os.WriteFile(filepath.Join(dir, "message.txt"), []byte(post.Text), 0o644); err != nil {
-		return err
-	}
 	files, hops, err := resolver.Resolve(ctx, roots)
 	meta := linkedPost{tagPost: post, Version: 1, LinkHash: hash, Hops: hops}
 	for _, l := range roots {
 		meta.Links = append(meta.Links, l.URL())
 	}
 	if err != nil {
-		_ = saveLinkedJSON(filepath.Join(dir, "message.json"), meta)
+		_ = writeArchiveMetadata(dir, meta, opts.WriteMetadata)
 		return err
 	}
 	session := &linkedSession{resolver: resolver, roots: roots, files: files, hops: hops}
@@ -435,7 +417,7 @@ func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*
 	if len(meta.Resources) == 0 {
 		return fmt.Errorf("all resource files excluded by extension filters")
 	}
-	if err := saveLinkedJSON(filepath.Join(dir, "message.json"), meta); err != nil {
+	if err := writeArchiveMetadata(dir, meta, opts.WriteMetadata); err != nil {
 		return err
 	}
 	w := prog.New(utils.Byte.FormatBinaryBytes)
@@ -469,7 +451,7 @@ renderWait:
 		}
 	}
 	meta.Complete = true
-	return saveLinkedJSON(filepath.Join(dir, "message.json"), meta)
+	return writeArchiveMetadata(dir, meta, opts.WriteMetadata)
 }
 
 type linkedSession struct {

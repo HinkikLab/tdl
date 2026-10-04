@@ -138,6 +138,7 @@ messages 100 through 109:
 | `download_base` | String, `downloads` | Download root; `-d` overrides it while preserving job subdirectories |
 | `download_dir` | Optional string | Legacy alias; nonempty `download_base` wins |
 | `incremental` | Boolean, `false` | Global incremental switch, overridden per job; keep false for mixed examples |
+| `write_metadata` | Boolean, `true` | Write per-post `meta.json` in tag/linked archives; `false` disables output, overridden per job |
 | `state_file` | Optional string | Default `<download_base>/<subdir>/tdl_state.json`; used by range/incremental jobs; prefer distinct default paths |
 | `overlap_seconds` | Nonnegative integer, `3600` | Incremental lookback; currently `0` falls back to another layer/default rather than disabling lookback |
 | `jobs` | Required nonempty array | Download tasks, processed in order |
@@ -156,6 +157,7 @@ messages 100 through 109:
 | `comment` | Default false; true selects the linked discussion group. A legacy integer also selects comment mode and sets the start ID if omitted. Prefer a boolean with explicit endpoints |
 | `start_comment` / `end_comment` | Positive integers, start inclusive, end exclusive, end greater than start; maximum range 1,000,000. Direct jobs use these same legacy field names |
 | `incremental` | per job override of the global incremental switch |
+| `write_metadata` | per job override of archive metadata output; omission inherits the global setting |
 | `overlap_seconds` | per job override of the lookback window |
 | `export_filter` | expr filter for incremental mode, same as `tdl chat export -f` |
 | `with_content` | include `date`/`text` in the incremental export |
@@ -173,6 +175,41 @@ incremental lookback are not used by direct ID-range scanning.
 `export_all: true` includes non-media messages in the plan; it does not turn
 text into downloadable files. Use an archive mode to preserve post descriptions.
 Incremental export files are retained under `<job directory>/.tdl_tmp/`.
+
+### Archive metadata
+
+Tag and linked-resource archives write one `meta.json` per post by default,
+including the original caption and message/resource details. They no longer
+create `message.txt` or `message.json`. Set `write_metadata` to `false` at the
+top level to disable this output for all archive jobs, or inside a job to
+override the global value:
+
+```json
+{
+  "write_metadata": false,
+  "jobs": [
+    {
+      "chat_url": "https://t.me/example_channel",
+      "tags": ["#tutorial"],
+      "subdir": "media-only"
+    },
+    {
+      "chat_url": "https://t.me/example_channel/100",
+      "follow_links": true,
+      "write_metadata": true,
+      "subdir": "with-metadata"
+    }
+  ]
+}
+```
+
+Disabling metadata still skips exact-size completed media and resumes partial
+downloads. A linked archive without saved metadata resolves its resource links
+again on reruns; `meta.json` allows it to skip a completed post before resolution.
+Existing `message.json` files remain readable for archive migration and completion
+checks. Changing this setting preserves existing files. Download indices and
+resume state are separate from per-post metadata and remain in use.
+The standalone tag command supports `--write-metadata=false` as well.
 
 ### Message and comment ranges
 
@@ -227,8 +264,8 @@ home URL with `--topic 41872`.
 Run `tdl batch -c config.json --check-only` to count matches, then
 `tdl batch -c config.json -y` to download. Each matching Telegram album or
 individual media post goes into `downloads/tags/<chat-id>/<matched-tag> <caption> [id]/` with
-its photos/videos, the original caption in `message.txt`, and IDs, captions and
-source link in `message.json`. The directory name removes every hashtag and
+its photos/videos and, by default, `meta.json` containing IDs, original captions
+and the source link. The directory name removes every hashtag and
 illegal path character and limits the tag plus caption to 64 characters. If
 several tags match, the first matching tag in config order becomes the prefix.
 If a caption consists only of hashtags, the folder uses every hashtag in its
@@ -290,8 +327,8 @@ searched. Bots may return further links to bots or group messages.
 Each post is resolved and downloaded before the next one is requested.
 
 Files go into `<download_base>/<subdir>/<main-chat-id>/<main caption [post ID]>/`
-with the complete preview album by default, original `message.txt` and
-`message.json` containing entry links, hops, resource identities and completion
+with the complete preview album by default and optional `meta.json` containing
+the original caption, entry links, hops, resource identities and completion
 status. Folder names reuse hashtag archive rules and remove visible URLs.
 Stable Telegram file IDs in filenames let reissued messages resume the same
 partial files even when their message IDs change.

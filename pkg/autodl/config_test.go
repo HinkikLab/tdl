@@ -1,6 +1,7 @@
 package autodl
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -9,6 +10,35 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+func TestArchiveMetadataConfigPrecedence(t *testing.T) {
+	for _, tc := range []struct {
+		name, global, job string
+		want              bool
+	}{
+		{"default", "", "", true},
+		{"global enabled", `"write_metadata": true,`, "", true},
+		{"global disabled", `"write_metadata": false,`, "", false},
+		{"job disabled", "", `"write_metadata": false,`, false},
+		{"job overrides enabled", `"write_metadata": true,`, `"write_metadata": false,`, false},
+		{"job overrides disabled", `"write_metadata": false,`, `"write_metadata": true,`, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "config.json")
+			data := fmt.Sprintf(`{%s "jobs": [{%s "chat_url": "https://t.me/example", "tags": ["#tag"]}]}`, tc.global, tc.job)
+			require.NoError(t, os.WriteFile(path, []byte(data), 0o644))
+			cfg, err := LoadConfig(path)
+			require.NoError(t, err)
+			require.Equal(t, tc.want, cfg.Jobs[0].WritesMetadata(cfg.WriteMetadata))
+		})
+	}
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(path, []byte("write_metadata: false\njobs:\n  - chat_url: https://t.me/example\n    follow_links: true\n    write_metadata: true\n  - chat_url: https://t.me/example\n    tag: tag\n"), 0o644))
+	cfg, err := LoadConfig(path)
+	require.NoError(t, err)
+	require.True(t, cfg.Jobs[0].WritesMetadata(cfg.WriteMetadata))
+	require.False(t, cfg.Jobs[1].WritesMetadata(cfg.WriteMetadata))
+}
 
 func TestParseLink(t *testing.T) {
 	tests := []struct {

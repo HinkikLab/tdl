@@ -195,6 +195,7 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 	if r.opts.Dir != "" {
 		dir = filepath.Join(r.opts.Dir, job.Subdir)
 	}
+	writeMetadata := job.WritesMetadata(r.cfg.WriteMetadata)
 	if job.FollowLinks {
 		start, end := 0, 0
 		if job.StartComment != nil {
@@ -205,7 +206,8 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 			StartID: start, EndID: end, MaxPosts: job.MaxPosts, CheckOnly: r.opts.CheckOnly,
 			Takeout: r.opts.Takeout, Threads: threads, Limit: limit, Pool: r.pool, Links: job.LinkOptions,
 			Include: r.opts.Include, Exclude: r.opts.Exclude,
-			BotUpdates: r.opts.BotUpdates,
+			BotUpdates:    r.opts.BotUpdates,
+			WriteMetadata: &writeMetadata,
 		})
 	}
 	if job.IsTagJob() {
@@ -215,9 +217,10 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 			TagMatch: job.TagMatch, Dir: dir,
 			CheckOnly: r.opts.CheckOnly, Takeout: r.opts.Takeout,
 			Threads: threads, Limit: limit, PoolSize: r.poolSize,
-			PoolSizeSet: true,
-			Pool:        r.pool,
-			MaxPosts:    job.MaxPosts,
+			PoolSizeSet:   true,
+			Pool:          r.pool,
+			MaxPosts:      job.MaxPosts,
+			WriteMetadata: &writeMetadata,
 		})
 	}
 	link, err := ParseLink(job.ChatURL)

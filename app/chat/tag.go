@@ -40,6 +40,8 @@ type TagOptions struct {
 	PoolSizeSet bool
 	Pool        dcpool.Pool
 	MaxPosts    int // zero scans the complete chat history
+
+	WriteMetadata *bool // nil enables meta.json output
 }
 
 type tagMedia struct {
@@ -174,10 +176,7 @@ func DownloadTag(ctx context.Context, c *telegram.Client, kvd storage.Storage, o
 		if err := os.MkdirAll(dir, 0o755); err != nil {
 			return err
 		}
-		if err := os.WriteFile(filepath.Join(dir, "message.txt"), []byte(post.Text), 0o644); err != nil {
-			return err
-		}
-		if err := writeTagJSON(filepath.Join(dir, "message.json"), post); err != nil {
+		if err := writeArchiveMetadata(dir, post, opts.WriteMetadata); err != nil {
 			return err
 		}
 		for _, m := range post.Messages {
@@ -387,7 +386,7 @@ func migrateTagDirectory(root, target string, id int) error {
 			continue
 		}
 		candidate := filepath.Join(root, entry.Name())
-		b, err := os.ReadFile(filepath.Join(candidate, "message.json"))
+		b, err := readArchiveMetadata(candidate)
 		if err != nil {
 			continue
 		}

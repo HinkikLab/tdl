@@ -66,6 +66,9 @@ type Config struct {
 	// Incremental enables the timestamp based incremental mode for every job
 	// that does not override it.
 	Incremental bool `json:"incremental" yaml:"incremental"`
+	// WriteMetadata controls per-post meta.json output in archive jobs.
+	// Omission enables metadata; a job level setting takes precedence.
+	WriteMetadata *bool `json:"write_metadata,omitempty" yaml:"write_metadata,omitempty"`
 	// StateFile overrides where the incremental timestamps are stored.
 	StateFile string `json:"state_file" yaml:"state_file"`
 	// OverlapSeconds overrides the incremental lookback window.
@@ -99,6 +102,8 @@ type Job struct {
 	Chat string `json:"chat" yaml:"chat"`
 	// Subdir is the directory under DownloadBase for this job.
 	Subdir string `json:"subdir" yaml:"subdir"`
+	// WriteMetadata overrides the global archive metadata switch.
+	WriteMetadata *bool `json:"write_metadata,omitempty" yaml:"write_metadata,omitempty"`
 
 	// Comment selects the comment mode (?comment=N). It follows the python
 	// semantics: a bool, or an int used as the starting comment id when
@@ -335,6 +340,15 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 }
 
 func (j *Job) IsTagJob() bool { return j.Tag != "" || len(j.Tags) > 0 }
+
+// WritesMetadata reports whether archive jobs should output meta.json.
+// A job level setting wins; omission at both levels enables output.
+func (j *Job) WritesMetadata(global *bool) bool {
+	if j.WriteMetadata != nil {
+		return *j.WriteMetadata
+	}
+	return global == nil || *global
+}
 
 // UsesIncremental reports whether the job runs in incremental mode with the
 // given config wide default. A job level setting always wins.

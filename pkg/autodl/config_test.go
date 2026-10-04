@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/go-faster/errors"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -157,6 +158,45 @@ func TestLoadConfigMultipleTags(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, []string{"#绝区零", "#原神"}, cfg.Jobs[0].Tags)
 	assert.True(t, cfg.Jobs[0].IsTagJob())
+}
+
+func TestLoadConfigTagTopicsAndPrivateChats(t *testing.T) {
+	for _, fields := range []string{
+		`"chat_url":"https://t.me/c/2255983776/41872/"`,
+		`"chat_url":"https://t.me/c/2255983776/41872/42000"`,
+		`"chat_url":"https://t.me/group/42000?thread=41872"`,
+		`"chat_url":"https://t.me/c/2255983776/"`,
+		`"chat_url":"https://t.me/group","topic_id":41872`,
+		`"chat_url":"https://t.me/c/2255983776/41872/","topic_id":41872`,
+	} {
+		path := filepath.Join(t.TempDir(), "config.json")
+		require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{`+fields+`,"tags":["#example"]}]}`), 0o600))
+		cfg, err := LoadConfig(path)
+		require.NoError(t, err, fields)
+		require.True(t, cfg.Jobs[0].IsTagJob())
+	}
+}
+
+func TestConfigErrorReportsFileJobURLAndCause(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.json")
+	for _, fields := range []string{
+		`"topic_id":0`, `"topic_id":-1`, `"topic_id":999`,
+		`"comment":true`, `"start_comment":1,"end_comment":2`, `"reply_post_id":41872`,
+	} {
+		require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"chat_url":"https://t.me/group","tags":["#ok"]},{"chat_url":"https://t.me/c/2255983776/41872/","tags":["#ok"],`+fields+`}]}`), 0o600))
+		_, err := LoadConfig(path)
+		require.Error(t, err, fields)
+		var configErr *ConfigError
+		require.True(t, errors.As(err, &configErr))
+		require.Equal(t, path, configErr.Path)
+		require.Equal(t, 2, configErr.Job)
+		require.Equal(t, "https://t.me/c/2255983776/41872/", configErr.ChatURL)
+		require.Contains(t, err.Error(), "\n  Reason: ")
+		require.Contains(t, err.Error(), path)
+		require.NotContains(t, err.Error(), "config.go:")
+	}
+	_, err := LoadConfig(filepath.Join(t.TempDir(), "missing.json"))
+	require.ErrorIs(t, err, os.ErrNotExist)
 }
 
 func TestLoadConfigIntCommentImpliesStart(t *testing.T) {

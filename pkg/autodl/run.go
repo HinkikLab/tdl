@@ -191,11 +191,6 @@ func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Conf
 func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error {
 	log := logctx.From(ctx)
 
-	link, err := ParseLink(job.ChatURL)
-	if err != nil {
-		return err
-	}
-
 	dir := job.Dir()
 	if r.opts.Dir != "" {
 		dir = filepath.Join(r.opts.Dir, job.Subdir)
@@ -216,6 +211,7 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 	if job.IsTagJob() {
 		return chat.DownloadTag(ctx, r.client, r.storage, chat.TagOptions{
 			Chat: job.ChatURL, Tag: job.Tag, Tags: job.Tags,
+			TopicID:  num(job.TopicID),
 			TagMatch: job.TagMatch, Dir: dir,
 			CheckOnly: r.opts.CheckOnly, Takeout: r.opts.Takeout,
 			Threads: threads, Limit: limit, PoolSize: r.poolSize,
@@ -223,6 +219,10 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int) error
 			Pool:        r.pool,
 			MaxPosts:    job.MaxPosts,
 		})
+	}
+	link, err := ParseLink(job.ChatURL)
+	if err != nil {
+		return err
 	}
 
 	if err = os.MkdirAll(dir, 0o755); err != nil {

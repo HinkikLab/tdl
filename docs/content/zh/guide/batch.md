@@ -86,7 +86,7 @@ tdl batch init -c config.json --force
 | 直接范围 | 频道/群组主页或帖子 URL | 必填左闭右开范围；URL 的帖子 ID 不会自动变成下载范围 |
 | 评论范围 | 主频道帖子 URL，`comment: true` | 范围是关联讨论组的消息 ID；按 ID 下载，不自动限定为这篇主帖的回复 |
 | 增量 | 对话主页或主帖 URL | 不需要范围；`topic_id` / `reply_post_id` 仅在增量扫描中生效 |
-| 标签归档 | 频道/群组主页 | 不填 `comment`、范围、`topic_id`、`reply_post_id`；使用独立历史扫描与文件检查，增量参数不改变其行为 |
+| 标签归档 | 频道/群组主页或论坛话题链接 | 可用 `topic_id` 限定话题；不填 `comment`、范围、`reply_post_id`；使用独立历史扫描与文件检查，增量参数不改变其行为 |
 | 链接资源归档 | 主频道主页或某篇主帖 | 可加主帖标签；主页可加主帖 ID 范围；不能与时间戳增量、`comment: true`、topic/reply 选择器组合 |
 
 `--mode auto` 是默认值，范围/增量任务按 `comment` 和 URL 的 `?comment=N`
@@ -150,7 +150,7 @@ tdl batch init -c config.json --force
 | `export_filter` | 增量模式的 expr 过滤表达式，等价于 `tdl chat export -f` |
 | `with_content` | 增量模式导出时附带 `date`/`text` |
 | `export_all` | 增量模式导出非媒体消息（默认只导出媒体） |
-| `topic_id` | 增量模式使用，正整数话题根消息 ID；URL 中的话题路径不会自动填入该字段 |
+| `topic_id` | 正整数话题根消息 ID；用于增量或标签扫描。标签任务也能从话题链接推导，显式值须与链接一致；增量任务仍需显式填写 |
 | `reply_post_id` | 增量模式使用，扫描对话中的正整数回复根消息 ID；关联讨论组中应填转发根消息 ID，不是主频道帖子 ID |
 | `tag` / `tags` | 一个 tag 或多个 tag 数组；按图片/视频说明文字中的完整 hashtag 筛选，与消息 ID 范围任务二选一 |
 | `tag_match` | 多 tag 匹配方式：`any`（默认，命中任意一个）或 `all`（全部命中） |
@@ -185,7 +185,7 @@ tdl batch init -c config.json --force
 
 ### 按 tag 归档图片和视频
 
-tag 任务的 `chat_url` 填群组或频道主页链接，无须填写消息 ID 范围：
+tag 任务的 `chat_url` 填群组/频道主页或论坛话题链接，无须填写消息 ID 范围：
 
 ```json
 {
@@ -202,6 +202,14 @@ tag 任务的 `chat_url` 填群组或频道主页链接，无须填写消息 ID 
   ]
 }
 ```
+
+私有数字群组可填 `https://t.me/c/2255983776/` 扫描整个群组；
+`https://t.me/c/2255983776/41872/` 仅扫描话题 41872。
+也支持话题内消息链接 `https://t.me/c/2255983776/41872/42000`，
+或主页链接配合 `"topic_id": 41872`。公开群组的话题路径及 `?thread=41872`
+使用相同规则。运行时会向 Telegram 确认该话题存在且可访问；普通消息、
+已删除或不可访问的话题不会退回全群扫描。命令行同样支持
+`tdl chat download-tag --chat <话题链接> --tag <标签>`，或主页配合 `--topic 41872`。
 
 先运行 `tdl batch -c config.json --check-only` 查看匹配数量，再运行
 `tdl batch -c config.json -y` 下载。输出结构为
@@ -220,6 +228,9 @@ Telegram 相册只要有一条成员的说明包含 tag，就会下载整组。
 并去重；`all` 可由同一相册不同成员的说明共同满足。只扫描图片/视频说明，不匹配
 独立文本帖或其他附件的文字。标签归档使用固定命名规则，`--template`、
 `--include` / `--exclude` 当前不影响此模式。
+
+配置错误会分行显示文件路径、任务编号、群组链接和原因。终端仅将 `Error:`
+标题标红；需要调用栈和源码行号时，加全局参数 `--debug`，详细信息会单独显示。
 
 ### 归档预览帖链接中的实际资源
 

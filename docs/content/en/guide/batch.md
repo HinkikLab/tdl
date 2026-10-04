@@ -93,7 +93,7 @@ Jobs run in array order; one configuration can contain several modes.
 | Direct range | Channel/group home or post | Both range endpoints are required; the post ID in the URL does not automatically select a download range |
 | Comment range | Main channel post, `comment: true` | Range IDs belong to the linked discussion group; these IDs are not automatically restricted to replies to that post |
 | Incremental | Chat home or main post | No range required; `topic_id` / `reply_post_id` apply only to incremental scanning |
-| Caption-tag archive | Channel/group home | Omit `comment`, ranges and topic/reply selectors; its own history scan and file validation are independent of incremental settings |
+| Caption-tag archive | Channel/group home or forum topic link | Optional `topic_id` limits the scan; omit `comment`, ranges and `reply_post_id`; its own history scan and file validation are independent of incremental settings |
 | Linked-resource archive | Main channel home or one post | Optional main-post tags; home URLs may use a main-post ID range; cannot combine with timestamp incremental mode, `comment: true` or topic/reply selectors |
 
 `--mode auto` is the default. Range/incremental jobs choose the discussion
@@ -160,7 +160,7 @@ messages 100 through 109:
 | `export_filter` | expr filter for incremental mode, same as `tdl chat export -f` |
 | `with_content` | include `date`/`text` in the incremental export |
 | `export_all` | also export non-media messages in incremental mode |
-| `topic_id` | Incremental only: positive topic root ID; topic IDs in URLs do not automatically populate this selector |
+| `topic_id` | Positive topic root ID for incremental or tag scanning. Tag jobs also infer it from topic URLs; explicit values must agree. Incremental jobs still require the explicit selector |
 | `reply_post_id` | Incremental only: positive reply root ID in the scan dialog; use the forwarded root ID in the discussion group, not the original channel post ID |
 | `tag` / `tags` | one hashtag or an array of hashtags matched against photo/video captions; use instead of a message ID range |
 | `tag_match` | `any` (default) selects posts with any requested tag; `all` requires every tag |
@@ -196,7 +196,7 @@ Use the incremental `reply_post_id` example to scan replies to one root.
 
 ### Archive photo and video posts by hashtag
 
-For a tag job, `chat_url` is the chat's home URL and no message range is needed:
+For a tag job, `chat_url` is a chat home or forum topic URL; no message range is needed:
 
 ```json
 {
@@ -213,6 +213,16 @@ For a tag job, `chat_url` is the chat's home URL and no message range is needed:
   ]
 }
 ```
+
+Use `https://t.me/c/2255983776/` for a whole private numeric group, or
+`https://t.me/c/2255983776/41872/` for topic 41872 only. A message link inside
+that topic (`https://t.me/c/2255983776/41872/42000`) also selects the topic.
+Alternatively, combine a home URL with `"topic_id": 41872`. Public topic
+paths and `?thread=41872` use the same rules. Telegram must confirm the topic
+exists and is accessible before scanning; ordinary messages, deleted topics
+and inaccessible topics never fall back to scanning the whole chat. The CLI
+also accepts `tdl chat download-tag --chat <topic-link> --tag <tag>`, or a
+home URL with `--topic 41872`.
 
 Run `tdl batch -c config.json --check-only` to count matches, then
 `tdl batch -c config.json -y` to download. Each matching Telegram album or
@@ -233,6 +243,10 @@ deduplicated. In `all` mode, different members of one album may satisfy
 different tags. Only photo/video captions are scanned, not separate text posts
 or other attachment types. This archive uses fixed names; `--template` and
 `--include` / `--exclude` currently do not affect caption-tag jobs.
+
+Configuration errors show the file, job number, chat URL and reason on separate
+lines. Only the `Error:` heading is red; add the global `--debug` flag to show
+call stacks and source locations in a separate details block.
 
 ### Archive linked resources from preview posts
 

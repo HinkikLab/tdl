@@ -45,7 +45,8 @@ func NewChatDownloadTag() *cobra.Command {
 			}, limiter)
 		},
 	}
-	cmd.Flags().StringVarP(&opts.Chat, "chat", "c", "", "public Telegram chat URL or username")
+	cmd.Flags().StringVarP(&opts.Chat, "chat", "c", "", "Telegram chat/topic URL, username or numeric chat ID")
+	cmd.Flags().IntVar(&opts.TopicID, "topic", 0, "scan only this forum topic ID")
 	cmd.Flags().StringVar(&opts.Tag, "tag", "", "hashtag in the media caption, with or without #")
 	cmd.Flags().StringSliceVar(&opts.Tags, "tags", nil, "multiple hashtags; a comma-separated list is accepted")
 	cmd.Flags().StringVar(&opts.TagMatch, "tag-match", "any", "match mode for multiple tags: any or all")

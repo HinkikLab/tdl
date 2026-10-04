@@ -33,6 +33,9 @@ func TestMatchAlbumKeepsAllMediaAndOriginalCaption(t *testing.T) {
 	assert.Equal(t, []int{101, 102, 103}, []int{post.Messages[0].ID, post.Messages[1].ID, post.Messages[2].ID})
 	assert.Equal(t, "https://t.me/AVMYS/101", post.SourceURL)
 	assert.Equal(t, []string{"#绝区零"}, post.MatchedTags)
+	privatePost, ok := matchAlbum(pending, []string{"#绝区零"}, "any", 2255983776, "2255983776")
+	require.True(t, ok)
+	assert.Equal(t, "https://t.me/c/2255983776/101", privatePost.SourceURL)
 	_, ok = matchAlbum(pending, []string{"#绝区零", "#原神"}, "all", 12345, "AVMYS")
 	assert.False(t, ok)
 	_, ok = matchAlbum(pending, []string{"#原神"}, "any", 12345, "AVMYS")
@@ -47,12 +50,4 @@ func TestPostDirectoryRemovesTagsAndUnsafeCharacters(t *testing.T) {
 	assert.Equal(t, "绝区零 [42]", postDirectory("#绝区零", 42, "#绝区零"))
 	assert.Equal(t, "tag1 tag2 tag3 [42]", postDirectory("#tag1 #tag2\n#tag3", 42, "#tag2"))
 	assert.Equal(t, "tag1 tag2 [42]", postDirectory("#tag1, #tag2", 42, "#tag2"))
-}
-
-func TestTagChatNameRejectsMessageLink(t *testing.T) {
-	chat, err := tagChatName("https://t.me/AVMYS/")
-	require.NoError(t, err)
-	assert.Equal(t, "AVMYS", chat)
-	_, err = tagChatName("https://t.me/AVMYS/123")
-	require.Error(t, err)
 }

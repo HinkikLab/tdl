@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -15,7 +14,6 @@ import (
 
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/peers"
-	"github.com/gotd/td/telegram/query"
 	"github.com/gotd/td/telegram/query/messages"
 	"github.com/gotd/td/tg"
 
@@ -29,6 +27,7 @@ import (
 // TagOptions selects media posts by the hashtag in their Telegram caption.
 type TagOptions struct {
 	Chat        string
+	TopicID     int // zero scans the complete chat
 	Tag         string
 	Tags        []string
 	TagMatch    string // any (default) or all
@@ -68,7 +67,7 @@ type tagPost struct {
 // DownloadTag walks the chat history so album members are included even when
 // Telegram only places a caption on one photo or video in the album.
 func DownloadTag(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts TagOptions) error {
-	chat, err := tagChatName(opts.Chat)
+	target, err := ParseTagTarget(opts.Chat, opts.TopicID)
 	if err != nil {
 		return err
 	}
@@ -87,12 +86,20 @@ func DownloadTag(ctx context.Context, c *telegram.Client, kvd storage.Storage, o
 		return fmt.Errorf("tag match mode must be any or all")
 	}
 	manager := peers.Options{Storage: storage.NewPeers(kvd)}.Build(c.API())
+	chat := target.Chat
 	peer, err := tutil.GetInputPeer(ctx, manager, chat)
 	if err != nil {
 		return fmt.Errorf("resolve chat %q: %w", chat, err)
 	}
 
-	it := messages.NewIterator(query.NewQuery(c.API()).Messages().GetHistory(peer.InputPeer()), 100)
+	history, err := tagHistory(ctx, c.API(), peer.InputPeer(), target.TopicID)
+	if err != nil {
+		return err
+	}
+	if target.TopicID > 0 {
+		fmt.Printf("Scanning forum topic %d in %s.\n", target.TopicID, chat)
+	}
+	it := messages.NewIterator(history, 100)
 	var pending []tagMedia
 	var posts []tagPost
 	scanned := 0
@@ -180,7 +187,11 @@ func DownloadTag(ctx context.Context, c *telegram.Client, kvd storage.Storage, o
 			})
 		}
 	}
-	sum := sha256.Sum256([]byte(strings.Join(tags, "|") + ":" + mode))
+	scope := strings.Join(tags, "|") + ":" + mode
+	if target.TopicID > 0 {
+		scope += ":topic:" + strconv.Itoa(target.TopicID)
+	}
+	sum := sha256.Sum256([]byte(scope))
 	manifestPath := filepath.Join(root, fmt.Sprintf("index_%x.json", sum[:6]))
 	if err := writeTagJSON(manifestPath, manifest); err != nil {
 		return err
@@ -195,31 +206,6 @@ func DownloadTag(ctx context.Context, c *telegram.Client, kvd storage.Storage, o
 		Template:          `{{.GroupDir}}/{{.MessageID}}_{{filenamify .FileName}}`,
 		GroupDirByMessage: groupDirByMessage,
 	})
-}
-
-func tagChatName(raw string) (string, error) {
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return "", fmt.Errorf("chat is required")
-	}
-	if !strings.Contains(raw, "/") && !strings.Contains(raw, ".") {
-		return strings.TrimPrefix(raw, "@"), nil
-	}
-	if !strings.Contains(raw, "://") {
-		raw = "https://" + raw
-	}
-	u, err := url.Parse(raw)
-	if err != nil {
-		return "", err
-	}
-	if host := strings.ToLower(u.Hostname()); host != "t.me" && host != "telegram.me" && host != "telegram.dog" {
-		return "", fmt.Errorf("unsupported chat link host %q", host)
-	}
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) != 1 || parts[0] == "" || u.RawQuery != "" || u.Fragment != "" {
-		return "", fmt.Errorf("--chat must identify a chat, not a message")
-	}
-	return parts[0], nil
 }
 
 func normalizeTag(raw string) (string, error) {
@@ -321,6 +307,8 @@ func matchAlbum(pending []tagMedia, tags []string, mode string, chatID int64, ch
 	post.Directory = postDirectory(caption, post.MessageID, matched[0])
 	if _, err := strconv.ParseInt(chat, 10, 64); err != nil {
 		post.SourceURL = fmt.Sprintf("https://t.me/%s/%d", chat, post.MessageID)
+	} else {
+		post.SourceURL = fmt.Sprintf("https://t.me/c/%s/%d", chat, post.MessageID)
 	}
 	return post, true
 }

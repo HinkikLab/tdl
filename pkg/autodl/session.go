@@ -4,8 +4,6 @@ import (
 	"context"
 	"strings"
 
-	"github.com/go-faster/errors"
-
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/storage/keygen"
 	"github.com/iyear/tdl/pkg/kv"
@@ -48,7 +46,7 @@ func AutoStart(ctx context.Context, engine kv.Storage, namespace string) (string
 
 	cfg, err := LoadConfig(path)
 	if err != nil {
-		return "", "", errors.Wrapf(err, "config %s is invalid", path)
+		return "", "", err
 	}
 
 	if ns := strings.TrimSpace(cfg.Namespace); ns != "" {

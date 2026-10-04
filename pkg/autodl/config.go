@@ -147,20 +147,20 @@ func LoadConfigForRun(path string, forceIncremental bool) (*Config, error) {
 func loadConfig(path string, forceIncremental bool) (*Config, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, errors.Wrapf(err, "read config %s", path)
+		return nil, &ConfigError{Path: path, Err: errors.Wrap(err, "read config")}
 	}
 
 	var c Config
 	dec := yaml.NewDecoder(bytes.NewReader(b))
 	if err = dec.Decode(&c); err != nil {
-		return nil, errors.Wrapf(err, "parse config %s", path)
+		return nil, &ConfigError{Path: path, Err: errors.Wrap(err, "parse config")}
 	}
 	var extra any
 	if err = dec.Decode(&extra); err != io.EOF {
 		if err == nil {
 			err = errors.New("multiple YAML documents are not supported")
 		}
-		return nil, errors.Wrapf(err, "parse config %s", path)
+		return nil, &ConfigError{Path: path, Err: errors.Wrap(err, "parse config")}
 	}
 	if forceIncremental {
 		for i := range c.Jobs {
@@ -170,7 +170,12 @@ func loadConfig(path string, forceIncremental bool) (*Config, error) {
 	}
 
 	if err = c.Normalize(); err != nil {
-		return nil, err
+		var configErr *ConfigError
+		if errors.As(err, &configErr) {
+			configErr.Path = path
+			return nil, configErr
+		}
+		return nil, &ConfigError{Path: path, Err: err}
 	}
 
 	return &c, nil
@@ -204,7 +209,7 @@ func (c *Config) Normalize() error {
 
 	for i := range c.Jobs {
 		if err := c.Jobs[i].normalize(c.DownloadBase, c.Incremental); err != nil {
-			return errors.Wrapf(err, "job %d", i+1)
+			return &ConfigError{Job: i + 1, ChatURL: c.Jobs[i].ChatURL, Err: err}
 		}
 	}
 
@@ -216,8 +221,10 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 		return errors.New("chat_url is required")
 	}
 
-	if _, err := ParseLink(j.ChatURL); err != nil {
-		return err
+	if !j.IsTagJob() || j.FollowLinks {
+		if _, err := ParseLink(j.ChatURL); err != nil {
+			return err
+		}
 	}
 
 	if j.Subdir != "" {
@@ -283,15 +290,14 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 		if j.Tag != "" && strings.TrimSpace(j.Tag) == "" {
 			return errors.New("tag must not be blank")
 		}
-		link, err := ParseLink(j.ChatURL)
-		if err != nil {
+		if j.TopicID != nil && *j.TopicID <= 0 {
+			return errors.New("topic_id must be positive")
+		}
+		if _, err := chat.ParseTagTarget(j.ChatURL, num(j.TopicID)); err != nil {
 			return err
 		}
-		if link.MessageID != 0 || link.Comment != 0 {
-			return errors.New("tag job chat_url must identify a chat, not a message")
-		}
-		if j.StartComment != nil || j.EndComment != nil || j.Comment != nil || j.TopicID != nil || j.ReplyPostID != nil {
-			return errors.New("tag job cannot also select a message/comment range or topic")
+		if j.StartComment != nil || j.EndComment != nil || j.Comment != nil || j.ReplyPostID != nil {
+			return errors.New("tag job cannot also select a message/comment range or reply_post_id")
 		}
 		if j.MaxPosts < 0 {
 			return errors.New("max_posts must not be negative")

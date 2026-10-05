@@ -27,6 +27,7 @@ func TestLinkedCompletionIncludesResolutionSelection(t *testing.T) {
 	require.NoError(t, writeArchiveMetadata(dir, saved, nil))
 	timing := opts
 	timing.Links.BotTimeout++
+	timing.Links.BotRequestInterval = 30
 	require.Equal(t, linkedFingerprint([]resourceLink{link}, opts), linkedFingerprint([]resourceLink{link}, timing), "retry/timing changes preserve selection identity")
 	opts.Links.MaxDepth++
 	require.Nil(t, completedLinkedPost(dir, post, linkedFingerprint([]resourceLink{link}, opts)))

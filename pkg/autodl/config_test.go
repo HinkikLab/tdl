@@ -551,10 +551,12 @@ func TestLinkedArchiveConfig(t *testing.T) {
 	require.Equal(t, 5, cfg.Jobs[0].LinkOptions.MaxDepth)
 	require.Zero(t, *cfg.Jobs[0].LinkOptions.ReRequestLimit)
 	require.Equal(t, 8, cfg.Jobs[1].LinkOptions.MaxDepth)
+	require.Zero(t, cfg.Jobs[1].LinkOptions.BotRequestInterval)
 	for _, fields := range []string{
 		`"comment":true`, `"topic_id":1`, `"start_comment":2`,
 		`"start_comment":2,"end_comment":1`, `"max_posts":-1`, `"tag_match":"bad"`, `"tags":[" "]`,
 		`"link_options":{"max_depth":-1}`, `"link_options":{"max_depth":33}`, `"link_options":{"rerequest_limit":-1}`,
+		`"link_options":{"bot_request_interval_seconds":-1}`, `"link_options":{"bot_request_interval_seconds":86401}`,
 		`"link_options":{"bot_timeout_seconds":2,"bot_idle_seconds":3}`, `"link_options":{"bot_timeout_seconds":2,"bot_idle_seconds":1,"poll_interval_ms":3000}`,
 	} {
 		require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"chat_url":"https://t.me/course","follow_links":true,`+fields+`}]}`), 0o644))
@@ -564,6 +566,24 @@ func TestLinkedArchiveConfig(t *testing.T) {
 	require.NoError(t, os.WriteFile(path, []byte(`{"jobs":[{"chat_url":"https://t.me/course","follow_links":true,"start_comment":2,"end_comment":5}]}`), 0o644))
 	_, err = LoadConfig(path)
 	require.NoError(t, err)
+}
+
+func TestLinkedBotRequestIntervalJSONAndYAML(t *testing.T) {
+	for _, interval := range []int{0, 30, 86400} {
+		for _, format := range []string{"json", "yaml"} {
+			t.Run(fmt.Sprintf("%s/%d", format, interval), func(t *testing.T) {
+				path := filepath.Join(t.TempDir(), "config."+format)
+				body := fmt.Sprintf(`{"jobs":[{"chat_url":"https://t.me/course/42","follow_links":true,"link_options":{"bot_request_interval_seconds":%d}}]}`, interval)
+				if format == "yaml" {
+					body = fmt.Sprintf("jobs:\n  - chat_url: https://t.me/course/42\n    follow_links: true\n    link_options:\n      bot_request_interval_seconds: %d\n", interval)
+				}
+				require.NoError(t, os.WriteFile(path, []byte(body), 0o600))
+				cfg, err := LoadConfig(path)
+				require.NoError(t, err)
+				require.Equal(t, interval, cfg.Jobs[0].LinkOptions.BotRequestInterval)
+			})
+		}
+	}
 }
 
 func TestArchiveJobsAcceptRangeAndIncrementalSelection(t *testing.T) {

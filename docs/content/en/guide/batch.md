@@ -373,6 +373,7 @@ partial files even when their message IDs change.
 | `max_links` | `100` | maximum distinct resolved links per post, at most `1000` |
 | `bot_timeout_seconds` | `60` | total response time after a successful start, including history RPC waits; existing middleware handles waits before sending the request |
 | `bot_idle_seconds` | `3` | quiet interval after receiving media or another entry link |
+| `bot_request_interval_seconds` | `0` | minimum seconds since the same bot's last reply was sent before requesting again; 0 disables it, maximum 86400; waiting is outside the reply timeout |
 | `poll_interval_ms` | `500` | update-check/minimum history interval; unchanged history backs off up to max(5s, configured interval), new/edited replies reset it, live updates retain self-deleted messages |
 | `max_bot_messages` | `500` | maximum responses to one bot request |
 | `max_topic_messages` | `1000` | maximum messages per confirmed resource topic, including the root, service messages and deleted placeholders; exceeding the limit fails the post, at most `100000` |
@@ -382,13 +383,23 @@ partial files even when their message IDs change.
 | `max_flood_wait_seconds` | `3600` | maximum automatic wait for textual bot rate limits |
 
 Zero selects defaults for most numeric `link_options`; only
-`rerequest_limit` / `flood_retries` use `0` to disable retries.
+`rerequest_limit` / `flood_retries` use `0` to disable retries, and
+`bot_request_interval_seconds: 0` disables the request interval.
 `scan_comments`, `include_previews` and `cleanup_bot_messages` can be set false.
 Other upper bounds are: timeout 3600 seconds, idle 300 seconds, polling 60000 ms,
 bot messages / comment limit 10000, topic messages 100000, reissues 10, flood retries 20, fallback
 wait 3600 seconds and maximum wait 86400 seconds.
 Idle and polling intervals must be shorter than the timeout, and
 `flood_wait_seconds` must not exceed `max_flood_wait_seconds`.
+
+With `bot_request_interval_seconds: 30`, a last reply sent at 12:00:00 allows
+the next request to that bot at 12:00:30. Status text, files and trailing
+promotion text all count. Download time counts toward the interval, so an
+already elapsed interval adds no wait. New replies during the wait move this
+boundary forward; repeated reads, file-reference refreshes, edits and your own
+`/start` messages do not. Each bot has its own timestamp, shared across posts,
+jobs, rate-limit retries and file reissues in the same batch. Waiting honors
+cancellation and is outside `bot_timeout_seconds`.
 
 English/Chinese rate-limit messages with seconds, minutes or hours trigger a
 cancellation-aware wait followed by a fresh request. Progress notifications

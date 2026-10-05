@@ -343,6 +343,7 @@ Telegram 相册只要有一条成员的说明包含 tag，就会下载整组。
 | `max_links` | `100` | 每篇主帖最多解析多少个不同入口，上限 `1000` |
 | `bot_timeout_seconds` | `60` | `/start` 成功后等待完整回复的总时间，包含回复历史 RPC 等待；发送请求前的 Telegram 限流等待沿用中间件 |
 | `bot_idle_seconds` | `3` | 收到文件/下一层链接后，连续无新增或编辑消息多久认为回复已稳定 |
+| `bot_request_interval_seconds` | `0` | 再次请求同一机器人前，距其最后一条回复的发送时间至少间隔多少秒；`0` 禁用，上限 `86400`；等待不计入回复 timeout |
 | `poll_interval_ms` | `500` | 更新检查及历史查询的最小间隔；无变化历史退避上限为 5 秒或更大的配置间隔，新/编辑消息重置间隔，保留自删消息更新 |
 | `max_bot_messages` | `500` | 单次请求允许接收的回复条数上限 |
 | `max_topic_messages` | `1000` | 每个已确认资源话题的消息扫描上限，包含根消息、服务消息和删除占位；超限报告失败，上限 `100000` |
@@ -352,7 +353,7 @@ Telegram 相册只要有一条成员的说明包含 tag，就会下载整组。
 | `max_flood_wait_seconds` | `3600` | 机器人文本限流的最大自动等待秒数，超出时报告失败 |
 
 数值 `0` 在大多数 `link_options` 字段中表示使用默认值；只有
-`rerequest_limit` / `flood_retries` 的 `0` 表示禁用对应重试。
+`rerequest_limit` / `flood_retries` 的 `0` 表示禁用对应重试，`bot_request_interval_seconds: 0` 禁用请求间隔。
 `scan_comments`、`include_previews`、`cleanup_bot_messages` 均可显式设为 `false`。
 其他上限为：timeout `3600` 秒、idle `300` 秒、poll `60000` 毫秒、
 bot messages / comment limit `10000`、topic messages `100000`、rerequest `10` 次、flood retries `20` 次、
@@ -361,6 +362,11 @@ fallback wait `3600` 秒、maximum wait `86400` 秒。
 `flood_wait_seconds` 不能大于 `max_flood_wait_seconds`。
 
 机器人会按主帖顺序请求，资源下载使用 batch 的连接池、线程数和文件并发数。
+例如 `bot_request_interval_seconds: 30`，最后一条回复在 12:00:00 发出，则下一次请求同一机器人
+最早在 12:00:30 发送。回复提示、文件和末尾推广文本都计入最后回复时间；下载耗时抵扣间隔，
+已满 30 秒就无需再等。等待中收到新回复会重新计算边界；重复查询、文件引用刷新、消息编辑和自己的
+`/start` 不会重置这个发送时间。相同 batch 内跨主帖、跨 job、限流重试和文件重新请求均共享
+同一机器人的最后回复时间，不同机器人分别计算；取消会立即结束等待。
 收到“请求频繁/冷却/Too many requests”等提示后，识别秒、分钟、小时并自动等待
 再请求；只有明确限流且没有时长的提示才使用默认等待。普通“正在处理”提示继续等
 当前请求。群组消息跳转不使用机器人文本退避。

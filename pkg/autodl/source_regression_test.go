@@ -139,6 +139,7 @@ func TestArchiveIdentityNormalizesTagsButExcludesRetryPerformance(t *testing.T) 
 	job.Tag = "#notes"
 	job.Tags = []string{"extra", "#NOTES"}
 	job.LinkOptions.BotTimeout = 120
+	job.LinkOptions.BotRequestInterval = 30
 	job.LinkOptions.ReRequestLimit = ptr(8)
 	job.LinkOptions.PollInterval = 1000
 	changed, err := r.archiveStateScope(job, "downloads")

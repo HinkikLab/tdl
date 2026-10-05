@@ -19,6 +19,7 @@
         "max_links": 100,
         "bot_timeout_seconds": 60,
         "bot_idle_seconds": 3,
+        "bot_request_interval_seconds": 0,
         "poll_interval_ms": 500,
         "max_bot_messages": 500,
         "max_topic_messages": 1000,

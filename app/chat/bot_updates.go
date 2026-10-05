@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"time"
 
 	"github.com/gotd/td/tg"
 )
@@ -12,8 +13,45 @@ import (
 // Deleted messages remain available until their files have been downloaded.
 // It implements telegram.UpdateHandler without RPCs on the update loop.
 type BotUpdates struct {
-	mu      sync.Mutex
-	watches map[int64]*botWatch
+	mu          sync.Mutex
+	watches     map[int64]*botWatch
+	lastReplies map[int64]botReplyTime
+}
+
+type botReplyTime struct {
+	messageID int
+	sentAt    time.Time
+}
+
+func (u *BotUpdates) recordBotReply(botID int64, m *tg.Message) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.recordBotReplyLocked(botID, m)
+}
+
+func (u *BotUpdates) recordBotReplyLocked(botID int64, m *tg.Message) {
+	last := u.lastReplies[botID]
+	if m.Out || m.ID <= last.messageID {
+		return
+	}
+	if u.lastReplies == nil {
+		u.lastReplies = map[int64]botReplyTime{}
+	}
+	last.messageID = m.ID
+	sentAt := time.Unix(int64(m.Date), 0)
+	if m.Date <= 0 {
+		sentAt = time.Now()
+	}
+	if sentAt.After(last.sentAt) {
+		last.sentAt = sentAt
+	}
+	u.lastReplies[botID] = last
+}
+
+func (u *BotUpdates) lastBotReply(botID int64) botReplyTime {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.lastReplies[botID]
 }
 
 type botWatch struct {
@@ -31,6 +69,12 @@ func (u *BotUpdates) Watch(botID int64, after, limit int) {
 	if u.watches[botID] == nil {
 		u.watches[botID] = &botWatch{after: after, limit: limit, messages: map[int]*tg.Message{}}
 	}
+	if u.lastReplies == nil {
+		u.lastReplies = map[int64]botReplyTime{}
+	}
+	last := u.lastReplies[botID]
+	last.messageID = max(last.messageID, after)
+	u.lastReplies[botID] = last
 }
 
 func (u *BotUpdates) Handle(_ context.Context, updates tg.UpdatesClass) error {
@@ -42,6 +86,9 @@ func (u *BotUpdates) Handle(_ context.Context, updates tg.UpdatesClass) error {
 			continue
 		}
 		watch := u.watches[peer.UserID]
+		if _, known := u.lastReplies[peer.UserID]; watch != nil || known {
+			u.recordBotReplyLocked(peer.UserID, m)
+		}
 		if watch == nil || m.ID <= watch.after {
 			continue
 		}

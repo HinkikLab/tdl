@@ -9,6 +9,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/telegram/peers"
@@ -20,17 +21,22 @@ import (
 )
 
 func TestLinkedDeletedBotMessageResumesAfterReissue(t *testing.T) {
-	for _, mode := range []string{"in-flight", "repeated-deletion", "restart-after-reissue-failure", "changed-file"} {
+	for _, mode := range []string{"in-flight", "repeated-deletion", "restart-after-reissue-failure", "changed-file", "request-interval"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()
 			data := bytes.Repeat([]byte{0x42, 0x17, 0x93}, downloader.MaxPartSize+43)
 			opts := LinkedOptions{Threads: 1, Limit: 1, Links: LinkOptions{BotTimeout: 3, BotIdle: 1, PollInterval: 10}}
+			if mode == "request-interval" {
+				opts.Links.BotRequestInterval = 2
+			}
 			require.NoError(t, opts.Links.Normalize())
 			link, err := parseResourceLink("https://t.me/files_bot?start=fixture")
 			require.NoError(t, err)
 			post := tagPost{ChatID: 1, MessageID: 42, Directory: "Caption [42]"}
 			path := filepath.Join(root, post.Directory, "document_99_notes.bin")
 			starts, deletedLookups := 0, 0
+			var requestTimes []time.Time
+			firstReplyTime := time.Time{}
 			var offsets []int64
 			api := tg.NewClient(linkedRPC(func(_ context.Context, in bin.Encoder, out bin.Decoder) error {
 				switch req := in.(type) {
@@ -44,6 +50,7 @@ func TestLinkedDeletedBotMessageResumesAfterReissue(t *testing.T) {
 					return linkedReply(&tg.MessagesMessages{}, out)
 				case *tg.MessagesStartBotRequest:
 					starts++
+					requestTimes = append(requestTimes, time.Now())
 					if mode == "restart-after-reissue-failure" && starts == 2 {
 						return fmt.Errorf("simulated bot request interruption")
 					}
@@ -56,9 +63,16 @@ func TestLinkedDeletedBotMessageResumesAfterReissue(t *testing.T) {
 						docID++
 					}
 					base := starts * 10
+					message := linkedDocument(base+2, docID, ref, data)
+					if mode == "request-interval" {
+						message.Date = int(time.Now().Unix())
+						if starts == 1 {
+							firstReplyTime = time.Unix(int64(message.Date), 0)
+						}
+					}
 					return linkedReply(&tg.Updates{Updates: []tg.UpdateClass{
 						&tg.UpdateMessageID{ID: base, RandomID: req.RandomID},
-						&tg.UpdateNewMessage{Message: linkedDocument(base+2, docID, ref, data)},
+						&tg.UpdateNewMessage{Message: message},
 					}}, out)
 				case *tg.MessagesGetMessagesRequest:
 					deletedLookups++
@@ -106,6 +120,9 @@ func TestLinkedDeletedBotMessageResumesAfterReissue(t *testing.T) {
 				}
 			}
 			require.NoError(t, err)
+			if mode == "request-interval" {
+				require.False(t, requestTimes[1].Before(firstReplyTime.Add(2*time.Second)), "file reissues also respect the last bot reply")
+			}
 			got, err := os.ReadFile(path)
 			require.NoError(t, err)
 			require.Equal(t, len(data), len(got))

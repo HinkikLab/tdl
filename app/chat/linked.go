@@ -34,6 +34,7 @@ type LinkOptions struct {
 	MaxLinks           int   `json:"max_links" yaml:"max_links"`
 	BotTimeout         int   `json:"bot_timeout_seconds" yaml:"bot_timeout_seconds"`
 	BotIdle            int   `json:"bot_idle_seconds" yaml:"bot_idle_seconds"`
+	BotRequestInterval int   `json:"bot_request_interval_seconds" yaml:"bot_request_interval_seconds"`
 	PollInterval       int   `json:"poll_interval_ms" yaml:"poll_interval_ms"`
 	MaxBotMessages     int   `json:"max_bot_messages" yaml:"max_bot_messages"`
 	MaxTopicMessages   int   `json:"max_topic_messages" yaml:"max_topic_messages"`
@@ -57,6 +58,7 @@ func (o *LinkOptions) Normalize() error {
 		{"max_links", &o.MaxLinks, 100, 1000},
 		{"bot_timeout_seconds", &o.BotTimeout, 60, 3600},
 		{"bot_idle_seconds", &o.BotIdle, 3, 300},
+		{"bot_request_interval_seconds", &o.BotRequestInterval, 0, 86400},
 		{"poll_interval_ms", &o.PollInterval, 500, 60000},
 		{"max_bot_messages", &o.MaxBotMessages, 500, 10000},
 		{"max_topic_messages", &o.MaxTopicMessages, 1000, 100000},
@@ -327,6 +329,7 @@ type telegramLinkBackend struct {
 	cleanupIDs  map[int]bool
 	updates     *BotUpdates
 	watchedBots map[int64]bool
+	replyTimes  BotUpdates
 }
 
 // Remember IDs immediately, including requests whose responses later time out.
@@ -728,12 +731,65 @@ func (b *telegramLinkBackend) requestBot(ctx context.Context, bot peers.User, st
 	}
 }
 
+func (b *telegramLinkBackend) botReplyTimes() *BotUpdates {
+	if b.updates != nil {
+		return b.updates // shared across posts and jobs in this batch
+	}
+	return &b.replyTimes
+}
+
+func (b *telegramLinkBackend) waitBotRequestInterval(ctx context.Context, bot peers.User) error {
+	botID := bot.ID()
+	interval := time.Duration(b.opts.BotRequestInterval) * time.Second
+	for {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		last := b.botReplyTimes().lastBotReply(botID)
+		if interval == 0 || last.sentAt.IsZero() {
+			return nil
+		}
+		remaining := time.Until(last.sentAt.Add(interval))
+		if remaining <= 0 {
+			return nil
+		}
+		fmt.Printf("Bot %d: waiting %.1f seconds after its last reply before requesting again\n", botID, remaining.Seconds())
+		if err := waitLinked(ctx, remaining); err != nil {
+			return err
+		}
+		if b.updates == nil {
+			// Without a live handler, check for late replies before accepting
+			// the interval boundary. Repeated history copies keep their date.
+			res, err := b.api.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{Peer: bot.InputPeer(), Limit: 100})
+			if err != nil {
+				return fmt.Errorf("check bot %d replies during request interval: %w", botID, err)
+			}
+			modified, ok := res.AsModified()
+			if !ok {
+				return fmt.Errorf("unexpected bot history result")
+			}
+			for _, raw := range modified.GetMessages() {
+				if m, ok := raw.(*tg.Message); ok && tutil.GetPeerID(m.PeerID) == botID {
+					b.botReplyTimes().recordBotReply(botID, m)
+				}
+			}
+		}
+		// A late reply during the wait moves the next request boundary forward.
+	}
+}
+
 func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User, start string) ([]resourceMessage, error) {
 	// The existing Telegram middleware may wait through an RPC FLOOD_WAIT.
 	// Start the bot response timer after the start RPC finishes so that this
 	// server-required wait is not cut short by bot_timeout_seconds.
 	// A fresh watermark excludes old resources belonging to previous posts.
-	res, err := b.api.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{Peer: bot.InputPeer(), Limit: 1})
+	watermarkLimit := 1
+	if b.opts.BotRequestInterval > 0 {
+		// The latest message may be our own /start; find the latest incoming
+		// reply as well when seeding the request interval from this dialog.
+		watermarkLimit = 100
+	}
+	res, err := b.api.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{Peer: bot.InputPeer(), Limit: watermarkLimit})
 	if err != nil {
 		return nil, fmt.Errorf("read bot %d request watermark: %w", bot.ID(), err)
 	}
@@ -744,9 +800,23 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 	watermark := 0
 	for _, m := range modified.GetMessages() {
 		watermark = max(watermark, m.GetID())
+		if m, ok := m.(*tg.Message); ok && tutil.GetPeerID(m.PeerID) == bot.ID() {
+			b.botReplyTimes().recordBotReply(bot.ID(), m)
+		}
 	}
 	if b.updates != nil {
 		b.updates.Watch(bot.ID(), watermark, (b.opts.MaxBotMessages+1)*(*b.opts.ReRequestLimit+1)*(*b.opts.FloodRetries+1))
+	}
+	if err := b.waitBotRequestInterval(ctx, bot); err != nil {
+		if b.updates != nil && !b.watchedBots[bot.ID()] {
+			b.updates.Stop(bot.ID())
+		}
+		return nil, fmt.Errorf("wait bot %d request interval: %w", bot.ID(), err)
+	}
+	if b.opts.BotRequestInterval > 0 {
+		// Exclude previous-request replies that arrived while waiting, even
+		// when the start RPC does not return a request message ID.
+		watermark = max(watermark, b.botReplyTimes().lastBotReply(bot.ID()).messageID)
 	}
 	var random [8]byte
 	if _, err := rand.Read(random[:]); err != nil {
@@ -793,6 +863,7 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 			if requestID > 0 && m.ID < requestID {
 				continue
 			}
+			b.botReplyTimes().recordBotReply(bot.ID(), m)
 			b.rememberBotMessages(m.ID)
 			data, _ := json.Marshal(m)
 			// Snapshots retain old live updates. Consume each source version once

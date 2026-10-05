@@ -22,7 +22,7 @@ import (
 
 // Options configures a batch run.
 type Options struct {
-	// ConfigPath is the config.json to read.
+	// ConfigPath is the YAML or legacy JSON config file to read.
 	ConfigPath string
 	// DownloadOverrides replace the matching config values when set.
 	Dir string
@@ -97,7 +97,7 @@ type Runner struct {
 // Run executes the batch download described by path.
 //
 // It is intentionally a drop-in replacement for python/run_unified.py: the
-// same config.json, the same job semantics, but driven by tdl's own downloader
+// same config fields and job semantics, but driven by tdl's own downloader
 // so one process, one connection pool and batched requests are used for the
 // whole run.
 func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Options) error {

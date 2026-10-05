@@ -1,0 +1,156 @@
+# 批量下载示例：保留需要的任务，替换示例群组、消息 ID 和标签。
+# 相对路径以命令执行目录为基准；每个任务使用独立 subdir。
+# 下载前先运行 `tdl batch -c config.yaml --check-only` 检查。
+# 默认值：pool=16，threads=8，limit=4，overlap_seconds=3600。
+# 归档元数据默认输出 meta.json；write_metadata=false 关闭可见元数据。
+# 私有论坛主页链接不带话题选择器时扫描全部话题。
+namespace: default # 账号命名空间；显式 -n/--ns 优先
+download_base: downloads # 下载根目录；相对路径以命令执行目录为基准
+incremental: false # 按时间戳增量扫描；任务设置覆盖全局默认值
+write_metadata: true # 输出归档 meta.json；任务设置覆盖全局默认值
+overlap_seconds: 3600 # 增量回看秒数；0 表示不回看
+pool: 16 # 连接池大小；0 不限制；命令行参数优先
+threads: 8 # 单文件下载线程数；须大于 0；命令行参数优先
+limit: 4 # 同时下载的文件数；须大于 0；命令行参数优先
+jobs: # 按顺序执行任务；仅保留需要的示例
+  # 01. 直接下载频道或群组消息，范围 [100, 110)，包含消息 100 至 109。
+  # 只下载消息 100 时，将 end_comment 设为 101。
+  - chat_url: https://t.me/example_channel/100 # 来源群组或帖子链接；链接归档填写主帖来源
+    comment: false # true 下载关联讨论组评论；false 下载对话消息
+    start_comment: 100 # 起始消息 ID，包含此条；评论模式使用讨论组消息 ID
+    end_comment: 110 # 结束消息 ID，不包含此条；单条下载填起始 ID + 1
+    subdir: 01-direct-range # 相对子目录；每个任务使用独立路径保存文件和续传状态
+
+  # 02. 下载关联讨论组中 ID 为 900 至 909 的评论。
+  # 此模式按讨论组消息 ID 选择评论，范围不限于某个主帖。
+  - chat_url: https://t.me/example_channel/100 # 来源群组或帖子链接；链接归档填写主帖来源
+    comment: true # true 下载关联讨论组评论；false 下载对话消息
+    start_comment: 900 # 起始消息 ID，包含此条；评论模式使用讨论组消息 ID
+    end_comment: 910 # 结束消息 ID，不包含此条；单条下载填起始 ID + 1
+    subdir: 02-comment-range # 相对子目录；每个任务使用独立路径保存文件和续传状态
+
+  # 03. 增量扫描整个对话；首次最多扫描 100000 条历史消息。
+  # 后续从上次完成时间回看 3600 秒；export_filter 支持 expr 表达式。
+  - chat_url: https://t.me/example_channel # 来源群组或帖子链接；链接归档填写主帖来源
+    comment: false # true 下载关联讨论组评论；false 下载对话消息
+    incremental: true # 按时间戳增量扫描；任务设置覆盖全局默认值
+    overlap_seconds: 3600 # 增量回看秒数；0 表示不回看
+    export_filter: "" # 增量模式 expr 筛选表达式；空字符串不额外筛选
+    with_content: true # 在增量导出 JSON 中附带日期和文本
+    export_all: false # 增量导出是否包含无媒体消息；false 仅导出媒体消息
+    subdir: 03-incremental-chat # 相对子目录；每个任务使用独立路径保存文件和续传状态
+
+  # 04. 增量扫描论坛话题 200；话题 ID 是话题根消息的 ID。
+  # URL 中出现话题 ID 不会自动开启此增量话题筛选；须显式设置 topic_id。
+  - chat_url: https://t.me/example_forum # 来源群组或帖子链接；链接归档填写主帖来源
+    comment: false # true 下载关联讨论组评论；false 下载对话消息
+    incremental: true # 按时间戳增量扫描；任务设置覆盖全局默认值
+    topic_id: 200 # 论坛话题根消息 ID；将增量扫描限制在该话题
+    with_content: true # 在增量导出 JSON 中附带日期和文本
+    subdir: 04-incremental-topic # 相对子目录；每个任务使用独立路径保存文件和续传状态
+
+  # 05. 增量扫描关联讨论组中某篇主帖的评论。
+  # reply_post_id=900 是讨论组的转发根消息 ID，填写此 ID 而非频道帖子 100。
+  # chat 与实际下载来源须指向同一个讨论组。
+  - chat_url: https://t.me/example_channel/100 # 来源群组或帖子链接；链接归档填写主帖来源
+    chat: https://t.me/example_discussion # 显式导出来源；须与解析后的对话或讨论组一致
+    comment: true # true 下载关联讨论组评论；false 下载对话消息
+    incremental: true # 按时间戳增量扫描；任务设置覆盖全局默认值
+    reply_post_id: 900 # 讨论组中转发根消息的 ID，填写讨论组 ID 而非频道帖子 ID
+    with_content: true # 在增量导出 JSON 中附带日期和文本
+    subdir: 05-incremental-comments # 相对子目录；每个任务使用独立路径保存文件和续传状态
+
+  # 06. 归档图片或视频说明中包含完整标签 #教程 的帖子。
+  # 相册任意成员命中即保留整组；max_posts=1 先检查一组。
+  # max_posts=0 扫描全部历史。
+  - chat_url: https://t.me/example_channel # 来源群组或帖子链接；链接归档填写主帖来源
+    tag: '#教程' # 说明中的完整标签；以 # 开头的值须加引号
+    max_posts: 1 # 归档帖子组上限；0 处理完整窗口；增量任务应填 0
+    subdir: 06-tag-single # 相对子目录；每个任务使用独立路径保存文件和续传状态
+
+  # 07. 归档 [100, 110) 内命中任一标签的帖子或相册。
+  # write_metadata=false 关闭可见元数据，仍保留内部续传记录。
+  - chat_url: https://t.me/example_channel # 来源群组或帖子链接；链接归档填写主帖来源
+    tags: # 说明标签列表；链接任务筛选主帖；带 # 的值须加引号
+      - '#教程'
+      - '#示例'
+    tag_match: any # any 命中任一标签；all 要求帖子或相册包含全部标签
+    start_comment: 100 # 起始消息 ID，包含此条；评论模式使用讨论组消息 ID
+    end_comment: 110 # 结束消息 ID，不包含此条；单条下载填起始 ID + 1
+    write_metadata: false # 输出归档 meta.json；任务设置覆盖全局默认值
+    max_posts: 1 # 归档帖子组上限；0 处理完整窗口；增量任务应填 0
+    subdir: 07-tags-any # 相对子目录；每个任务使用独立路径保存文件和续传状态
+
+  # 08. 增量归档：同一帖子或相册说明须包含全部标签。
+  # 处理完整窗口后才推进 last_ts；使用 max_posts=0 避免截断窗口。
+  - chat_url: https://t.me/example_channel # 来源群组或帖子链接；链接归档填写主帖来源
+    tags: # 说明标签列表；链接任务筛选主帖；带 # 的值须加引号
+      - '#教程'
+      - '#示例'
+    tag_match: all # any 命中任一标签；all 要求帖子或相册包含全部标签
+    incremental: true # 按时间戳增量扫描；任务设置覆盖全局默认值
+    max_posts: 0 # 归档帖子组上限；0 处理完整窗口；增量任务应填 0
+    subdir: 08-tags-all # 相对子目录；每个任务使用独立路径保存文件和续传状态
+
+  # 09. 归档单个主帖链接的资源，包括隐藏链接和 URL 按钮。
+  # 支持多层跳转；输出目录按主帖说明命名。
+  # chat_url 填写主帖 URL；机器人 start 链接由主帖内容解析。
+  - chat_url: https://t.me/example_channel/100 # 来源群组或帖子链接；链接归档填写主帖来源
+    follow_links: true # 解析主帖或评论中的链接，经机器人和群组获取资源
+    incremental: false # 按时间戳增量扫描；任务设置覆盖全局默认值
+    subdir: 09-linked-single # 相对子目录；每个任务使用独立路径保存文件和续传状态
+    link_options: # 链接资源解析设置；仅在 follow_links 开启时使用
+      # 默认保留预览、扫描评论、清理本次机器人请求和回复，
+      # 文件失效最多重新请求 3 次，文本限流最多重试 5 次。
+      # bot_request_interval_seconds 从机器人最后回复时间开始计算；0 不限制。
+      # rerequest_limit 或 flood_retries 设为 0 可禁用对应重试。
+      scan_comments: true # 在关联讨论组评论中查找资源链接；默认 true
+      comment_limit: 100 # 每个主帖最多扫描的评论条数；默认 100
+      include_previews: true # 同时下载主帖预览媒体；默认 true
+      cleanup_bot_messages: true # 处理后删除本次机器人请求及收集到的回复；默认 true
+      max_depth: 8 # 链接递归深度上限；默认 8，最大 32
+      max_links: 100 # 每个主帖最多解析的链接数；默认 100，最大 1000
+      bot_timeout_seconds: 60 # 每次机器人请求的最长等待秒数；须大于空闲等待时间
+      bot_idle_seconds: 3 # 收到回复后连续空闲此秒数则结束收集
+      bot_request_interval_seconds: 0 # 同一机器人最后回复到下次请求的间隔秒数；0 不限制
+      poll_interval_ms: 500 # 机器人回复轮询间隔，单位毫秒；默认 500
+      max_bot_messages: 500 # 每次机器人请求最多收集的回复条数；默认 500
+      max_topic_messages: 1000 # 每个链接话题最多扫描的消息条数；默认 1000
+      rerequest_limit: 3 # 资源文件失效或删除后的重新请求次数；默认 3；0 禁用
+      flood_retries: 5 # 机器人文本请求限流重试次数；默认 5；0 禁用
+      flood_wait_seconds: 30 # 限流未提供等待时长时的回退秒数；默认 30
+      max_flood_wait_seconds: 3600 # 允许的机器人文本限流等待秒数上限；默认 3600
+
+  # 10. 增量归档预览帖的链接资源；从评论中查找入口。
+  # max_posts=0 处理完整窗口；确认失效的机器人或群组在本轮运行中跳过。
+  - chat_url: https://t.me/example_channel # 来源群组或帖子链接；链接归档填写主帖来源
+    follow_links: true # 解析主帖或评论中的链接，经机器人和群组获取资源
+    incremental: true # 按时间戳增量扫描；任务设置覆盖全局默认值
+    max_posts: 0 # 归档帖子组上限；0 处理完整窗口；增量任务应填 0
+    subdir: 10-linked-comments # 相对子目录；每个任务使用独立路径保存文件和续传状态
+    link_options: # 链接资源解析设置；仅在 follow_links 开启时使用
+      scan_comments: true # 在关联讨论组评论中查找资源链接；默认 true
+      cleanup_bot_messages: true # 处理后删除本次机器人请求及收集到的回复；默认 true
+
+  # 11. 归档 [100, 110) 内命中任一说明标签的主帖链接资源。
+  # 同一机器人最后回复 30 秒后才能再次请求；下载耗时计入间隔。
+  # 机器人分批回复较慢时增大空闲与超时等待；空闲时间须小于超时时间。
+  - chat_url: https://t.me/example_channel # 来源群组或帖子链接；链接归档填写主帖来源
+    follow_links: true # 解析主帖或评论中的链接，经机器人和群组获取资源
+    incremental: false # 按时间戳增量扫描；任务设置覆盖全局默认值
+    start_comment: 100 # 起始消息 ID，包含此条；评论模式使用讨论组消息 ID
+    end_comment: 110 # 结束消息 ID，不包含此条；单条下载填起始 ID + 1
+    tags: # 说明标签列表；链接任务筛选主帖；带 # 的值须加引号
+      - '#教程'
+      - '#示例'
+    tag_match: any # any 命中任一标签；all 要求帖子或相册包含全部标签
+    max_posts: 1 # 归档帖子组上限；0 处理完整窗口；增量任务应填 0
+    subdir: 11-linked-filtered # 相对子目录；每个任务使用独立路径保存文件和续传状态
+    link_options: # 链接资源解析设置；仅在 follow_links 开启时使用
+      max_depth: 8 # 链接递归深度上限；默认 8，最大 32
+      bot_timeout_seconds: 120 # 每次机器人请求的最长等待秒数；须大于空闲等待时间
+      bot_idle_seconds: 10 # 收到回复后连续空闲此秒数则结束收集
+      bot_request_interval_seconds: 30 # 同一机器人最后回复到下次请求的间隔秒数；0 不限制
+      rerequest_limit: 3 # 资源文件失效或删除后的重新请求次数；默认 3；0 禁用
+      flood_retries: 5 # 机器人文本请求限流重试次数；默认 5；0 禁用
+      cleanup_bot_messages: true # 处理后删除本次机器人请求及收集到的回复；默认 true

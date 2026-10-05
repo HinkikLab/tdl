@@ -1,0 +1,156 @@
+# Batch examples: keep the jobs you need and replace the example chats, IDs and tags.
+# Paths are relative to the command's working directory. Give each job its own subdir.
+# Run `tdl batch -c config.yaml --check-only` before downloading.
+# Defaults: pool=16, threads=8, limit=4, overlap_seconds=3600.
+# Archive metadata defaults to meta.json; write_metadata=false disables visible metadata.
+# A private forum home URL without a topic selector scans all topics.
+namespace: default # Account namespace; explicit -n/--ns overrides it
+download_base: downloads # Download root; relative to the command working directory
+incremental: false # Timestamp-based scan; job setting overrides the global default
+write_metadata: true # Write archive meta.json; job setting overrides the global default
+overlap_seconds: 3600 # Incremental lookback in seconds; 0 disables overlap
+pool: 16 # Connection pool size; 0 is unlimited; CLI flags take precedence
+threads: 8 # Download threads per file; positive; CLI flags take precedence
+limit: 4 # Concurrent file downloads; positive; CLI flags take precedence
+jobs: # Tasks execute in order; keep only the examples you need
+  # 01. Direct channel/group messages in [100, 110), including IDs 100 through 109.
+  # To download only ID 100, set end_comment to 101.
+  - chat_url: https://t.me/example_channel/100 # Source chat/post URL; linked archives require the main-post source
+    comment: false # true selects discussion-group comments; false selects chat messages
+    start_comment: 100 # Inclusive message ID; use discussion-group IDs in comment mode
+    end_comment: 110 # Exclusive message ID; use start + 1 for a single message
+    subdir: 01-direct-range # Relative subdirectory; use a distinct path for each job and its resume state
+
+  # 02. Comment IDs 900 through 909 in the linked discussion group.
+  # This selects discussion-group messages by ID; it does not limit comments to one post.
+  - chat_url: https://t.me/example_channel/100 # Source chat/post URL; linked archives require the main-post source
+    comment: true # true selects discussion-group comments; false selects chat messages
+    start_comment: 900 # Inclusive message ID; use discussion-group IDs in comment mode
+    end_comment: 910 # Exclusive message ID; use start + 1 for a single message
+    subdir: 02-comment-range # Relative subdirectory; use a distinct path for each job and its resume state
+
+  # 03. Incrementally scan the whole chat; the first run scans up to 100,000 messages.
+  # Later runs look back 3,600 seconds. export_filter accepts an expr expression.
+  - chat_url: https://t.me/example_channel # Source chat/post URL; linked archives require the main-post source
+    comment: false # true selects discussion-group comments; false selects chat messages
+    incremental: true # Timestamp-based scan; job setting overrides the global default
+    overlap_seconds: 3600 # Incremental lookback in seconds; 0 disables overlap
+    export_filter: "" # Incremental expr filter; empty accepts all selected messages
+    with_content: true # Include dates and text in the incremental export JSON
+    export_all: false # Include non-media messages in incremental exports; false exports media only
+    subdir: 03-incremental-chat # Relative subdirectory; use a distinct path for each job and its resume state
+
+  # 04. Incrementally scan forum topic 200, whose ID is the topic's root message ID.
+  # A topic ID in the URL does not enable topic filtering; set topic_id explicitly.
+  - chat_url: https://t.me/example_forum # Source chat/post URL; linked archives require the main-post source
+    comment: false # true selects discussion-group comments; false selects chat messages
+    incremental: true # Timestamp-based scan; job setting overrides the global default
+    topic_id: 200 # Forum topic root message ID; restricts incremental scans to that topic
+    with_content: true # Include dates and text in the incremental export JSON
+    subdir: 04-incremental-topic # Relative subdirectory; use a distinct path for each job and its resume state
+
+  # 05. Incrementally scan replies to one post in the linked discussion group.
+  # reply_post_id=900 is the forwarded root message ID in that group, not channel post 100.
+  # The chat and download source must refer to the same discussion group.
+  - chat_url: https://t.me/example_channel/100 # Source chat/post URL; linked archives require the main-post source
+    chat: https://t.me/example_discussion # Explicit export source; must match the resolved chat/discussion group
+    comment: true # true selects discussion-group comments; false selects chat messages
+    incremental: true # Timestamp-based scan; job setting overrides the global default
+    reply_post_id: 900 # Forwarded root message ID in the discussion group, not the channel post ID
+    with_content: true # Include dates and text in the incremental export JSON
+    subdir: 05-incremental-comments # Relative subdirectory; use a distinct path for each job and its resume state
+
+  # 06. Archive photo/video posts whose captions contain the complete hashtag #教程.
+  # A match on any album member keeps the whole album; max_posts=1 previews one group.
+  # Set max_posts=0 to scan the full history.
+  - chat_url: https://t.me/example_channel # Source chat/post URL; linked archives require the main-post source
+    tag: '#教程' # Complete caption hashtag; quote values beginning with #
+    max_posts: 1 # Maximum archive groups; 0 processes the full window; use 0 for incremental jobs
+    subdir: 06-tag-single # Relative subdirectory; use a distinct path for each job and its resume state
+
+  # 07. Archive albums in [100, 110) whose captions contain either listed hashtag.
+  # write_metadata=false hides visible metadata while retaining internal resume records.
+  - chat_url: https://t.me/example_channel # Source chat/post URL; linked archives require the main-post source
+    tags: # Caption hashtags; linked jobs filter main posts; keep quoted # values
+      - '#教程'
+      - '#示例'
+    tag_match: any # any matches one tag; all requires every tag in the post/album
+    start_comment: 100 # Inclusive message ID; use discussion-group IDs in comment mode
+    end_comment: 110 # Exclusive message ID; use start + 1 for a single message
+    write_metadata: false # Write archive meta.json; job setting overrides the global default
+    max_posts: 1 # Maximum archive groups; 0 processes the full window; use 0 for incremental jobs
+    subdir: 07-tags-any # Relative subdirectory; use a distinct path for each job and its resume state
+
+  # 08. Incremental archive requiring both hashtags in one post or album caption.
+  # The complete window advances last_ts; keep max_posts=0 to avoid truncating the window.
+  - chat_url: https://t.me/example_channel # Source chat/post URL; linked archives require the main-post source
+    tags: # Caption hashtags; linked jobs filter main posts; keep quoted # values
+      - '#教程'
+      - '#示例'
+    tag_match: all # any matches one tag; all requires every tag in the post/album
+    incremental: true # Timestamp-based scan; job setting overrides the global default
+    max_posts: 0 # Maximum archive groups; 0 processes the full window; use 0 for incremental jobs
+    subdir: 08-tags-all # Relative subdirectory; use a distinct path for each job and its resume state
+
+  # 09. Archive resources linked from one main post, including hidden links and URL buttons.
+  # Links may redirect through multiple hops; the output directory uses the main post caption.
+  # Set chat_url to the main post URL, not a bot start link.
+  - chat_url: https://t.me/example_channel/100 # Source chat/post URL; linked archives require the main-post source
+    follow_links: true # Resolve resources through main-post/comment links, bots and groups
+    incremental: false # Timestamp-based scan; job setting overrides the global default
+    subdir: 09-linked-single # Relative subdirectory; use a distinct path for each job and its resume state
+    link_options: # Linked-resource resolution settings; used only with follow_links
+      # Defaults keep previews, scan comments, clean up this run's bot messages and replies,
+      # retry expired files up to 3 times and retry text flood waits up to 5 times.
+      # bot_request_interval_seconds is measured from the bot's last reply; 0 disables it.
+      # Setting rerequest_limit or flood_retries to 0 disables that retry type.
+      scan_comments: true # Search linked discussion comments for resource links; default true
+      comment_limit: 100 # Maximum comments scanned per main post; default 100
+      include_previews: true # Also download main-post preview media; default true
+      cleanup_bot_messages: true # Delete this run's bot requests and collected replies after processing; default true
+      max_depth: 8 # Maximum link traversal depth; default 8, maximum 32
+      max_links: 100 # Maximum links resolved per main post; default 100, maximum 1000
+      bot_timeout_seconds: 60 # Maximum wait per bot request in seconds; must exceed idle time
+      bot_idle_seconds: 3 # Stop collecting after this many idle seconds following a reply
+      bot_request_interval_seconds: 0 # Seconds since the same bot's last reply before next request; 0 disables
+      poll_interval_ms: 500 # Bot reply polling interval in milliseconds; default 500
+      max_bot_messages: 500 # Maximum replies collected per bot request; default 500
+      max_topic_messages: 1000 # Maximum messages scanned per linked topic; default 1000
+      rerequest_limit: 3 # Retries for expired/deleted resource files; default 3; 0 disables
+      flood_retries: 5 # Retries for bot text flood limits; default 5; 0 disables
+      flood_wait_seconds: 30 # Fallback wait when no flood duration is supplied, in seconds; default 30
+      max_flood_wait_seconds: 3600 # Maximum accepted bot text flood wait in seconds; default 3600
+
+  # 10. Incrementally archive linked resources from preview posts; search comments for links.
+  # max_posts=0 processes the full window; confirmed dead bots/groups are skipped per run.
+  - chat_url: https://t.me/example_channel # Source chat/post URL; linked archives require the main-post source
+    follow_links: true # Resolve resources through main-post/comment links, bots and groups
+    incremental: true # Timestamp-based scan; job setting overrides the global default
+    max_posts: 0 # Maximum archive groups; 0 processes the full window; use 0 for incremental jobs
+    subdir: 10-linked-comments # Relative subdirectory; use a distinct path for each job and its resume state
+    link_options: # Linked-resource resolution settings; used only with follow_links
+      scan_comments: true # Search linked discussion comments for resource links; default true
+      cleanup_bot_messages: true # Delete this run's bot requests and collected replies after processing; default true
+
+  # 11. Archive linked resources from main posts in [100, 110) matching either caption tag.
+  # The same bot is requested 30 seconds after its last reply; download time counts toward this.
+  # Increase idle and timeout for slower bot batches; idle must remain below timeout.
+  - chat_url: https://t.me/example_channel # Source chat/post URL; linked archives require the main-post source
+    follow_links: true # Resolve resources through main-post/comment links, bots and groups
+    incremental: false # Timestamp-based scan; job setting overrides the global default
+    start_comment: 100 # Inclusive message ID; use discussion-group IDs in comment mode
+    end_comment: 110 # Exclusive message ID; use start + 1 for a single message
+    tags: # Caption hashtags; linked jobs filter main posts; keep quoted # values
+      - '#教程'
+      - '#示例'
+    tag_match: any # any matches one tag; all requires every tag in the post/album
+    max_posts: 1 # Maximum archive groups; 0 processes the full window; use 0 for incremental jobs
+    subdir: 11-linked-filtered # Relative subdirectory; use a distinct path for each job and its resume state
+    link_options: # Linked-resource resolution settings; used only with follow_links
+      max_depth: 8 # Maximum link traversal depth; default 8, maximum 32
+      bot_timeout_seconds: 120 # Maximum wait per bot request in seconds; must exceed idle time
+      bot_idle_seconds: 10 # Stop collecting after this many idle seconds following a reply
+      bot_request_interval_seconds: 30 # Seconds since the same bot's last reply before next request; 0 disables
+      rerequest_limit: 3 # Retries for expired/deleted resource files; default 3; 0 disables
+      flood_retries: 5 # Retries for bot text flood limits; default 5; 0 disables
+      cleanup_bot_messages: true # Delete this run's bot requests and collected replies after processing; default true

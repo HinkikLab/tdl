@@ -5,8 +5,8 @@ weight: 35
 
 # 批量下载
 
-`tdl batch` 是 `python/run_unified.py` 脚本的原生实现，保留其 `config.json` 基础字段，
-支持直接消息、评论、增量扫描、说明标签归档和预览帖链接资源归档。
+`tdl batch` 是 `python/run_unified.py` 脚本的原生实现，保留其配置字段，默认使用 YAML，
+并兼容现有 JSON 配置；支持直接消息、评论、增量扫描、说明标签归档和预览帖链接资源归档。
 所有任务复用一个 Telegram 客户端和连接池，并支持文件分片续传。
 
 ## 快速开始
@@ -17,20 +17,20 @@ weight: 35
 tdl batch init
 {{< /command >}}
 
-2. 编辑生成的 `config.json`：保留需要的 job，删除其他示例，将 `example_channel`、
+2. 编辑生成的 `config.yaml`：保留需要的 job，删除其他示例，将 `example_channel`、
    `example_discussion`、`example_forum`、消息 ID 和标签替换为自己的内容；
    `namespace` 填已登录账号的命名空间。
 3. 先检查，再下载：
 
 只检查配置、参数优先级和状态路径占用，可离线运行
-`tdl batch -c config.json --validate-only`，无需打开账号存储。
+`tdl batch -c config.yaml --validate-only`，无需打开账号存储。
 
 {{< command >}}
-tdl batch -c config.json --check-only
-tdl batch -c config.json
+tdl batch -c config.yaml --check-only
+tdl batch -c config.yaml
 {{< /command >}}
 
-如果当前目录存在合法的 `config.json`，并且已经登录（`tdl login`），
+如果当前目录存在合法的批量配置，并且已经登录（`tdl login`），
 那么**不带任何参数直接运行 `tdl`** 也会自动进入批量下载：
 
 {{< command >}}
@@ -45,20 +45,30 @@ tdl
 
 {{< command >}}
 tdl batch init
-tdl batch init -c examples/config.json
-tdl batch init -c config.json --force
+tdl batch init --lang zh
+tdl batch init --lang en
+tdl batch init -c examples/config.yaml
+tdl batch init -c config.yaml --force
 {{< /command >}}
 
-默认写入当前目录的 `config.json`，也可用 `-c/--config` 指定输出路径；缺少的父目录
+默认写入当前目录的 `config.yaml`，也可用 `-c/--config` 指定输出路径；缺少的父目录
 会自动创建。文件已存在时会报告错误并保留原内容，`--force` 明确允许替换。
 生成只操作配置文件，不初始化账号存储、不发起机器人请求，也不执行示例中的 job。
 
-文件是标准 UTF-8 JSON，说明使用额外的 **`_comment`** 字段，解析器会忽略该字段。
-**`comment` 是评论模式配置，不能填说明文字。** 不要在 JSON 中添加 `//` 或尾随逗号。
-配置解析器也接受 YAML；未指定 `-c` 时依次查找 `config.json`、`config.yaml`、`config.yml`。
+默认自动选择注释语言：依次读取 `LC_ALL`、`LC_MESSAGES`、`LANGUAGE`、`LANG`，
+采用第一个非空变量；都未设置时，在 Windows 上读取系统显示语言。
+中文语言环境生成简体中文注释，其他语言或无法检测时生成英文注释。
+`LANGUAGE` 可填写以冒号分隔的语言偏好列表，采用其中第一个支持的语言。
+可用 `--lang zh`、`--lang en` 手动选择，`--lang auto` 为默认值。
+
+文件是 UTF-8 YAML，在对应 job 前提供说明，并在每个选项后附上独立的行尾 `#` 注释；
+**`comment` 是评论模式配置，不能填说明文字。**
+已有 JSON 配置可继续通过 `-c old-config.json` 读取，包含旧版 `_comment` 字段也无需转换。
+未指定 `-c` 时依次查找 `config.yaml`、`config.yml`、`config.json`。
 所有相对路径以**执行命令的当前目录**为基准，不是配置文件所在目录。
 
-内置模板位于 `pkg/autodl/config.example.json`，包含以下 11 个 job。
+内置 YAML 模板位于 `pkg/autodl/config.example.yaml`（英文）和
+`pkg/autodl/config.example.zh.yaml`（中文），配置值保持一致，包含以下 11 个 job。
 每个示例使用独立 `subdir`，避免不同任务共用消息级状态文件：
 
 | 示例 | 用途 | 核心配置 |
@@ -106,29 +116,23 @@ tdl batch init -c config.json --force
 保留 Python 脚本的基础字段；标签和链接资源模式属于原生 batch 的扩展。
 最小的直接下载示例如下，下载消息 100 到 109：
 
-```json
-{
-  "namespace": "default",
-  "download_base": "downloads",
-  "incremental": false,
-  "jobs": [
-    {
-      "_comment": "直接下载消息 100 到 109",
-      "chat_url": "https://t.me/example_channel/100",
-      "comment": false,
-      "start_comment": 100,
-      "end_comment": 110,
-      "subdir": "direct"
-    }
-  ]
-}
+```yaml
+download_base: downloads
+incremental: false
+jobs:
+  # 直接下载消息 100 到 109。
+  - chat_url: https://t.me/example_channel/100
+    comment: false
+    start_comment: 100
+    end_comment: 110
+    subdir: direct
+namespace: default
 ```
 
 ### 顶层字段
 
 | 字段 | 类型 / 默认值 | 说明 |
 | --- | --- | --- |
-| `_comment` | 字符串或数组，可省略 | 说明文字，忽略，不影响执行 |
 | `namespace` | 字符串，`default` | tdl 账号命名空间；显式 `-n/--ns` 优先 |
 | `download_base` | 字符串，`downloads` | 下载根目录；命令行 `-d` 可覆盖根目录，仍保留各 job 的 `subdir` |
 | `download_dir` | 字符串，可省略 | `download_base` 的旧版别名；后者非空时优先 |
@@ -145,7 +149,6 @@ tdl batch init -c config.json --force
 
 | 字段 | 说明 |
 | --- | --- |
-| `_comment` | 说明文字，忽略 |
 | `chat_url` | 必填。支持公开主页/帖子、私有主页 `https://t.me/c/1234567890/` 及帖子链接、`?comment=456`、不带协议及 `/s/` 预览链接；账号须有访问权限 |
 | `chat` | 普通消息任务的来源确认，可填用户名、数值 ID 或 Telegram URL；必须与 `chat_url` 解析出的实际频道/讨论组一致，冲突时在扫描、下载和状态写入前失败。归档始终使用 `chat_url` |
 | `subdir` | job 的相对子目录；不能为绝对路径或通过 `..` 逃出下载根目录。不同任务使用独立子目录 |
@@ -184,25 +187,19 @@ tdl batch init -c config.json --force
 
 标签和链接资源归档默认在每个帖子目录中仅输出一份 `meta.json`，包含原始说明、
 消息及资源信息，不再生成 `message.txt` 或 `message.json`。在顶层设置
-`"write_metadata": false` 可关闭所有归档任务的元数据输出；各 job 可以单独覆盖：
+`write_metadata: false` 可关闭所有归档任务的元数据输出；各 job 可以单独覆盖：
 
-```json
-{
-  "write_metadata": false,
-  "jobs": [
-    {
-      "chat_url": "https://t.me/example_channel",
-      "tags": ["#教程"],
-      "subdir": "media-only"
-    },
-    {
-      "chat_url": "https://t.me/example_channel/100",
-      "follow_links": true,
-      "write_metadata": true,
-      "subdir": "with-metadata"
-    }
-  ]
-}
+```yaml
+jobs:
+  - chat_url: https://t.me/example_channel
+    subdir: media-only
+    tags:
+      - '#教程'
+  - chat_url: https://t.me/example_channel/100
+    follow_links: true
+    subdir: with-metadata
+    write_metadata: true
+write_metadata: false
 ```
 
 关闭可见元数据后仍校验完成媒体并续传未完成文件；标签归档保留不含说明的内部完成记录。
@@ -217,14 +214,12 @@ tdl batch init -c config.json --force
 直接下载某条消息 100：`comment: false`、`start_comment: 100`、`end_comment: 101`。
 评论范围示例：
 
-```json
-{
-  "chat_url": "https://t.me/example_channel/100",
-  "comment": true,
-  "start_comment": 900,
-  "end_comment": 910,
-  "subdir": "comments"
-}
+```yaml
+chat_url: https://t.me/example_channel/100
+comment: true
+end_comment: 910
+start_comment: 900
+subdir: comments
 ```
 
 这里 100 是主帖 ID，900 到 909 是讨论组的消息 ID。可从具体评论链接
@@ -236,32 +231,29 @@ tdl batch init -c config.json --force
 
 tag 任务的 `chat_url` 填群组/频道主页或论坛话题链接，无须填写消息 ID 范围：
 
-```json
-{
-  "namespace": "default",
-  "download_base": "downloads",
-  "jobs": [
-    {
-      "chat_url": "https://t.me/example_channel",
-      "tags": ["#教程", "#示例"],
-      "tag_match": "any",
-      "max_posts": 1,
-      "subdir": "tags"
-    }
-  ]
-}
+```yaml
+download_base: downloads
+jobs:
+  - chat_url: https://t.me/example_channel
+    max_posts: 1
+    subdir: tags
+    tag_match: any
+    tags:
+      - '#教程'
+      - '#示例'
+namespace: default
 ```
 
 私有数字群组可填 `https://t.me/c/2255983776/` 扫描整个群组；
 `https://t.me/c/2255983776/41872/` 仅扫描话题 41872。
 也支持话题内消息链接 `https://t.me/c/2255983776/41872/42000`，
-或主页链接配合 `"topic_id": 41872`。公开群组的话题路径及 `?thread=41872`
+或主页链接配合 `topic_id: 41872`。公开群组的话题路径及 `?thread=41872`
 使用相同规则。运行时会向 Telegram 确认该话题存在且可访问；普通消息、
 已删除或不可访问的话题不会退回全群扫描。命令行同样支持
 `tdl chat download-tag --chat <话题链接> --tag <标签>`，或主页配合 `--topic 41872`。
 
-先运行 `tdl batch -c config.json --check-only` 查看匹配数量，再运行
-`tdl batch -c config.json -y` 下载。输出结构为
+先运行 `tdl batch -c config.yaml --check-only` 查看匹配数量，再运行
+`tdl batch -c config.yaml -y` 下载。输出结构为
 `downloads/tags/<chat-id>/<命中的tag> <清理后的说明> [消息ID]/`；目录名会移除
 说明中的所有 hashtag 和非法字符，并将 tag 加说明限制为 64 个字符。
 同时命中多个 tag 时，使用配置顺序中的第一个命中 tag 作为目录前缀。
@@ -289,33 +281,28 @@ Telegram 相册只要有一条成员的说明包含 tag，就会下载整组。
 `start_comment` / `end_comment`，此时表示**主频道帖子 ID** 的左闭右开范围，
 命中相册任意成员会保留整组。不需要设置 `comment: true`。
 
-```json
-{
-  "namespace": "default",
-  "download_base": "downloads",
-  "jobs": [
-    {
-      "chat_url": "https://t.me/example_channel",
-      "follow_links": true,
-      "subdir": "resources",
-      "max_posts": 1,
-      "link_options": {
-        "cleanup_bot_messages": true,
-        "scan_comments": true,
-        "max_depth": 8,
-        "rerequest_limit": 3,
-        "flood_retries": 5,
-        "flood_wait_seconds": 30
-      }
-    }
-  ]
-}
+```yaml
+download_base: downloads
+jobs:
+  - chat_url: https://t.me/example_channel
+    follow_links: true
+    link_options:
+      cleanup_bot_messages: true
+      flood_retries: 5
+      flood_wait_seconds: 30
+      max_depth: 8
+      rerequest_limit: 3
+      scan_comments: true
+    max_posts: 1
+    subdir: resources
+namespace: default
 ```
 
 `tdl batch init` 的示例 09 包含完整参数；仓库根目录的
-`config.linked.example.json` 也保留单模式示例。替换频道名和
-账号 namespace 后运行 `tdl batch -c config.json --check-only` 预览主帖与评论中的
-入口链接，再运行 `tdl batch -c config.json` 下载。
+`config.linked.example.yaml`（英文）和 `config.linked.example.zh.yaml`（中文）
+也保留单模式示例。替换频道名和
+账号 namespace 后运行 `tdl batch -c config.yaml --check-only` 预览主帖与评论中的
+入口链接，再运行 `tdl batch -c config.yaml` 下载。
 `--check-only` 不请求机器人、不下载文件、不删除消息，也不验证入口后的跳转链。
 
 正文链接包括普通 URL、文字背后的 Telegram 超链接和内联 URL 按钮。
@@ -407,21 +394,19 @@ fallback wait `3600` 秒、maximum wait `86400` 秒。
 
 标签归档和链接资源归档都可使用 `start_comment` / `end_comment` 选择源消息：
 
-```json
-{
-  "jobs": [{
-    "chat_url": "https://t.me/example_channel",
-    "tags": ["#教程"],
-    "start_comment": 100,
-    "end_comment": 110,
-    "subdir": "tag-range"
-  }]
-}
+```yaml
+jobs:
+  - chat_url: https://t.me/example_channel
+    end_comment: 110
+    start_comment: 100
+    subdir: tag-range
+    tags:
+      - '#教程'
 ```
 
-需要解析链接时再加 `"follow_links": true`。范围是源群组的消息 ID，
+需要解析链接时再加 `follow_links: true`。范围是源群组的消息 ID，
 不是资源群组或机器人的消息 ID；命中相册任一成员就归档整组，边界不会拆散相册。
-改为 `"incremental": true` 后，范围字段被忽略，按 `last_ts` 和回看秒数扫描。
+改为 `incremental: true` 后，范围字段被忽略，按 `last_ts` 和回看秒数扫描。
 首次扫描全部历史，完整成功后才写入窗口结束时间；失败、取消、扫描超出 100000 条
 或 `max_posts` 截断窗口时保留 `last_ts`，下次运行通过文件/清单检查继续处理。
 `--check-only` 不推进时间戳。归档增量建议 `max_posts: 0`，每个 job 保持独立 `subdir`。
@@ -453,7 +438,7 @@ fallback wait `3600` 秒、maximum wait `86400` 秒。
 | `--delay` | 所有 batch 家族的文件启动间隔，例如 `1s`，默认 `0`；取消时立即结束等待，机器人文本退避仍使用专属参数 |
 
 {{< command >}}
-tdl batch -c config.json -y --check-only
+tdl batch -c config.yaml -y --check-only
 tdl batch --incremental --overlap-seconds 7200
 tdl batch -d /path/to/downloads -i mp4,jpg
 tdl batch --batch-threads 8 --batch-limit 4 --batch-pool 16
@@ -468,7 +453,7 @@ tdl batch --retry-skipped
 
 {{< hint info >}}
 `--batch-threads` / `--batch-limit` / `--batch-pool` 优先于全局的 `-t` / `-l` / `--pool`，
-全局参数又优先于 `config.json` 中的 `threads` / `limit` / `pool`，
+全局参数又优先于 `config.yaml` 中的 `threads` / `limit` / `pool`，
 最后回落到默认值 `8` / `4` / `16`（与 Python 脚本一致）。
 {{< /hint >}}
 
@@ -543,27 +528,23 @@ tdl batch --incremental --overlap-seconds 3600
 
 只扫描一个论坛话题：
 
-```json
-{
-  "chat_url": "https://t.me/example_forum",
-  "incremental": true,
-  "topic_id": 200,
-  "subdir": "topic-200"
-}
+```yaml
+chat_url: https://t.me/example_forum
+incremental: true
+subdir: topic-200
+topic_id: 200
 ```
 
 只扫描一篇频道帖的评论：
 
-```json
-{
-  "chat_url": "https://t.me/example_channel/100",
-  "chat": "https://t.me/example_discussion",
-  "comment": true,
-  "incremental": true,
-  "reply_post_id": 900,
-  "with_content": true,
-  "subdir": "post-100-comments"
-}
+```yaml
+chat: https://t.me/example_discussion
+chat_url: https://t.me/example_channel/100
+comment: true
+incremental: true
+reply_post_id: 900
+subdir: post-100-comments
+with_content: true
 ```
 
 900 必须是关联讨论组中的转发根消息 ID。若已经使用讨论组自身的 URL 作为

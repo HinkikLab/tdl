@@ -1,0 +1,31 @@
+# Standalone linked-resource archive example. Replace the example channel before use.
+# Run `tdl batch -c config.linked.example.yaml --check-only` to inspect the plan.
+namespace: default # Account namespace; explicit -n/--ns overrides it
+download_base: downloads # Download root; relative to the command working directory
+write_metadata: true # Write archive meta.json; job setting overrides the global default
+pool: 16 # Connection pool size; 0 is unlimited; CLI flags take precedence
+threads: 8 # Download threads per file; positive; CLI flags take precedence
+limit: 4 # Concurrent file downloads; positive; CLI flags take precedence
+jobs: # Tasks execute in order; keep only the examples you need
+  # Archive one main post, including linked resources found in its comments.
+  - chat_url: https://t.me/example_channel # Source chat/post URL; linked archives require the main-post source
+    follow_links: true # Resolve resources through main-post/comment links, bots and groups
+    subdir: linked-archive # Relative subdirectory; use a distinct path for each job and its resume state
+    max_posts: 1 # Maximum archive groups; 0 processes the full window; use 0 for incremental jobs
+    link_options: # Linked-resource resolution settings; used only with follow_links
+      scan_comments: true # Search linked discussion comments for resource links; default true
+      include_previews: true # Also download main-post preview media; default true
+      cleanup_bot_messages: true # Delete this run's bot requests and collected replies after processing; default true
+      max_depth: 8 # Maximum link traversal depth; default 8, maximum 32
+      max_links: 100 # Maximum links resolved per main post; default 100, maximum 1000
+      bot_timeout_seconds: 60 # Maximum wait per bot request in seconds; must exceed idle time
+      bot_idle_seconds: 3 # Stop collecting after this many idle seconds following a reply
+      bot_request_interval_seconds: 0 # Seconds since the same bot's last reply before next request; 0 disables
+      poll_interval_ms: 500 # Bot reply polling interval in milliseconds; default 500
+      max_bot_messages: 500 # Maximum replies collected per bot request; default 500
+      max_topic_messages: 1000 # Maximum messages scanned per linked topic; default 1000
+      comment_limit: 100 # Maximum comments scanned per main post; default 100
+      rerequest_limit: 3 # Retries for expired/deleted resource files; default 3; 0 disables
+      flood_retries: 5 # Retries for bot text flood limits; default 5; 0 disables
+      flood_wait_seconds: 30 # Fallback wait when no flood duration is supplied, in seconds; default 30
+      max_flood_wait_seconds: 3600 # Maximum accepted bot text flood wait in seconds; default 3600

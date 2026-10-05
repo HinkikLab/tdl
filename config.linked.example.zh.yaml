@@ -1,0 +1,31 @@
+# 独立链接资源归档示例；使用前替换示例频道。
+# 先运行 `tdl batch -c config.linked.example.zh.yaml --check-only` 检查计划。
+namespace: default # 账号命名空间；显式 -n/--ns 优先
+download_base: downloads # 下载根目录；相对路径以命令执行目录为基准
+write_metadata: true # 输出归档 meta.json；任务设置覆盖全局默认值
+pool: 16 # 连接池大小；0 不限制；命令行参数优先
+threads: 8 # 单文件下载线程数；须大于 0；命令行参数优先
+limit: 4 # 同时下载的文件数；须大于 0；命令行参数优先
+jobs: # 按顺序执行任务；仅保留需要的示例
+  # 归档一个主帖，包括其评论中链接的资源。
+  - chat_url: https://t.me/example_channel # 来源群组或帖子链接；链接归档填写主帖来源
+    follow_links: true # 解析主帖或评论中的链接，经机器人和群组获取资源
+    subdir: linked-archive # 相对子目录；每个任务使用独立路径保存文件和续传状态
+    max_posts: 1 # 归档帖子组上限；0 处理完整窗口；增量任务应填 0
+    link_options: # 链接资源解析设置；仅在 follow_links 开启时使用
+      scan_comments: true # 在关联讨论组评论中查找资源链接；默认 true
+      include_previews: true # 同时下载主帖预览媒体；默认 true
+      cleanup_bot_messages: true # 处理后删除本次机器人请求及收集到的回复；默认 true
+      max_depth: 8 # 链接递归深度上限；默认 8，最大 32
+      max_links: 100 # 每个主帖最多解析的链接数；默认 100，最大 1000
+      bot_timeout_seconds: 60 # 每次机器人请求的最长等待秒数；须大于空闲等待时间
+      bot_idle_seconds: 3 # 收到回复后连续空闲此秒数则结束收集
+      bot_request_interval_seconds: 0 # 同一机器人最后回复到下次请求的间隔秒数；0 不限制
+      poll_interval_ms: 500 # 机器人回复轮询间隔，单位毫秒；默认 500
+      max_bot_messages: 500 # 每次机器人请求最多收集的回复条数；默认 500
+      max_topic_messages: 1000 # 每个链接话题最多扫描的消息条数；默认 1000
+      comment_limit: 100 # 每个主帖最多扫描的评论条数；默认 100
+      rerequest_limit: 3 # 资源文件失效或删除后的重新请求次数；默认 3；0 禁用
+      flood_retries: 5 # 机器人文本请求限流重试次数；默认 5；0 禁用
+      flood_wait_seconds: 30 # 限流未提供等待时长时的回退秒数；默认 30
+      max_flood_wait_seconds: 3600 # 允许的机器人文本限流等待秒数上限；默认 3600

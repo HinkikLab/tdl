@@ -73,7 +73,7 @@ func New() *cobra.Command {
 		SilenceErrors: true,
 		SilenceUsage:  true,
 		// A bare `tdl` (no subcommand, no argument) starts the batch mode when
-		// the working directory holds a valid config.json and the account is
+		// the working directory holds a valid batch config and the account is
 		// logged in. Otherwise the usual help is printed.
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(args) > 0 || os.Getenv(batchDisableEnv) != "" {

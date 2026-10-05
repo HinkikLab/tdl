@@ -8,12 +8,29 @@ import (
 	"strings"
 )
 
-//go:embed config.example.json
+//go:embed config.example.yaml
 var exampleConfig string
+
+//go:embed config.example.zh.yaml
+var exampleConfigZH string
 
 // WriteExampleConfig writes the annotated, multi-mode batch examples without
 // loading an account or contacting Telegram. Existing files require overwrite.
 func WriteExampleConfig(path string, overwrite bool) error {
+	return WriteExampleConfigLanguage(path, overwrite, "auto")
+}
+
+// WriteExampleConfigLanguage selects Chinese or English comments, leaving the
+// configuration values identical. Language may be auto, zh or en.
+func WriteExampleConfigLanguage(path string, overwrite bool, language string) error {
+	language, err := ResolveExampleLanguage(language)
+	if err != nil {
+		return err
+	}
+	content := exampleConfig
+	if language == "zh" {
+		content = exampleConfigZH
+	}
 	if strings.TrimSpace(path) == "" {
 		return fmt.Errorf("config path must not be empty")
 	}
@@ -28,7 +45,7 @@ func WriteExampleConfig(path string, overwrite bool) error {
 		if err != nil {
 			return fmt.Errorf("create config %s: %w", path, err)
 		}
-		_, writeErr := f.WriteString(exampleConfig)
+		_, writeErr := f.WriteString(content)
 		closeErr := f.Close()
 		if writeErr != nil || closeErr != nil {
 			_ = os.Remove(path)
@@ -48,7 +65,7 @@ func WriteExampleConfig(path string, overwrite bool) error {
 	tmp := f.Name()
 	defer os.Remove(tmp)
 	if err = f.Chmod(0o644); err == nil {
-		_, err = f.WriteString(exampleConfig)
+		_, err = f.WriteString(content)
 	}
 	closeErr := f.Close()
 	if err != nil {

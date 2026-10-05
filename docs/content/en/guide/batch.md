@@ -5,15 +5,16 @@ weight: 35
 
 # Batch download
 
-`tdl batch` is a native port of the `python/run_unified.py` helper. It reads the
-**same base `config.json` fields** and adds caption-tag and linked-resource
-archives. Direct messages, comments, incremental jobs and archives share one
-Telegram client and connection pool, with resumable file downloads.
+`tdl batch` is a native port of the `python/run_unified.py` helper. It keeps the
+same configuration fields, uses YAML by default and accepts existing JSON
+configs. It adds caption-tag and linked-resource archives. Direct messages,
+comments, incremental jobs and archives share one Telegram client and connection
+pool, with resumable file downloads.
 
 ## Quick start
 
 For an offline check of configuration, effective options and state-path
-ownership, run `tdl batch -c config.json --validate-only`. It does not open
+ownership, run `tdl batch -c config.yaml --validate-only`. It does not open
 account storage.
 
 1. Generate an annotated configuration without logging in or connecting to Telegram:
@@ -28,11 +29,11 @@ tdl batch init
 3. Preview the plan, then download:
 
 {{< command >}}
-tdl batch -c config.json --check-only
-tdl batch -c config.json
+tdl batch -c config.yaml --check-only
+tdl batch -c config.yaml
 {{< /command >}}
 
-When the working directory holds a valid `config.json` **and** you are logged in
+When the working directory holds a valid batch config **and** you are logged in
 (`tdl login`), running bare `tdl` starts the batch mode automatically:
 
 {{< command >}}
@@ -48,24 +49,34 @@ output instead.
 
 {{< command >}}
 tdl batch init
-tdl batch init -c examples/config.json
-tdl batch init -c config.json --force
+tdl batch init --lang en
+tdl batch init --lang zh
+tdl batch init -c examples/config.yaml
+tdl batch init -c config.yaml --force
 {{< /command >}}
 
-The default destination is `config.json` in the working directory. `-c/--config`
+The default destination is `config.yaml` in the working directory. `-c/--config`
 selects another output path, and missing parent directories are created.
 Existing files are preserved unless `--force` explicitly allows replacement.
 Generation only writes the configuration; it does not initialize account
 storage, contact bots or execute any jobs.
 
-The output is standard UTF-8 JSON. Extra **`_comment`** fields contain notes
-and are ignored by the parser. **`comment` selects comment mode and must not
-be used for descriptive text.** Do not add `//` comments or trailing commas.
-The parser also accepts YAML. Without `-c`, batch searches for `config.json`,
-`config.yaml`, then `config.yml`. Relative paths are based on the **working
+Comments default to the language detected from `LC_ALL`, `LC_MESSAGES`,
+`LANGUAGE`, then `LANG` (first nonempty variable wins). If none is set, Windows
+uses its display language. Chinese locales select Simplified Chinese comments;
+other or unavailable locales use English. `LANGUAGE` also accepts a colon-separated
+preference list; its first supported language wins. Use `--lang zh` or `--lang en`
+to override detection; `--lang auto` is the default.
+
+The output is UTF-8 YAML with job explanations and a separate inline `#` comment
+after every option. **`comment` selects comment mode and must not be used for descriptive
+text.** Existing JSON files remain readable with `-c old-config.json`, including
+legacy `_comment` fields. Without `-c`, batch searches for `config.yaml`,
+`config.yml`, then `config.json`. Relative paths are based on the **working
 directory**, including when the configuration lives elsewhere.
 
-The embedded template at `pkg/autodl/config.example.json` includes 11 jobs.
+The embedded templates `pkg/autodl/config.example.yaml` (English) and
+`pkg/autodl/config.example.zh.yaml` (Chinese) contain identical settings and 11 jobs.
 Each uses its own `subdir` to keep message-level resume state separate:
 
 | Example | Purpose | Main settings |
@@ -117,29 +128,23 @@ The base fields remain compatible with the Python script. Tag and linked
 archives are native batch extensions. This minimal direct job downloads
 messages 100 through 109:
 
-```json
-{
-  "namespace": "default",
-  "download_base": "downloads",
-  "incremental": false,
-  "jobs": [
-    {
-      "_comment": "Download messages 100 through 109 directly",
-      "chat_url": "https://t.me/example_channel/100",
-      "comment": false,
-      "start_comment": 100,
-      "end_comment": 110,
-      "subdir": "direct"
-    }
-  ]
-}
+```yaml
+download_base: downloads
+incremental: false
+jobs:
+  # Download messages 100 through 109 directly.
+  - chat_url: https://t.me/example_channel/100
+    comment: false
+    start_comment: 100
+    end_comment: 110
+    subdir: direct
+namespace: default
 ```
 
 ### Top level fields
 
 | Field | Type / default | Description |
 | --- | --- | --- |
-| `_comment` | Optional string/array | Documentation only; ignored |
 | `namespace` | String, `default` | Account namespace; explicit `-n/--ns` takes precedence |
 | `download_base` | String, `downloads` | Download root; `-d` overrides it while preserving job subdirectories |
 | `download_dir` | Optional string | Legacy alias; nonempty `download_base` wins |
@@ -156,7 +161,6 @@ messages 100 through 109:
 
 | Field | Description |
 | --- | --- |
-| `_comment` | Documentation only; ignored |
 | `chat_url` | Required. Public home/post, private home `https://t.me/c/1234567890/` and post links, comment links, links without a scheme and `/s/` preview links are accepted; the account must have access |
 | `chat` | Optional source confirmation for ordinary message jobs: username, numeric ID or Telegram URL. It must resolve to the same effective channel/discussion as `chat_url`; conflicts fail before scanning, downloading or writing completion state. Archives use `chat_url` |
 | `subdir` | Relative job directory under `download_base`; absolute paths and escaping `..` paths are rejected; use distinct directories for distinct jobs |
@@ -205,23 +209,17 @@ create `message.txt` or `message.json`. Set `write_metadata` to `false` at the
 top level to disable this output for all archive jobs, or inside a job to
 override the global value:
 
-```json
-{
-  "write_metadata": false,
-  "jobs": [
-    {
-      "chat_url": "https://t.me/example_channel",
-      "tags": ["#tutorial"],
-      "subdir": "media-only"
-    },
-    {
-      "chat_url": "https://t.me/example_channel/100",
-      "follow_links": true,
-      "write_metadata": true,
-      "subdir": "with-metadata"
-    }
-  ]
-}
+```yaml
+jobs:
+  - chat_url: https://t.me/example_channel
+    subdir: media-only
+    tags:
+      - '#tutorial'
+  - chat_url: https://t.me/example_channel/100
+    follow_links: true
+    subdir: with-metadata
+    write_metadata: true
+write_metadata: false
 ```
 
 Disabling visible metadata still validates completed media and resumes partial
@@ -239,14 +237,12 @@ The standalone tag command supports `--write-metadata=false` as well.
 To download message 100 alone, set `comment: false`, `start_comment: 100`
 and `end_comment: 101`. A comment range looks like this:
 
-```json
-{
-  "chat_url": "https://t.me/example_channel/100",
-  "comment": true,
-  "start_comment": 900,
-  "end_comment": 910,
-  "subdir": "comments"
-}
+```yaml
+chat_url: https://t.me/example_channel/100
+comment: true
+end_comment: 910
+start_comment: 900
+subdir: comments
 ```
 
 100 is the main post ID; 900–909 are discussion group message IDs. The comment
@@ -258,34 +254,31 @@ Use the incremental `reply_post_id` example to scan replies to one root.
 
 For a tag job, `chat_url` is a chat home or forum topic URL; no message range is needed:
 
-```json
-{
-  "namespace": "default",
-  "download_base": "downloads",
-  "jobs": [
-    {
-      "chat_url": "https://t.me/example_channel",
-      "tags": ["#tutorial", "#example"],
-      "tag_match": "any",
-      "max_posts": 1,
-      "subdir": "tags"
-    }
-  ]
-}
+```yaml
+download_base: downloads
+jobs:
+  - chat_url: https://t.me/example_channel
+    max_posts: 1
+    subdir: tags
+    tag_match: any
+    tags:
+      - '#tutorial'
+      - '#example'
+namespace: default
 ```
 
 Use `https://t.me/c/2255983776/` for a whole private numeric group, or
 `https://t.me/c/2255983776/41872/` for topic 41872 only. A message link inside
 that topic (`https://t.me/c/2255983776/41872/42000`) also selects the topic.
-Alternatively, combine a home URL with `"topic_id": 41872`. Public topic
+Alternatively, combine a home URL with `topic_id: 41872`. Public topic
 paths and `?thread=41872` use the same rules. Telegram must confirm the topic
 exists and is accessible before scanning; ordinary messages, deleted topics
 and inaccessible topics never fall back to scanning the whole chat. The CLI
 also accepts `tdl chat download-tag --chat <topic-link> --tag <tag>`, or a
 home URL with `--topic 41872`.
 
-Run `tdl batch -c config.json --check-only` to count matches, then
-`tdl batch -c config.json -y` to download. Each matching Telegram album or
+Run `tdl batch -c config.yaml --check-only` to count matches, then
+`tdl batch -c config.yaml -y` to download. Each matching Telegram album or
 individual media post goes into `downloads/tags/<chat-id>/<matched-tag> <caption> [id]/` with
 its photos/videos and, by default, `meta.json` containing IDs, original captions
 and the source link. The directory name removes every hashtag and
@@ -318,30 +311,27 @@ or one post. A home URL scans all history unless `max_posts` is set. Optional
 `start_comment` / `end_comment` select an inclusive/exclusive **main-post ID**
 range and preserve any matching album in full; `comment: true` is not used.
 
-```json
-{
-  "namespace": "default",
-  "download_base": "downloads",
-  "jobs": [{
-    "chat_url": "https://t.me/example_channel",
-    "follow_links": true,
-    "subdir": "resources",
-    "max_posts": 1,
-    "link_options": {
-      "cleanup_bot_messages": true,
-      "scan_comments": true,
-      "max_depth": 8,
-      "rerequest_limit": 3,
-      "flood_retries": 5,
-      "flood_wait_seconds": 30
-    }
-  }]
-}
+```yaml
+download_base: downloads
+jobs:
+  - chat_url: https://t.me/example_channel
+    follow_links: true
+    link_options:
+      cleanup_bot_messages: true
+      flood_retries: 5
+      flood_wait_seconds: 30
+      max_depth: 8
+      rerequest_limit: 3
+      scan_comments: true
+    max_posts: 1
+    subdir: resources
+namespace: default
 ```
 
 Example 09 from `tdl batch init` contains every setting. The repository root
-also contains the single-mode `config.linked.example.json`.
-`tdl batch -c config.json --check-only` discovers main-post and comment entry
+also contains the single-mode `config.linked.example.yaml` (English) and
+`config.linked.example.zh.yaml` (Chinese).
+`tdl batch -c config.yaml --check-only` discovers main-post and comment entry
 links without requesting bots, downloading, writing archives or deleting
 messages. It does not verify the chain beyond those entry links.
 
@@ -455,21 +445,19 @@ targets again so restored resources can recover.
 
 Both tag and linked archives accept source message ranges:
 
-```json
-{
-  "jobs": [{
-    "chat_url": "https://t.me/example_channel",
-    "tags": ["#notes"],
-    "start_comment": 100,
-    "end_comment": 110,
-    "subdir": "tag-range"
-  }]
-}
+```yaml
+jobs:
+  - chat_url: https://t.me/example_channel
+    end_comment: 110
+    start_comment: 100
+    subdir: tag-range
+    tags:
+      - '#notes'
 ```
 
-Add `"follow_links": true` to resolve linked resources. IDs belong to the source
+Add `follow_links: true` to resolve linked resources. IDs belong to the source
 chat, not a resource group or bot. Selecting any album member preserves the full
-album, including members outside the boundaries. With `"incremental": true`,
+album, including members outside the boundaries. With `incremental: true`,
 ID fields are ignored; `last_ts` and overlap seconds select the source window.
 The first run scans full history. Only a complete successful window advances
 `last_ts`; failure, cancellation, the 100000-message scan limit or a `max_posts`
@@ -504,7 +492,7 @@ Use `tdl batch init` to generate examples. The following flags execute batch job
 | `--delay` | File-start interval across all batch families, e.g. `1s`, default 0; waits honor cancellation and bot text backoff keeps its separate settings |
 
 {{< command >}}
-tdl batch -c config.json -y --check-only
+tdl batch -c config.yaml -y --check-only
 tdl batch --incremental --overlap-seconds 7200
 tdl batch -d /path/to/downloads -i mp4,jpg
 tdl batch --batch-threads 8 --batch-limit 4 --batch-pool 16
@@ -522,7 +510,7 @@ configuration without an account.
 {{< hint info >}}
 `--batch-threads` / `--batch-limit` / `--batch-pool` win over the global
 `-t` / `-l` / `--pool`, which in turn win over `threads` / `limit` / `pool` in
-`config.json`. The final fallback is `8` / `4` / `16`, the same values the
+`config.yaml`. The final fallback is `8` / `4` / `16`, the same values the
 python script used.
 {{< /hint >}}
 
@@ -611,27 +599,23 @@ ID range fields do not limit an incremental job.
 
 A forum-topic job:
 
-```json
-{
-  "chat_url": "https://t.me/example_forum",
-  "incremental": true,
-  "topic_id": 200,
-  "subdir": "topic-200"
-}
+```yaml
+chat_url: https://t.me/example_forum
+incremental: true
+subdir: topic-200
+topic_id: 200
 ```
 
 Replies to one channel post:
 
-```json
-{
-  "chat_url": "https://t.me/example_channel/100",
-  "chat": "https://t.me/example_discussion",
-  "comment": true,
-  "incremental": true,
-  "reply_post_id": 900,
-  "with_content": true,
-  "subdir": "post-100-comments"
-}
+```yaml
+chat: https://t.me/example_discussion
+chat_url: https://t.me/example_channel/100
+comment: true
+incremental: true
+reply_post_id: 900
+subdir: post-100-comments
+with_content: true
 ```
 
 900 must be the forwarded root ID in the linked discussion group. If

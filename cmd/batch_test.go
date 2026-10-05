@@ -25,7 +25,8 @@ func TestBatchOptionsPreserveExplicitUnlimitedPool(t *testing.T) {
 }
 
 func TestBatchInitCommand(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "examples with spaces", "config.json")
+	t.Setenv("LC_ALL", "en_US.UTF-8")
+	path := filepath.Join(t.TempDir(), "examples with spaces", "config.yaml")
 	run := func(args ...string) (string, error) {
 		cmd := NewBatch()
 		var out bytes.Buffer
@@ -37,7 +38,7 @@ func TestBatchInitCommand(t *testing.T) {
 	}
 	out, err := run("init", "-c", path)
 	require.NoError(t, err)
-	require.Contains(t, out, "11 example jobs")
+	require.Contains(t, out, "11 example jobs, English comments")
 	require.Contains(t, out, "--check-only")
 	cfg, err := autodl.LoadConfig(path)
 	require.NoError(t, err)
@@ -49,10 +50,19 @@ func TestBatchInitCommand(t *testing.T) {
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, "keep", string(b))
-	_, err = run("init", "-c", path, "--force")
+	out, err = run("init", "-c", path, "--force", "--lang", "zh")
 	require.NoError(t, err)
+	require.Contains(t, out, "中文注释")
+	b, err = os.ReadFile(path)
+	require.NoError(t, err)
+	require.Contains(t, string(b), "# 01. 直接下载")
 	_, err = autodl.LoadConfig(path)
 	require.NoError(t, err)
+	_, err = run("init", "-c", path, "--force", "--lang", "invalid")
+	require.ErrorContains(t, err, "use auto, zh or en")
+	after, err := os.ReadFile(path)
+	require.NoError(t, err)
+	require.Equal(t, b, after)
 }
 
 func TestBatchPoolOverridesGlobalUnlimitedPool(t *testing.T) {

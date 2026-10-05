@@ -1,9 +1,9 @@
 // Package autodl implements the batch download mode of tdl.
 //
 // It is a native port of the python/run_unified.py helper script, so it reads
-// the very same config.json. Instead of shelling out to one tdl process per
-// batch it drives tdl's own downloader, which means one connection pool, one
-// Telegram client and batched message resolution for the whole run.
+// the same configuration fields as the Python JSON config. Instead of shelling
+// out to one tdl process per batch it drives tdl's own downloader, which means
+// one connection pool, one Telegram client and batched message resolution.
 package autodl
 
 import (
@@ -26,7 +26,7 @@ import (
 const (
 	// DefaultConfigFile is the config name looked up in the working directory
 	// when no explicit config is given.
-	DefaultConfigFile = "config.json"
+	DefaultConfigFile = "config.yaml"
 	// DefaultDownloadBase is the download root used when the config does not
 	// set one.
 	DefaultDownloadBase = "downloads"
@@ -52,7 +52,7 @@ const (
 	MaxRangeMessages = 1_000_000
 )
 
-// Config is the python-compatible config.json.
+// Config is compatible with the Python batch configuration fields.
 //
 // Only "jobs" is required. Unknown fields are ignored for compatibility with
 // config generators that also store settings used by other tools.
@@ -138,8 +138,8 @@ func (j *Job) Dir() string { return j.dir }
 
 // LoadConfig reads and normalizes a config file.
 //
-// If the file has no .json suffix, a YAML file is read instead. YAML is a
-// superset of JSON, so this only widens what is accepted.
+// YAML is a superset of JSON, so both YAML and legacy JSON config files are
+// accepted regardless of their filename extension.
 func LoadConfig(path string) (*Config, error) {
 	return loadConfig(path, false)
 }
@@ -489,7 +489,7 @@ func ParseLink(raw string) (Link, error) {
 // FindConfig returns the first existing config candidate in the working
 // directory.
 func FindConfig() (string, bool) {
-	candidates := []string{DefaultConfigFile, "config.yaml", "config.yml"}
+	candidates := []string{DefaultConfigFile, "config.yml", "config.json"}
 	for _, c := range candidates {
 		if st, err := os.Stat(c); err == nil && !st.IsDir() {
 			return c, true

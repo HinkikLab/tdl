@@ -48,7 +48,7 @@ type batchFlags struct {
 // options turns the parsed flags into autodl options.
 //
 // --batch-* wins over the global -l/-t/--pool, which in turn wins over the
-// performance keys of config.json.
+// performance keys of config.yaml (legacy JSON configs are also accepted).
 func (f *batchFlags) options(global *cobra.Command) autodl.Options {
 	globalPool, globalPoolSet := changedIntValue(global, consts.FlagPoolSize)
 	poolSize, poolSizeSet := globalPool, globalPoolSet
@@ -142,8 +142,8 @@ func pickInt(values ...int) int {
 
 // NewBatch builds the `tdl batch` command.
 //
-// It is a native port of python/run_unified.py: it reads the same config.json
-// and supports the same modes and resume semantics, but it drives tdl's own
+// It is a native port of python/run_unified.py: it reads the same config fields
+// and supports the same modes and resume semantics, but drives tdl's own
 // downloader instead of spawning a tdl process per batch.
 func NewBatch() *cobra.Command {
 	f := &batchFlags{}
@@ -152,10 +152,11 @@ func NewBatch() *cobra.Command {
 		Use:   "batch",
 		Short: "Batch download messages, comments, caption tags or linked resources",
 		Long: `Batch download Telegram messages, comments, caption-tag archives or
-linked resources described by config.json. Run "tdl batch init" to generate
+linked resources described by config.yaml. Run "tdl batch init" to generate
 annotated examples of all modes, compatible with the native batch parser.
 
-Without --config, config.json in the working directory is used. Running bare
+Without --config, config.yaml is preferred in the working directory, followed
+by config.yml and the legacy config.json. Running bare
 ` + "`tdl`" + ` (without any argument) starts this command automatically when such a
 config exists and the account is logged in.
 
@@ -227,7 +228,7 @@ Partial downloads keep their parts so only missing parts are fetched again.`,
 		},
 	}
 
-	cmd.Flags().StringVarP(&f.config, "config", "c", "", "config file path (default: config.json in the working directory)")
+	cmd.Flags().StringVarP(&f.config, "config", "c", "", "config file path (default: config.yaml; legacy JSON is accepted)")
 	cmd.Flags().BoolVar(&f.checkOnly, "check-only", false, "only check and report what would be downloaded")
 	cmd.Flags().BoolVar(&f.validateOnly, "validate-only", false, "validate the configuration and options offline without opening account storage")
 	cmd.Flags().BoolVarP(&f.yes, "yes", "y", false, "answer yes to every confirmation")

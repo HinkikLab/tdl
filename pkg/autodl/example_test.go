@@ -1,36 +1,29 @@
 package autodl
 
 import (
-	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"gopkg.in/yaml.v3"
 )
 
 func TestExampleConfigCoversBatchModes(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "nested", "config.json")
-	require.NoError(t, WriteExampleConfig(path, false))
+	path := filepath.Join(t.TempDir(), "nested", "config.yaml")
+	require.NoError(t, WriteExampleConfigLanguage(path, false, "en"))
 	b, err := os.ReadFile(path)
 	require.NoError(t, err)
-	require.True(t, json.Valid(b), "examples must be strict JSON, including their annotations")
+	require.Contains(t, string(b), "# 01. Direct channel/group messages")
+	require.NotRegexp(t, `(?m)^\s*_comment:`, string(b))
 	cfg, err := LoadConfig(path)
 	require.NoError(t, err, "every generated job must pass the real batch parser")
 	require.Len(t, cfg.Jobs, 11)
 
-	var raw struct {
-		Comment []string `json:"_comment"`
-		Jobs    []struct {
-			Comment string `json:"_comment"`
-		} `json:"jobs"`
-	}
-	require.NoError(t, json.Unmarshal(b, &raw))
-	require.NotEmpty(t, raw.Comment)
 	seen := map[string]bool{}
-	for i, job := range cfg.Jobs {
-		require.NotEmpty(t, raw.Jobs[i].Comment)
+	for _, job := range cfg.Jobs {
 		require.NotEmpty(t, job.Subdir)
 		require.False(t, seen[job.Subdir], "jobs must not collide in resume state")
 		seen[job.Subdir] = true
@@ -68,7 +61,7 @@ func TestExampleConfigCoversBatchModes(t *testing.T) {
 }
 
 func TestWriteExampleConfigPreservesExistingFile(t *testing.T) {
-	path := filepath.Join(t.TempDir(), "config.json")
+	path := filepath.Join(t.TempDir(), "config.yaml")
 	original := []byte("user configuration\n")
 	require.NoError(t, os.WriteFile(path, original, 0o644))
 	require.ErrorContains(t, WriteExampleConfig(path, false), "--force")
@@ -104,19 +97,75 @@ func TestBatchDocumentationConfigs(t *testing.T) {
 		t.Run(language, func(t *testing.T) {
 			b, err := os.ReadFile(filepath.Join("..", "..", "docs", "content", language, "guide", "batch.md"))
 			require.NoError(t, err)
-			blocks := regexp.MustCompile("(?s)```json\\r?\\n(.*?)```").FindAllSubmatch(b, -1)
+			blocks := regexp.MustCompile("(?s)```yaml\\r?\\n(.*?)```").FindAllSubmatch(b, -1)
 			require.NotEmpty(t, blocks)
 			for _, block := range blocks {
 				var value map[string]any
-				require.NoError(t, json.Unmarshal(block[1], &value))
+				require.NoError(t, yaml.Unmarshal(block[1], &value))
+				data := block[1]
 				if _, config := value["jobs"]; !config {
-					continue
+					// A standalone job must pass the same parser as a full config.
+					data, err = yaml.Marshal(map[string]any{"jobs": []any{value}})
+					require.NoError(t, err)
 				}
-				path := filepath.Join(t.TempDir(), "config.json")
-				require.NoError(t, os.WriteFile(path, block[1], 0o600))
+				path := filepath.Join(t.TempDir(), "config.yaml")
+				require.NoError(t, os.WriteFile(path, data, 0o600))
 				_, err := LoadConfig(path)
 				require.NoError(t, err, string(block[1]))
 			}
 		})
+	}
+}
+
+func TestExampleLanguagesPreserveValuesAndExplainEveryOption(t *testing.T) {
+	var english any
+	for _, language := range []string{"en", "zh"} {
+		path := filepath.Join(t.TempDir(), "config.yaml")
+		require.NoError(t, WriteExampleConfigLanguage(path, false, language))
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		var value any
+		require.NoError(t, yaml.Unmarshal(data, &value))
+		if language == "en" {
+			english = value
+		} else {
+			require.Equal(t, english, value, "language changes must not change execution")
+			require.Contains(t, string(data), "# 01. 直接下载")
+		}
+		cfg, err := LoadConfig(path)
+		require.NoError(t, err)
+		require.Len(t, cfg.Jobs, 11)
+		assertExampleInlineComments(t, data)
+	}
+}
+
+func assertExampleInlineComments(t *testing.T, data []byte) {
+	t.Helper()
+	option := regexp.MustCompile(`^\s*(?:- )?[a-z_]+:`)
+	for _, line := range strings.Split(string(data), "\n") {
+		if option.MatchString(line) {
+			require.Contains(t, line, " # ", "each option needs an inline explanation")
+		}
+	}
+}
+
+func TestLinkedExampleLanguages(t *testing.T) {
+	var english any
+	for _, name := range []string{"config.linked.example.yaml", "config.linked.example.zh.yaml"} {
+		path := filepath.Join("..", "..", name)
+		cfg, err := LoadConfig(path)
+		require.NoError(t, err)
+		require.Len(t, cfg.Jobs, 1)
+		require.True(t, cfg.Jobs[0].FollowLinks)
+		data, err := os.ReadFile(path)
+		require.NoError(t, err)
+		assertExampleInlineComments(t, data)
+		var value any
+		require.NoError(t, yaml.Unmarshal(data, &value))
+		if english == nil {
+			english = value
+		} else {
+			require.Equal(t, english, value)
+		}
 	}
 }

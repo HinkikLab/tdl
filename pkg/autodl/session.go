@@ -34,7 +34,7 @@ func LoggedIn(ctx context.Context, kv storage.Storage) bool {
 // mode by itself.
 //
 // It returns the config path and the namespace it selected when the working
-// directory holds a valid config.json and that namespace is logged in. Any
+// directory holds a valid batch config and that namespace is logged in. Any
 // other outcome means the caller should fall back to the regular behaviour
 // (printing help).
 func AutoStart(ctx context.Context, engine kv.Storage, namespace string) (string, string, error) {

@@ -11,6 +11,28 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestFindConfigPrefersYAMLWithLegacyFallback(t *testing.T) {
+	t.Chdir(t.TempDir())
+	for _, name := range []string{"config.json", "config.yml", "config.yaml"} {
+		require.NoError(t, os.WriteFile(name, []byte("{}"), 0o600))
+	}
+	for _, name := range []string{"config.yaml", "config.yml", "config.json"} {
+		path, found := FindConfig()
+		require.True(t, found)
+		require.Equal(t, name, path)
+		require.NoError(t, os.Remove(name))
+	}
+	// A directory with a candidate's name must not hide a legacy config file.
+	require.NoError(t, os.Mkdir("config.yaml", 0o700))
+	require.NoError(t, os.WriteFile("config.json", []byte("{}"), 0o600))
+	path, found := FindConfig()
+	require.True(t, found)
+	require.Equal(t, "config.json", path)
+	require.NoError(t, os.Remove("config.json"))
+	_, found = FindConfig()
+	require.False(t, found)
+}
+
 func TestArchiveMetadataConfigPrecedence(t *testing.T) {
 	for _, tc := range []struct {
 		name, global, job string

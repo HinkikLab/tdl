@@ -222,6 +222,7 @@ type linkHop struct {
 	URL        string `json:"url"`
 	Depth      int    `json:"depth"`
 	MessageIDs []int  `json:"message_ids"`
+	Skipped    string `json:"skipped,omitempty"`
 }
 
 type linkResolver struct {
@@ -236,34 +237,52 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 	}
 	var files []linkedResource
 	var hops []linkHop
+	var deadEnds error
 	done, active, mediaSeen := map[string]bool{}, map[string]bool{}, map[string]bool{}
+	// A bot response can contain both resources and unrelated promotion links.
+	// Explore every branch, retaining media from every hop. A dead end must not
+	// discard earlier media or prevent a later sibling from supplying files.
+	stop := func(hop linkHop, err error) error {
+		hop.Skipped = err.Error()
+		hops = append(hops, hop)
+		deadEnds = multierr.Append(deadEnds, err)
+		return nil
+	}
 	var walk func(resourceLink, int) error
 	walk = func(l resourceLink, depth int) error {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if err := r.unavailable.lookup(l); err != nil {
-			return err
-		}
+		hop := linkHop{URL: l.URL(), Depth: depth}
 		if active[l.key()] {
-			return fmt.Errorf("resource link cycle at %s", l.URL())
+			return stop(hop, fmt.Errorf("resource link cycle at %s", l.URL()))
 		}
 		if done[l.key()] {
 			return nil
 		}
 		if depth > r.opts.MaxDepth {
-			return fmt.Errorf("resource link depth exceeds %d", r.opts.MaxDepth)
+			return stop(hop, fmt.Errorf("resource link depth exceeds %d", r.opts.MaxDepth))
 		}
 		if len(done) >= r.opts.MaxLinks {
-			return fmt.Errorf("resource link count exceeds %d", r.opts.MaxLinks)
+			return stop(hop, fmt.Errorf("resource link count exceeds %d", r.opts.MaxLinks))
 		}
 		done[l.key()], active[l.key()] = true, true
 		defer delete(active, l.key())
-		msgs, err := r.backend.Fetch(ctx, l)
-		if err != nil {
-			return fmt.Errorf("resolve %s: %w", l.URL(), r.unavailable.remember(l, err))
+		if err := r.unavailable.lookup(l); err != nil {
+			return stop(hop, err)
 		}
-		hop := linkHop{URL: l.URL(), Depth: depth}
+		msgs, err := r.backend.Fetch(ctx, l)
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		if err != nil {
+			err = fmt.Errorf("resolve %s: %w", l.URL(), r.unavailable.remember(l, err))
+			var noReplies *botNoResourceError
+			if isUnavailableResource(err) || errors.As(err, &noReplies) {
+				return stop(hop, err)
+			}
+			return err
+		}
 		var next []resourceLink
 		usable := false
 		for _, m := range msgs {
@@ -289,10 +308,10 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 				}
 			}
 		}
-		hops = append(hops, hop)
 		if !usable && len(next) == 0 {
-			return fmt.Errorf("%s returned no files or resource links", l.URL())
+			return stop(hop, fmt.Errorf("%s returned no files or resource links", l.URL()))
 		}
+		hops = append(hops, hop)
 		for _, n := range next {
 			if err := walk(n, depth+1); err != nil {
 				return err
@@ -305,8 +324,19 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 			return files, hops, err
 		}
 	}
+	if err := ctx.Err(); err != nil {
+		return files, hops, err
+	}
 	if len(files) == 0 {
+		if deadEnds != nil {
+			return nil, hops, deadEnds
+		}
 		return nil, hops, fmt.Errorf("no resource files resolved")
+	}
+	for _, hop := range hops {
+		if hop.Skipped != "" {
+			fmt.Printf("Resource branch %s skipped; keeping %d resolved file(s): %s\n", hop.URL, len(files), hop.Skipped)
+		}
 	}
 	return files, hops, nil
 }
@@ -1023,9 +1053,17 @@ func botMessagesActionable(messages map[int]*tg.Message) bool {
 	return false
 }
 
+// A bot's own response deadline with no actionable replies is a dead end.
+// Keep it distinct from caller cancellation and resources that did not settle.
+type botNoResourceError struct{ err error }
+
+func (e *botNoResourceError) Error() string { return e.err.Error() }
+func (e *botNoResourceError) Unwrap() error { return e.err }
+
 func botResponseTimeout(botID int64, seconds int, messages map[int]*tg.Message) error {
 	reason := "no actionable resource received"
-	if botMessagesActionable(messages) {
+	actionable := botMessagesActionable(messages)
+	if actionable {
 		reason = "resource replies did not settle"
 	}
 	lastID := 0
@@ -1047,5 +1085,9 @@ func botResponseTimeout(botID int64, seconds int, messages map[int]*tg.Message) 
 	if summary == "" {
 		summary = "no reply content"
 	}
-	return fmt.Errorf("bot %d response did not settle within %d seconds (%d messages): %s; last reply (ID %d): %q; adjust bot_timeout_seconds/bot_idle_seconds: %w", botID, seconds, len(messages), reason, lastID, summary, context.DeadlineExceeded)
+	err := fmt.Errorf("bot %d response did not settle within %d seconds (%d messages): %s; last reply (ID %d): %q; adjust bot_timeout_seconds/bot_idle_seconds: %w", botID, seconds, len(messages), reason, lastID, summary, context.DeadlineExceeded)
+	if !actionable {
+		return &botNoResourceError{err: err}
+	}
+	return err
 }

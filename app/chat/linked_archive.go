@@ -182,14 +182,8 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 			opts.counts.PostsNoLinks++
 			return nil
 		}
-		for _, link := range links {
-			if err := opts.Unavailable.lookup(link); err != nil {
-				skipped++
-				opts.counts.PostsUnavailable++
-				fmt.Printf("Post %d skipped: %s\n", post.MessageID, err)
-				return nil
-			}
-		}
+		// The resolver skips cached dead targets per branch. A post may also
+		// contain healthy links whose files still need to be archived.
 		selected++
 		fmt.Printf("Post %d: %d resource link(s) -> %s\n", post.MessageID, len(links), post.Directory)
 		if opts.CheckOnly {

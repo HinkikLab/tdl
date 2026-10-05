@@ -349,6 +349,19 @@ Resolution handles plain URLs, hidden text URLs and inline URL buttons, bot
 start links, `tg://` links, public/private message links, comment links and whole
 resource albums. When a post has no resource link, its associated comments are
 searched. Bots may return further links to bots or group messages.
+Media from every resolved hop is retained and deduplicated by Telegram file
+identity, including intermediate bots. Empty promotion links or URL buttons
+do not prevent other branches from being resolved. Once any resource is found,
+branches with no files or onward links (including bot response timeouts),
+unavailable targets, cycles and depth/link-count limits are skipped. Logs and
+`meta.json` entries in `hops[].skipped` record the reasons. An eight-hop chain
+with media at three hops downloads the resources from all three.
+Without any resources, resolution still fails or skips unavailable targets.
+Network/RPC errors, exhausted rate-limit retries, timeouts while resource replies
+have not settled, and caller cancellation remain failures. Bot names and short
+start parameters such as `1` or `ad` are not treated as promotion markers:
+promotion bots may still be requested up to the configured timeout, and any
+media they return is also retained.
 Resource links to forum-topic roots confirmed by Telegram scan the topic up to
 `max_topic_messages`, retain complete albums across pages, and resolve further
 links within the topic. Ordinary resource messages retain their single-message
@@ -429,7 +442,9 @@ identify accessible messages or confirmed topic roots. Invite links, group home 
 redirects, callback buttons, captcha and payment steps are not automatically
 executed. Unrecognized custom rate-limit text results in a response timeout.
 
-Nonexistent/deleted bots and invalid/inaccessible groups are skipped. All jobs
+Nonexistent/deleted bots and invalid/inaccessible groups are skipped per branch.
+A post with only unavailable targets is skipped; a dead entry does not prevent
+healthy entries in the same post from downloading. All jobs
 in one batch share a cache by target, independent of bot start parameters and
 group message IDs. Recursive resolution caches only the target that failed.
 Timeouts, flood waits, deleted individual messages and invalid start parameters

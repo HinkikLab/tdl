@@ -2,7 +2,9 @@ package downloader
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
+	"sort"
 	"sync"
 	"time"
 )
@@ -23,13 +25,14 @@ func PartsPath(tempPath string) string {
 // partsFile is the on-disk representation of the download progress of one
 // element.
 type partsFile struct {
-	// Version rejects journals produced by the old truncating resume path.
+	// Version 2 binds parts to media identity. Version 1 only checked size.
 	Version int `json:"version"`
 	// Parts is the total number of parts of the file.
 	Parts int `json:"parts"`
 	// Size is the size of the file the parts belong to. It is used to detect
 	// that the media changed on the server, which invalidates the parts.
-	Size int64 `json:"size"`
+	Size     int64        `json:"size"`
+	Identity FileIdentity `json:"identity"`
 	// Done holds the indexes of the parts that are fully written to disk.
 	Done []int `json:"done"`
 }
@@ -38,8 +41,12 @@ type partsFile struct {
 //
 // All methods are safe for concurrent use.
 type PartsStore struct {
-	path string
-	size int64
+	path      string
+	size      int64
+	identity  FileIdentity
+	loadErr   error
+	rejection string
+	recovery  []string
 
 	mu       sync.Mutex
 	done     map[int]struct{}
@@ -49,29 +56,47 @@ type PartsStore struct {
 
 // NewPartsStore loads the parts of the file at tempPath.
 //
-// size is the current size reported by Telegram. A sidecar that does not match
-// it is ignored and removed, because the remote media changed.
-func NewPartsStore(tempPath string, size int64) *PartsStore {
+// Loading is read-only. An absent identity never authorizes byte reuse. Use
+// OpenPartialFile to preserve unverified data and begin a fresh download.
+func NewPartsStore(tempPath string, size int64, identities ...FileIdentity) *PartsStore {
 	s := &PartsStore{
-		path: PartsPath(tempPath),
-		size: size,
-		done: make(map[int]struct{}),
+		path:     PartsPath(tempPath),
+		size:     size,
+		done:     make(map[int]struct{}),
+		lastSave: time.Now(),
+	}
+	if len(identities) == 1 {
+		s.identity = identities[0]
 	}
 
 	b, err := os.ReadFile(s.path)
 	if err != nil {
+		if !os.IsNotExist(err) {
+			s.loadErr = err
+		}
 		return s
 	}
 
 	var f partsFile
-	if err = json.Unmarshal(b, &f); err != nil || f.Version != 1 || f.Size != size || f.Parts != PartsCount(size) {
-		_ = os.Remove(s.path)
+	if err = json.Unmarshal(b, &f); err != nil {
+		s.rejection = "invalid part journal"
+		return s
+	}
+	if f.Version != 2 || !s.identity.valid() || s.identity.Size != size || f.Identity != s.identity || f.Size != size || f.Parts != PartsCount(size) {
+		s.rejection = "part journal has an unverified or different file identity"
 		return s
 	}
 
 	stat, err := os.Stat(tempPath)
 	if err != nil {
-		_ = os.Remove(s.path)
+		if !os.IsNotExist(err) {
+			s.loadErr = err
+		}
+		s.rejection = "part journal has no data file"
+		return s
+	}
+	if !stat.Mode().IsRegular() {
+		s.loadErr = fmt.Errorf("partial path %q is not a regular file", tempPath)
 		return s
 	}
 	for _, i := range f.Done {
@@ -81,6 +106,14 @@ func NewPartsStore(tempPath string, size int64) *PartsStore {
 	}
 
 	return s
+}
+
+// RecoveryPaths lists previous data and journals preserved by OpenPartial.
+// Callers should report these paths so the user can inspect or remove them.
+func (s *PartsStore) RecoveryPaths() []string {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return append([]string(nil), s.recovery...)
 }
 
 // Done returns a copy of the finished part indexes.
@@ -133,7 +166,20 @@ func (s *PartsStore) Reset() {
 
 // Remove drops the sidecar, e.g. after the element finished successfully.
 func (s *PartsStore) Remove() {
-	s.Reset()
+	_ = s.RemoveChecked()
+}
+
+// RemoveChecked removes a committed file's journal and reports filesystem
+// failures. Tracking is retained on failure so the caller can retry cleanup.
+func (s *PartsStore) RemoveChecked() error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := os.Remove(s.path); err != nil && !os.IsNotExist(err) {
+		return err
+	}
+	s.done = make(map[int]struct{})
+	s.dirty = 0
+	return nil
 }
 
 // flush writes the sidecar. The caller must hold the lock.
@@ -142,14 +188,16 @@ func (s *PartsStore) flush() error {
 		return nil
 	}
 	f := partsFile{
-		Version: 1,
-		Parts:   PartsCount(s.size),
-		Size:    s.size,
-		Done:    make([]int, 0, len(s.done)),
+		Version:  2,
+		Parts:    PartsCount(s.size),
+		Size:     s.size,
+		Identity: s.identity,
+		Done:     make([]int, 0, len(s.done)),
 	}
 	for i := range s.done {
 		f.Done = append(f.Done, i)
 	}
+	sort.Ints(f.Done)
 
 	b, err := json.Marshal(f)
 	if err != nil {
@@ -170,16 +218,41 @@ func (s *PartsStore) flush() error {
 	return nil
 }
 
-// OpenPartial preserves validated completed parts, discarding stale data when
-// no usable journal exists. Never truncate before loading the journal.
-func OpenPartial(path string, size int64) (*os.File, *PartsStore, error) {
+// OpenPartial preserves validated completed parts. Old, invalid or conflicting
+// journals and their bytes are moved together to a unique .unverified path.
+// The optional identity keeps the old API source-compatible; without it no
+// previous bytes can be trusted. New callers should use OpenPartialFile.
+func OpenPartial(path string, size int64, identities ...FileIdentity) (*os.File, *PartsStore, error) {
+	if size < 0 || len(identities) > 1 {
+		return nil, nil, fmt.Errorf("invalid partial download size or identity count")
+	}
+	if len(identities) == 1 && (!identities[0].valid() || identities[0].Size != size) {
+		return nil, nil, fmt.Errorf("invalid partial file identity")
+	}
+	s := NewPartsStore(path, size, identities...)
+	if s.loadErr != nil {
+		return nil, nil, s.loadErr
+	}
+	stat, err := os.Stat(path)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, nil, err
+	}
+	if stat != nil && !stat.Mode().IsRegular() {
+		return nil, nil, fmt.Errorf("partial path %q is not a regular file", path)
+	}
+	// An orphan nonempty temp file is just as unverified as a legacy journal.
+	if s.rejection != "" || (len(s.done) == 0 && stat != nil && stat.Size() > 0) {
+		s.recovery, err = preservePartial(path)
+		if err != nil {
+			return nil, nil, err
+		}
+		s.done = make(map[int]struct{})
+	}
 	f, err := os.OpenFile(path, os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		return nil, nil, err
 	}
-	s := NewPartsStore(path, size)
 	if len(s.Done()) == 0 {
-		s.Reset()
 		err = f.Truncate(0)
 	} else {
 		err = f.Truncate(size)
@@ -189,6 +262,54 @@ func OpenPartial(path string, size int64) (*os.File, *PartsStore, error) {
 		return nil, nil, err
 	}
 	return f, s, nil
+}
+
+// preservePartial retains the original recovery pair and never overwrites an
+// earlier recovery. If moving the journal fails, restore the original data.
+func preservePartial(path string) ([]string, error) {
+	paths := []string{path, PartsPath(path)}
+	var present []bool
+	for _, p := range paths {
+		_, err := os.Stat(p)
+		if err != nil && !os.IsNotExist(err) {
+			return nil, err
+		}
+		present = append(present, err == nil)
+	}
+	for n := 0; ; n++ {
+		target := path + ".unverified"
+		if n > 0 {
+			target += fmt.Sprintf(".%d", n)
+		}
+		destinations := []string{target, PartsPath(target)}
+		available := true
+		for _, p := range destinations {
+			if _, err := os.Stat(p); err == nil {
+				available = false
+			} else if !os.IsNotExist(err) {
+				return nil, err
+			}
+		}
+		if !available {
+			continue
+		}
+		var moved []string
+		for i, p := range paths {
+			if !present[i] {
+				continue
+			}
+			if err := os.Rename(p, destinations[i]); err != nil {
+				if i > 0 && present[0] {
+					if rollbackErr := os.Rename(destinations[0], paths[0]); rollbackErr != nil {
+						return nil, fmt.Errorf("preserve partial: %w; restore data: %v", err, rollbackErr)
+					}
+				}
+				return nil, fmt.Errorf("preserve partial %q: %w", p, err)
+			}
+			moved = append(moved, destinations[i])
+		}
+		return moved, nil
+	}
 }
 
 // PreAllocate extends an existing temp file to the expected size so that

@@ -10,15 +10,16 @@ import (
 	"bytes"
 	"io"
 	"math"
-	"net/url"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 
 	"github.com/go-faster/errors"
-	"github.com/iyear/tdl/app/chat"
 	"gopkg.in/yaml.v3"
+
+	"github.com/iyear/tdl/app/chat"
+	"github.com/iyear/tdl/core/util/tgref"
 )
 
 // Defaults mirror the constants of the python script.
@@ -225,6 +226,24 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 	if strings.TrimSpace(j.ChatURL) == "" {
 		return errors.New("chat_url is required")
 	}
+	if j.Comment != nil {
+		if _, ok := j.Comment.(bool); !ok {
+			if _, text := j.Comment.(string); text {
+				return errors.New("comment must be a boolean or integer")
+			}
+			if value, ok := IntValue(j.Comment); !ok || value <= 0 {
+				return errors.New("comment must be a boolean or positive integer")
+			}
+		}
+	}
+	for field, value := range map[string]*int{"topic_id": j.TopicID, "reply_post_id": j.ReplyPostID} {
+		if value != nil && *value <= 0 {
+			return errors.Errorf("%s must be positive", field)
+		}
+	}
+	if j.TopicID != nil && j.ReplyPostID != nil {
+		return errors.New("topic_id and reply_post_id cannot be combined")
+	}
 
 	if !j.IsTagJob() || j.FollowLinks {
 		if _, err := ParseLink(j.ChatURL); err != nil {
@@ -319,6 +338,9 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 	}
 
 	if !j.UsesIncremental(globalIncremental) {
+		if j.TopicID != nil || j.ReplyPostID != nil {
+			return errors.New("topic_id and reply_post_id require incremental mode for message jobs")
+		}
 		if j.StartComment == nil || j.EndComment == nil {
 			// a range job needs both ends; incremental jobs get ids from the
 			// export instead
@@ -454,83 +476,14 @@ func (l Link) CommentMode() bool { return l.Comment > 0 }
 //	https://t.me/channel/123?comment=456
 //	t.me/channel/123?thread=99
 func ParseLink(raw string) (Link, error) {
-	var l Link
-
-	s := strings.TrimSpace(raw)
-	if s == "" {
-		return l, errors.New("empty telegram link")
-	}
-
-	if !strings.Contains(s, "://") {
-		s = "https://" + strings.TrimPrefix(s, "//")
-	}
-
-	u, err := url.Parse(s)
+	ref, err := tgref.Parse(raw, tgref.Options{})
 	if err != nil {
-		return l, errors.Wrapf(err, "parse link %q", raw)
+		return Link{}, err
 	}
-
-	if host := strings.ToLower(u.Hostname()); host != "t.me" && host != "telegram.me" && host != "telegram.dog" {
-		return l, errors.Errorf("unsupported link host %q (expected t.me)", u.Hostname())
+	if ref.Bot {
+		return Link{}, errors.New("bot start links are not a batch message source")
 	}
-
-	parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-	if len(parts) == 0 || parts[0] == "" {
-		return l, errors.Errorf("invalid telegram link %q", raw)
-	}
-	for _, part := range parts {
-		if part == "" {
-			return l, errors.Errorf("invalid telegram link %q", raw)
-		}
-	}
-	// Public preview links add an /s/ prefix, but identify the same channel.
-	if strings.EqualFold(parts[0], "s") {
-		parts = parts[1:]
-		if len(parts) == 0 {
-			return l, errors.Errorf("invalid telegram link %q", raw)
-		}
-	}
-
-	messagePart := ""
-	if strings.EqualFold(parts[0], "c") { // private chat: /c/<id>[/<topic>/<msg>]
-		if len(parts) < 2 || len(parts) > 4 {
-			return l, errors.Errorf("invalid private channel link %q", raw)
-		}
-		l.Chat = parts[1]
-		if id, e := strconv.ParseInt(l.Chat, 10, 64); e != nil || id <= 0 {
-			return l, errors.Errorf("private chat ID in %q must be a positive integer", raw)
-		}
-		if len(parts) > 2 {
-			messagePart = parts[len(parts)-1]
-		}
-	} else {
-		if len(parts) > 3 {
-			return l, errors.Errorf("invalid telegram link %q", raw)
-		}
-		l.Chat = parts[0]
-		if len(parts) > 1 {
-			messagePart = parts[len(parts)-1]
-		}
-	}
-	if messagePart != "" {
-		if l.MessageID, err = strconv.Atoi(messagePart); err != nil {
-			return l, errors.Wrapf(err, "invalid message id in %q", raw)
-		}
-		if l.MessageID <= 0 {
-			return l, errors.Errorf("message id in %q must be positive", raw)
-		}
-	}
-
-	if c := u.Query().Get("comment"); c != "" {
-		if l.Comment, err = strconv.Atoi(c); err != nil {
-			return l, errors.Wrapf(err, "invalid comment id in %q", raw)
-		}
-		if l.Comment <= 0 {
-			return l, errors.Errorf("comment id in %q must be positive", raw)
-		}
-	}
-
-	return l, nil
+	return Link{Chat: ref.Chat, MessageID: ref.MessageID, Comment: ref.CommentID}, nil
 }
 
 // FindConfig returns the first existing config candidate in the working

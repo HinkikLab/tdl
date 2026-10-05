@@ -2,14 +2,7 @@ package autodl
 
 import (
 	"context"
-	"crypto/sha256"
 	"fmt"
-	"os"
-	"path/filepath"
-	"runtime"
-	"slices"
-	"sort"
-	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -21,14 +14,10 @@ import (
 
 	"github.com/iyear/tdl/app/chat"
 	"github.com/iyear/tdl/core/dcpool"
-	tdl "github.com/iyear/tdl/core/downloader"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/tclient"
-	"github.com/iyear/tdl/core/util/fsutil"
-	"github.com/iyear/tdl/core/util/tutil"
-	"github.com/iyear/tdl/pkg/prog"
-	"github.com/iyear/tdl/pkg/utils"
+	"github.com/iyear/tdl/internal/transfer"
 )
 
 // Options configures a batch run.
@@ -72,12 +61,20 @@ type Options struct {
 	// unavailable, so they are requested again.
 	RetrySkipped bool
 
-	// SkipResumePrompt resumes without asking.
+	// SkipResumePrompt is retained for source compatibility. Batch resumes
+	// automatically and has no resume prompt; use Yes for retry confirmations.
 	SkipResumePrompt bool
 
 	// Middlewares are extra telegram middlewares.
 	Middlewares []telegram.Middleware
 	BotUpdates  *chat.BotUpdates
+	// Namespace and NamespaceSet preserve CLI > config > default account precedence.
+	Namespace    string
+	NamespaceSet bool
+	// OnJobResult receives an explicit terminal result for each processed job.
+	OnJobResult func(JobResult)
+	// Origins labels explicit overrides for the prepared run's provenance.
+	Origins OptionOrigins
 }
 
 // Runner executes a batch config against one authorized telegram client.
@@ -87,11 +84,14 @@ type Runner struct {
 	client   *telegram.Client
 	storage  storage.Storage
 	poolSize int
+	account  string
 
-	pool        dcpool.Pool
-	manager     *peers.Manager
-	dialogs     map[string]peers.Peer
-	unavailable *chat.UnavailableLinks
+	pool         dcpool.Pool
+	manager      *peers.Manager
+	dialogs      map[string]peers.Peer
+	unavailable  *chat.UnavailableLinks
+	reservations transfer.Reservations
+	report       *jobReport
 }
 
 // Run executes the batch download described by path.
@@ -101,55 +101,47 @@ type Runner struct {
 // so one process, one connection pool and batched requests are used for the
 // whole run.
 func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Options) error {
-	cfg, err := LoadConfigForRun(opts.ConfigPath, opts.Incremental)
+	prepared, err := Prepare(opts)
 	if err != nil {
 		return err
 	}
 
-	return run(ctx, c, kvd, cfg, opts)
+	return RunPrepared(ctx, c, kvd, prepared)
+}
+
+// RunPrepared executes the exact snapshot validated before account setup.
+func RunPrepared(ctx context.Context, c *telegram.Client, kvd storage.Storage, prepared *PreparedRun) error {
+	if prepared == nil {
+		return errors.New("nil prepared batch run")
+	}
+	return runPrepared(ctx, c, kvd, prepared.cfg, prepared.opts)
 }
 
 func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Config, opts Options) (rerr error) {
-	if opts.Mode == "" {
-		opts.Mode = ModeAuto
+	prepared, err := prepareConfig(cfg, opts)
+	if err != nil {
+		return err
 	}
+	return RunPrepared(ctx, c, kvd, prepared)
+}
 
-	switch strings.ToLower(opts.Mode) {
-	case ModeAuto, ModeComment, ModeDirect:
-	default:
-		return errors.Errorf("invalid mode %q", opts.Mode)
-	}
-
-	for i := range cfg.Jobs {
-		if cfg.Jobs[i].IsTagJob() || cfg.Jobs[i].FollowLinks {
-			continue
-		}
-		mode, err := cfg.Jobs[i].ResolveMode(opts.Mode)
-		if err != nil {
-			return errors.Wrapf(err, "job %d", i+1)
-		}
-
-		// the resolved mode decides which dialog the ids belong to, so it has
-		// to be stored on the job rather than merely validated
-		cfg.Jobs[i].mode = mode
-	}
-
-	poolSize := DefaultPoolSize
-	if cfg.Pool != nil {
-		poolSize = *cfg.Pool
-	}
-	if opts.PoolSizeSet || opts.PoolSize > 0 {
-		poolSize = opts.PoolSize
-	}
-	threads := pick(opts.Threads, num(cfg.Threads), DefaultThreads)
-	limit := pick(opts.Limit, num(cfg.Limit), DefaultLimit)
+func runPrepared(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Config, opts Options) (rerr error) {
+	poolSize, threads, limit := opts.PoolSize, opts.Threads, opts.Limit
 
 	r := &Runner{opts: opts, cfg: cfg, client: c, storage: kvd, poolSize: poolSize, unavailable: &chat.UnavailableLinks{}}
-	r.pool = dcpool.NewPool(c, int64(poolSize),
-		tclient.NewDefaultMiddlewares(ctx, 5*time.Minute)...)
+	if err := r.reserveStates(); err != nil {
+		return err
+	}
+	middlewares := append(tclient.NewDefaultMiddlewares(ctx, 5*time.Minute), opts.Middlewares...)
+	r.pool = dcpool.NewPool(c, int64(poolSize), middlewares...)
 	defer multierr.AppendInvoke(&rerr, multierr.Close(r.pool))
 
 	r.manager = peers.Options{Storage: storage.NewPeers(kvd)}.Build(r.pool.Default(ctx))
+	self, err := c.Self(ctx)
+	if err != nil {
+		return errors.Wrap(err, "resolve authorized batch account")
+	}
+	r.account = fmt.Sprintf("%s:user:%d", opts.Namespace, self.ID)
 
 	log := logctx.From(ctx)
 	log.Info("Batch download",
@@ -163,11 +155,13 @@ func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Conf
 	color.Cyan("Performance: pool=%d threads=%d limit=%d", poolSize, threads, limit)
 
 	var failed int
+	var failures error
 	for idx := range cfg.Jobs {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
 		job := &cfg.Jobs[idx]
+		r.beginJob(idx+1, job)
 
 		jobCtx := logctx.With(ctx, log.Named(fmt.Sprintf("job%d", idx+1)))
 
@@ -178,11 +172,14 @@ func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Conf
 			announced = true
 		}
 		err := r.runJob(jobCtx, job, threads, limit, announce)
+		result := r.finishJob(err)
 		if !announced {
 			announce(job.ChatURL)
 		}
+		color.Cyan("%s", formatJobSummary(result))
 		if err != nil {
 			failed++
+			multierr.AppendInto(&failures, errors.Wrapf(err, "job %d (%s)", idx+1, job.ChatURL))
 			log.Error("Job failed", zap.Int("job", idx+1), zap.Error(err))
 			color.Red("Job %d failed: %s", idx+1, err)
 		}
@@ -190,560 +187,38 @@ func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Conf
 
 	color.Green("\nBatch download finished: %d job(s), %d failed", len(cfg.Jobs), failed)
 	if failed > 0 {
-		return errors.Errorf("%d job(s) failed", failed)
+		return errors.Wrapf(failures, "%d job(s) failed", failed)
 	}
 
 	return nil
 }
 
-// runJob processes a single config job.
-func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onResolved func(string)) error {
-	log := logctx.From(ctx)
-
-	dir := job.Dir()
-	if r.opts.Dir != "" {
-		dir = filepath.Join(r.opts.Dir, job.Subdir)
-	}
-	writeMetadata := job.WritesMetadata(r.cfg.WriteMetadata)
-	if job.FollowLinks {
-		return r.runArchiveWindow(ctx, job, dir, func(window chat.ArchiveWindow) error {
-			return chat.DownloadLinked(ctx, r.client, r.storage, chat.LinkedOptions{
-				Chat: job.ChatURL, Dir: dir, Tag: job.Tag, Tags: job.Tags, TagMatch: job.TagMatch,
-				Window: window, MaxPosts: job.MaxPosts, CheckOnly: r.opts.CheckOnly,
-				Takeout: r.opts.Takeout, Threads: threads, Limit: limit, Pool: r.pool, Links: job.LinkOptions,
-				Include: r.opts.Include, Exclude: r.opts.Exclude,
-				BotUpdates:    r.opts.BotUpdates,
-				Unavailable:   r.unavailable,
-				WriteMetadata: &writeMetadata,
-				OnResolved:    onResolved,
-			})
-		})
-	}
-	if job.IsTagJob() {
-		return r.runArchiveWindow(ctx, job, dir, func(window chat.ArchiveWindow) error {
-			return chat.DownloadTag(ctx, r.client, r.storage, chat.TagOptions{
-				Chat: job.ChatURL, Tag: job.Tag, Tags: job.Tags,
-				TopicID:  num(job.TopicID),
-				TagMatch: job.TagMatch, Dir: dir,
-				CheckOnly: r.opts.CheckOnly, Takeout: r.opts.Takeout,
-				Threads: threads, Limit: limit, PoolSize: r.poolSize,
-				PoolSizeSet:   true,
-				Pool:          r.pool,
-				MaxPosts:      job.MaxPosts,
-				Window:        window,
-				WriteMetadata: &writeMetadata,
-				OnResolved:    onResolved,
-			})
-		})
-	}
-	link, err := ParseLink(job.ChatURL)
-	if err != nil {
-		return err
-	}
-	incremental := job.UsesIncremental(r.cfg.Incremental)
-	var peer peers.Peer
-	if incremental {
-		peer, err = r.scanPeer(ctx, job, link)
-	} else {
-		peer, err = r.resolveDialog(ctx, job, link)
-	}
-	if err != nil {
-		return err
-	}
-	topicID, topicTitle := 0, ""
-	if incremental {
-		topicID = num(job.TopicID)
-	}
-	if topicID > 0 {
-		if topic, err := chat.ResolveForumTopic(ctx, r.pool.Default(ctx), peer.InputPeer(), topicID); err == nil {
-			topicTitle = topic.Title
-		} else {
-			log.Debug("Resolve topic title", zap.Error(err))
-		}
-	}
-	if onResolved != nil {
-		onResolved(chat.TargetName(peer, topicID, topicTitle, !incremental || (topicID == 0 && job.ReplyPostID == nil)))
-	}
-
-	if err = os.MkdirAll(dir, 0o755); err != nil {
-		return errors.Wrapf(err, "create download dir %s", dir)
-	}
-
-	statePath := r.statePath(job)
-	store, state, err := LoadStateStore(statePath, r.stateScope(job, link, dir))
-	if err != nil {
-		return err
-	}
-
-	if r.opts.RetrySkipped {
-		if n := state.ClearSkipped(); n > 0 {
-			color.Yellow("Retrying %d message(s) that an earlier run recorded as unavailable", n)
-			log.Info("Clear skipped messages", zap.Int("count", n), zap.String("state", statePath))
-
-			if serr := store.Save(); serr != nil {
-				return serr
+func (r *Runner) reserveStates() error {
+	for i := range r.cfg.Jobs {
+		job := &r.cfg.Jobs[i]
+		if job.IsTagJob() || job.FollowLinks {
+			if !job.UsesIncremental(r.cfg.Incremental) {
+				continue
 			}
 		}
-	}
-
-	log.Info("Start job",
-		zap.String("chat_url", job.ChatURL),
-		zap.String("dir", dir),
-		zap.Bool("incremental", incremental),
-		zap.Bool("comment", job.CommentMode()),
-		zap.String("state", statePath))
-
-	var targets []int
-	var exportTS int64
-
-	if incremental {
-		targets, exportTS, err = r.planIncremental(ctx, job, link, dir, state)
-		if err != nil {
-			return err
-		}
-	} else {
-		targets = rangeIDs(job)
-	}
-
-	if len(targets) == 0 {
-		log.Info("Nothing to download")
-		color.Yellow("No messages to download for this job")
-
-		// an empty window still has to move the timestamp, otherwise the next
-		// run scans the same range again
-		if incremental && !r.opts.CheckOnly {
-			return r.advanceIncremental(ctx, job, store, state, nil, exportTS)
-		}
-		return nil
-	}
-
-	missing := r.missing(targets, state)
-
-	log.Info("Plan",
-		zap.Int("targets", len(targets)),
-		zap.Int("finished", state.Len()),
-		zap.Int("missing", len(missing)))
-
-	color.Cyan("Target range: %s", formatIDs(targets))
-	color.Cyan("Already finished: %d, to download: %d", state.Len(), len(missing))
-
-	if r.opts.CheckOnly {
-		color.Yellow("Check only: skipping the download step")
-		return nil
-	}
-
-	if len(missing) == 0 {
-		color.Green("Everything is already downloaded")
-		if incremental {
-			return r.advanceIncremental(ctx, job, store, state, targets, exportTS)
-		}
-		return nil
-	}
-
-	if err = r.download(ctx, job, link, dir, missing, store, state, threads, limit); err != nil {
-		return err
-	}
-
-	left := state.Missing(targets)
-	if len(left) > 0 {
-		color.Yellow("%d message(s) are still missing after this run", len(left))
-		log.Warn("Messages still missing", zap.Int("count", len(left)), zap.Ints("ids", left))
-
-		if !r.confirm(ctx, fmt.Sprintf("Retry the %d missing message(s) now?", len(left)), true) {
-			if incremental {
-				color.Yellow("Keeping the incremental timestamp so the next run covers this range again")
-			}
-			return errors.Errorf("%d message(s) still missing", len(left))
-		}
-
-		if err = r.download(ctx, job, link, dir, left, store, state, threads, limit); err != nil {
-			return err
-		}
-
-		if left = state.Missing(targets); len(left) > 0 {
-			color.Yellow("%d message(s) are still missing", len(left))
-			return errors.Errorf("%d message(s) still missing", len(left))
+		if err := r.reservations.ReserveState(r.statePath(job), fmt.Sprintf("job %d state", i+1)); err != nil {
+			return errors.Wrapf(err, "job %d state ownership", i+1)
 		}
 	}
-
-	if incremental {
-		return r.advanceIncremental(ctx, job, store, state, targets, exportTS)
-	}
-
 	return nil
 }
 
 // missing returns the targets that still have to be downloaded.
 //
-// An id counts as done only when the state file records it. Files not recorded
-// in state are resolved in batches by the iterator, which can compare their
-// actual Telegram size before skipping them. Treating an arbitrary non-empty
-// file as complete here would permanently hide truncated downloads.
+// Media completions must be resolved again to confirm current media identity
+// and final-file size/stat. Only explicitly skipped or filtered messages bypass
+// the lookup; a stale finished ID alone cannot prove that its file exists.
 func (r *Runner) missing(targets []int, state *State) []int {
-	return state.Missing(targets)
-}
-
-func (r *Runner) download(ctx context.Context, job *Job, link Link, dir string, ids []int,
-	store *stateStore, state *State, threads, limit int) error {
-	dialog, err := r.resolveDialog(ctx, job, link)
-	if err != nil {
-		return err
-	}
-
-	log := logctx.From(ctx)
-
-	pw := prog.New(utils.Byte.FormatBinaryBytes)
-	go pw.Render()
-
-	jobCtx := &jobContext{
-		job:    job,
-		state:  state,
-		store:  store,
-		logger: log,
-	}
-	progress := newJobProgress(pw, jobCtx)
-
-	opts := &iterOptions{
-		template: r.template(),
-		include:  r.opts.Include,
-		exclude:  r.opts.Exclude,
-		takeout:  r.opts.Takeout,
-		batch:    DefaultBatchSize,
-		onFinish: func(ids []int) {
-			state.Finish(ids...)
-
-			if serr := store.SaveThrottled(); serr != nil {
-				log.Warn("Save state", zap.Error(serr))
-			}
-		},
-		onSkip: func(ids []int) {
-			state.Skip(ids...)
-			progress.markSkipped(len(ids))
-
-			if serr := store.SaveThrottled(); serr != nil {
-				log.Warn("Save state", zap.Error(serr))
-			}
-		},
-	}
-
-	it, err := newIter(r.pool, r.manager, dialog, dir, ids, opts)
-	if err != nil {
-		return err
-	}
-
-	dl := tdl.New(tdl.Options{
-		Pool:     r.pool,
-		Threads:  threads,
-		Iter:     it,
-		Progress: progress,
-	})
-	// part level resume: a failed element keeps its temp file, the next run
-	// only fetches the missing parts
-	dl.SetSkipParts(true)
-
-	log.Info("Start download",
-		zap.Int("ids", len(ids)),
-		zap.Int("threads", threads),
-		zap.Int("limit", limit))
-
-	err = dl.Download(ctx, limit)
-
-	it.Drain()
-
-	prog.Wait(ctx, pw)
-
-	if serr := store.Save(); serr != nil {
-		log.Warn("Save state", zap.Error(serr))
-		multierr.AppendInto(&err, serr)
-	}
-
-	done, failed, skipped := progress.Stats()
-	color.Cyan("Job summary: %d downloaded, %d failed, %d skipped", done, failed, skipped)
-
-	// A whole range resolving to nothing is almost never real: it means the ids
-	// were looked up in the wrong dialog, typically comment ids that were
-	// resolved against the channel instead of its discussion group.
-	if len(ids) > 0 && done == 0 && failed == 0 && skipped >= len(ids) {
-		color.Red("None of the %d message(s) exist in dialog %d.", len(ids), dialog.ID())
-		color.Red("Check --mode / the \"comment\" setting of the job and the id range, then run again with --retry-skipped.")
-		log.Warn("Every target was unavailable",
-			zap.Int("ids", len(ids)),
-			zap.Int64("dialog", dialog.ID()),
-			zap.Bool("comment_mode", commentDialog(job, link)))
-	}
-
-	if err != nil {
-		return errors.Wrap(err, "download")
-	}
-
-	if itErr := it.Err(); itErr != nil {
-		return errors.Wrap(itErr, "iterate")
-	}
-
-	return nil
-}
-
-// resolveDialog resolves the peer that actually holds the messages.
-//
-// Comment mode is what the python script expressed by appending ?comment=N to
-// the post link: the message ids are comments, so they live in the linked
-// discussion group of the channel and not in the channel itself. The mode is
-// therefore taken from the job ("comment": true) as well as from the link
-// (?comment=N is also accepted), because the python config points chat_url at
-// the post and keeps the range in start_comment/end_comment.
-func (r *Runner) resolveDialog(ctx context.Context, job *Job, link Link) (peers.Peer, error) {
-	key := fmt.Sprintf("%t:%s", commentDialog(job, link), link.Chat)
-	if peer, ok := r.dialogs[key]; ok {
-		return peer, nil
-	}
-	peer, err := r.resolveDialogUncached(ctx, job, link)
-	if err == nil {
-		if r.dialogs == nil {
-			r.dialogs = make(map[string]peers.Peer)
-		}
-		r.dialogs[key] = peer
-	}
-	return peer, err
-}
-
-func (r *Runner) resolveDialogUncached(ctx context.Context, job *Job, link Link) (peers.Peer, error) {
-	peer, err := tutil.GetInputPeer(ctx, r.manager, link.Chat)
-	if err != nil {
-		return nil, errors.Wrapf(err, "resolve chat %q", link.Chat)
-	}
-
-	if !commentDialog(job, link) {
-		return peer, nil
-	}
-
-	ch, ok := peer.(peers.Channel)
-	if !ok {
-		return nil, errors.Errorf("chat %q has no comment section", link.Chat)
-	}
-
-	raw, err := ch.FullRaw(ctx)
-	if err != nil {
-		return nil, errors.Wrap(err, "get channel full")
-	}
-
-	linked, ok := raw.GetLinkedChatID()
-	if !ok {
-		return nil, errors.Errorf("chat %q has no linked discussion group", link.Chat)
-	}
-
-	group, err := r.manager.ResolveChannelID(ctx, linked)
-	if err != nil {
-		return nil, errors.Wrap(err, "resolve discussion group")
-	}
-
-	logctx.From(ctx).Debug("Resolve comment dialog",
-		zap.String("chat", link.Chat),
-		zap.Int64("linked", linked),
-		zap.Int64("id", group.ID()))
-
-	return group, nil
-}
-
-// commentDialog reports whether the message ids of a job are comment ids in the
-// linked discussion group of the channel.
-//
-// Both spellings are accepted: the job level "comment": true of the python
-// config and the ?comment=N syntax of a telegram link. They mean the same
-// thing, and getting this wrong silently resolves the ids against the wrong
-// chat, where every single one of them looks deleted.
-func commentDialog(job *Job, link Link) bool {
-	return link.CommentMode() || job.CommentMode()
-}
-
-// scanPeer resolves the dialog that incremental mode reads its window from.
-//
-// The python script exported job.chat when it was set and the chat of the link
-// otherwise. An explicit job.chat is kept, because that is how the python
-// config pointed the scan at a discussion group while chat_url kept pointing at
-// the post.
-func (r *Runner) scanPeer(ctx context.Context, job *Job, link Link) (peers.Peer, error) {
-	ref := strings.TrimSpace(job.Chat)
-	if ref == "" {
-		return r.resolveDialog(ctx, job, link)
-	}
-
-	// a job.chat may also be a full telegram link
-	if l, err := ParseLink(ref); err == nil {
-		ref = l.Chat
-	}
-
-	return tutil.GetInputPeer(ctx, r.manager, ref)
-}
-
-func (r *Runner) template() string {
-	if r.opts.Template != "" {
-		return r.opts.Template
-	}
-
-	return `{{ .DialogID }}_{{ .MessageID }}_{{ filenamify .FileName }}`
-}
-
-// statePath returns the state file of a job. Every namespace and download
-// directory gets its own file so two configs can't clobber each other.
-func (r *Runner) statePath(job *Job) string {
-	if r.opts.StateFile != "" {
-		return r.opts.StateFile
-	}
-
-	if r.cfg.StateFile != "" {
-		return r.cfg.StateFile
-	}
-
-	dir := job.Dir()
-	if r.opts.Dir != "" {
-		dir = filepath.Join(r.opts.Dir, job.Subdir)
-	}
-	return filepath.Join(dir, DefaultStateFile)
-}
-
-// stateScope prevents one state file from silently reusing message IDs from a
-// different Telegram dialog or interpretation mode.
-func (r *Runner) stateScope(job *Job, link Link, dir string) string {
-	dir = filepath.Clean(dir)
-	if runtime.GOOS == "windows" {
-		dir = strings.ToLower(dir)
-	}
-	identity := strings.Join([]string{
-		strings.ToLower(strings.TrimSpace(link.Chat)),
-		job.mode,
-		strings.ToLower(strings.TrimSpace(job.Chat)),
-		fmt.Sprint(num(job.TopicID)),
-		fmt.Sprint(num(job.ReplyPostID)),
-		dir,
-		r.template(),
-		normalizeScopeExtensions(r.opts.Include),
-		normalizeScopeExtensions(r.opts.Exclude),
-	}, "\x00")
-	return fmt.Sprintf("v2|%x", sha256.Sum256([]byte(identity)))
-}
-
-func normalizeScopeExtensions(exts []string) string {
-	normalized := make([]string, 0, len(exts))
-	for _, ext := range exts {
-		normalized = append(normalized, strings.ToLower(fsutil.AddPrefixDot(ext)))
-	}
-	sort.Strings(normalized)
-	normalized = slices.Compact(normalized)
-	return strings.Join(normalized, ",")
-}
-
-// confirm asks the user a yes/no question.
-func (r *Runner) confirm(ctx context.Context, question string, def bool) bool {
-	if r.opts.Yes {
-		color.Yellow("%s [auto: yes]", question)
-		return true
-	}
-
-	return askConfirm(ctx, question, def)
-}
-
-// rangeIDs expands the start_comment/end_comment range, end excluded.
-func rangeIDs(job *Job) []int {
-	if job.StartComment == nil || job.EndComment == nil {
-		return nil
-	}
-
-	start, end := *job.StartComment, *job.EndComment
-	if end <= start {
-		return nil
-	}
-
-	out := make([]int, 0, end-start)
-	for id := start; id < end; id++ {
-		out = append(out, id)
-	}
-
-	return out
-}
-
-// formatIDs renders an id list the way the python script displayed it.
-func formatIDs(ids []int) string {
-	if len(ids) == 0 {
-		return "empty"
-	}
-
-	first, last := ids[0], ids[len(ids)-1]
-	if last-first+1 == len(ids) {
-		return fmt.Sprintf("%d-%d (%d)", first, last, len(ids))
-	}
-
-	return fmt.Sprintf("%d...%d (%d)", first, last, len(ids))
-}
-
-func pick(values ...int) int {
-	for _, v := range values {
-		if v > 0 {
-			return v
+	missing := make([]int, 0, len(targets))
+	for _, id := range targets {
+		if !state.IsTerminalWithoutMedia(id) {
+			missing = append(missing, id)
 		}
 	}
-
-	return values[len(values)-1]
-}
-
-func num(v *int) int {
-	if v == nil {
-		return 0
-	}
-
-	return *v
-}
-
-// askConfirm prints a y/n question and reads the answer from stdin.
-func askConfirm(ctx context.Context, question string, def bool) bool {
-	select {
-	case <-ctx.Done():
-		return def
-	default:
-	}
-
-	hint := "y/N"
-	if def {
-		hint = "Y/n"
-	}
-
-	fmt.Printf("%s (%s): ", color.YellowString(question), hint)
-
-	var answer string
-	if _, err := fmt.Scanln(&answer); err != nil {
-		return def
-	}
-
-	switch strings.ToLower(strings.TrimSpace(answer)) {
-	case "y", "yes":
-		return true
-	case "n", "no":
-		return false
-	default:
-		return def
-	}
-}
-
-// Mode selects how the message ids of a job are interpreted.
-const (
-	// ModeAuto detects the mode from the url and config, like the python script.
-	ModeAuto = "auto"
-	// ModeComment treats every id as a comment id (?comment=N).
-	ModeComment = "comment"
-	// ModeDirect treats every id as a message id in the chat itself.
-	ModeDirect = "direct"
-)
-
-// ResolveMode applies --mode to a job.
-func (j *Job) ResolveMode(mode string) (string, error) {
-	switch strings.ToLower(mode) {
-	case "", ModeAuto:
-		if j.CommentMode() {
-			return ModeComment, nil
-		}
-		return ModeDirect, nil
-	case ModeComment, ModeDirect:
-		return strings.ToLower(mode), nil
-	default:
-		return "", errors.Errorf("invalid mode %q", mode)
-	}
+	return missing
 }

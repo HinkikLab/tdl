@@ -103,8 +103,8 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 
 	up := uploader.New(options)
 
-	go upProgress.Render()
-	defer prog.Wait(ctx, upProgress)
+	stopRender := prog.Start(upProgress)
+	defer stopRender()
 
 	return up.Upload(ctx, viper.GetInt(consts.FlagLimit))
 }

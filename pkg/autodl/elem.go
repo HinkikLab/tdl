@@ -10,6 +10,7 @@ import (
 
 	"github.com/iyear/tdl/core/downloader"
 	"github.com/iyear/tdl/core/tmedia"
+	"github.com/iyear/tdl/internal/transfer"
 )
 
 // tempExt is the extension of a file that is still being downloaded. It is the
@@ -58,7 +59,7 @@ func (e *elem) start(takeout bool) error {
 
 	temp := e.path + tempExt
 
-	f, store, err := downloader.OpenPartial(temp, e.file.Size())
+	f, store, err := downloader.OpenPartialFile(temp, e.file)
 	if err != nil {
 		return err
 	}
@@ -86,17 +87,14 @@ func (e *elem) closeFile() error {
 
 // finish closes the temp file and moves it to its final name.
 func (e *elem) finish() error {
-	if err := e.closeFile(); err != nil {
-		return err
-	}
+	return e.Finalize(nil)
+}
 
-	if err := os.Rename(e.path+tempExt, e.path); err != nil {
-		return err
-	}
-
-	e.store.Remove()
-
-	return nil
+// Finalize commits payload bytes before any progress/state completion callback.
+func (e *elem) Finalize(downloadErr error) error {
+	file := e.to
+	e.to = nil
+	return transfer.Commit(file, e.store, e.file.Size(), e.path, e.date, downloadErr)
 }
 
 // cleanupFile drops the temp file and its sidecar.

@@ -21,9 +21,11 @@ import (
 	"github.com/gotd/td/telegram/query/messages"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
-	"github.com/iyear/tdl/core/tmedia"
-	"github.com/iyear/tdl/core/util/tutil"
 	"go.uber.org/multierr"
+
+	"github.com/iyear/tdl/core/tmedia"
+	"github.com/iyear/tdl/core/util/tgref"
+	"github.com/iyear/tdl/core/util/tutil"
 )
 
 // LinkOptions controls bounded resolution of resources linked from a post.
@@ -34,6 +36,7 @@ type LinkOptions struct {
 	BotIdle            int   `json:"bot_idle_seconds" yaml:"bot_idle_seconds"`
 	PollInterval       int   `json:"poll_interval_ms" yaml:"poll_interval_ms"`
 	MaxBotMessages     int   `json:"max_bot_messages" yaml:"max_bot_messages"`
+	MaxTopicMessages   int   `json:"max_topic_messages" yaml:"max_topic_messages"`
 	ReRequestLimit     *int  `json:"rerequest_limit" yaml:"rerequest_limit"`
 	ScanComments       *bool `json:"scan_comments" yaml:"scan_comments"`
 	CommentLimit       int   `json:"comment_limit" yaml:"comment_limit"`
@@ -56,6 +59,7 @@ func (o *LinkOptions) Normalize() error {
 		{"bot_idle_seconds", &o.BotIdle, 3, 300},
 		{"poll_interval_ms", &o.PollInterval, 500, 60000},
 		{"max_bot_messages", &o.MaxBotMessages, 500, 10000},
+		{"max_topic_messages", &o.MaxTopicMessages, 1000, 100000},
 		{"comment_limit", &o.CommentLimit, 100, 10000},
 		{"flood_wait_seconds", &o.FloodWait, 30, 3600},
 		{"max_flood_wait_seconds", &o.MaxFloodWait, 3600, 86400},
@@ -99,13 +103,14 @@ type resourceLink struct {
 	Kind    string
 	Chat    string
 	ID      int
+	TopicID int
 	Start   string
 	Comment int
 	Single  bool
 }
 
 func (l resourceLink) key() string {
-	return fmt.Sprintf("%s:%s:%d:%s:%d:%t", l.Kind, strings.ToLower(l.Chat), l.ID, l.Start, l.Comment, l.Single)
+	return fmt.Sprintf("%s:%s:%d:%d:%s:%d:%t", l.Kind, strings.ToLower(l.Chat), l.ID, l.TopicID, l.Start, l.Comment, l.Single)
 }
 
 func (l resourceLink) URL() string {
@@ -117,6 +122,9 @@ func (l resourceLink) URL() string {
 		path = "c/" + l.Chat
 	}
 	if l.ID > 0 {
+		if l.TopicID > 0 {
+			path += "/" + strconv.Itoa(l.TopicID)
+		}
 		path += "/" + strconv.Itoa(l.ID)
 	}
 	u := "https://t.me/" + path
@@ -139,95 +147,17 @@ var telegramUsername = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 // Only message links and bot start links are actionable. Home, invite, payment,
 // share and external web links do not identify a resource for this archive.
 func parseResourceLink(raw string) (resourceLink, error) {
-	var l resourceLink
-	s := strings.TrimSpace(raw)
-	if !strings.Contains(s, "://") {
-		s = "https://" + s
-	}
-	u, err := url.Parse(s)
+	ref, err := tgref.Parse(raw, tgref.Options{AllowTG: true})
 	if err != nil {
-		return l, err
+		return resourceLink{}, err
 	}
-	q := u.Query()
-	if u.Scheme == "tg" {
-		switch u.Host {
-		case "resolve":
-			l.Chat = q.Get("domain")
-		case "privatepost":
-			l.Chat = q.Get("channel")
-			if n, e := strconv.ParseInt(l.Chat, 10, 64); e != nil || n <= 0 {
-				return l, fmt.Errorf("invalid channel ID")
-			}
-		default:
-			return l, fmt.Errorf("unsupported Telegram action")
-		}
-		if id := q.Get("post"); id != "" {
-			l.ID, err = strconv.Atoi(id)
-			if err != nil || l.ID <= 0 {
-				return l, fmt.Errorf("invalid post ID")
-			}
-		}
-	} else {
-		if u.Scheme != "https" && u.Scheme != "http" {
-			return l, fmt.Errorf("unsupported URL scheme")
-		}
-		host := strings.ToLower(u.Hostname())
-		if host != "t.me" && host != "telegram.me" && host != "telegram.dog" {
-			return l, fmt.Errorf("unsupported link host")
-		}
-		if u.User != nil || u.Port() != "" {
-			return l, fmt.Errorf("invalid Telegram host")
-		}
-		p := strings.Split(strings.Trim(u.Path, "/"), "/")
-		if len(p) > 0 && p[0] == "s" {
-			p = p[1:]
-		}
-		if len(p) == 0 || p[0] == "" {
-			return l, fmt.Errorf("missing chat")
-		}
-		if p[0] == "c" {
-			if len(p) < 2 || len(p) > 4 {
-				return l, fmt.Errorf("invalid private chat/post link")
-			}
-			l.Chat = p[1]
-			if n, e := strconv.ParseInt(l.Chat, 10, 64); e != nil || n <= 0 {
-				return l, fmt.Errorf("invalid channel ID")
-			}
-			p = p[1:]
-		} else {
-			if len(p) > 3 {
-				return l, fmt.Errorf("invalid message link")
-			}
-			l.Chat = p[0]
-		}
-		if len(p) > 1 {
-			l.ID, err = strconv.Atoi(p[len(p)-1])
-			if err != nil || l.ID <= 0 {
-				return l, fmt.Errorf("invalid message ID")
-			}
-		}
+	kind := "chat"
+	if ref.Bot {
+		kind = "bot"
+	} else if ref.MessageID > 0 {
+		kind = "message"
 	}
-	if !telegramUsername.MatchString(l.Chat) {
-		return l, fmt.Errorf("invalid chat name")
-	}
-	if c := q.Get("comment"); c != "" {
-		l.Comment, err = strconv.Atoi(c)
-		if err != nil || l.Comment <= 0 {
-			return l, fmt.Errorf("invalid comment ID")
-		}
-	}
-	if q.Has("start") {
-		if l.ID != 0 || l.Comment != 0 {
-			return l, fmt.Errorf("invalid bot link")
-		}
-		l.Kind, l.Start = "bot", q.Get("start")
-	} else if l.ID > 0 {
-		l.Kind = "message"
-	} else {
-		l.Kind = "chat"
-	}
-	l.Single = q.Has("single")
-	return l, nil
+	return resourceLink{Kind: kind, Chat: ref.Chat, ID: ref.MessageID, TopicID: ref.TopicID, Start: ref.Start, Comment: ref.CommentID, Single: ref.Single}, nil
 }
 
 func utf16Text(s string, offset, length int) string {
@@ -439,7 +369,7 @@ func (b *telegramLinkBackend) Cleanup(ctx context.Context) error {
 		batch := ids[start:min(start+100, len(ids))]
 		_, err := b.api.MessagesDeleteMessages(ctx, &tg.MessagesDeleteMessagesRequest{Revoke: true, ID: batch})
 		if err != nil {
-			failures = multierr.Append(failures, err)
+			failures = multierr.Append(failures, fmt.Errorf("delete bot archive messages %v: %w", batch, err))
 			continue
 		}
 		for _, id := range batch {
@@ -511,7 +441,7 @@ func (b *telegramLinkBackend) Fetch(ctx context.Context, l resourceLink) ([]reso
 		peer, err = tutil.GetInputPeer(ctx, b.manager, l.Chat)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("resolve %s peer %q: %w", l.Kind, l.Chat, err)
 	}
 	if l.Kind == "bot" {
 		u, ok := peer.(peers.User)
@@ -524,20 +454,48 @@ func (b *telegramLinkBackend) Fetch(ctx context.Context, l resourceLink) ([]reso
 		return b.requestBot(ctx, u, l.Start)
 	}
 	if l.Comment > 0 {
-		m, err := getLinkedMessage(ctx, b.api, peer.InputPeer(), l.ID)
+		m, err := getLinkedMessage(ctx, b.api, archiveInputPeer(peer), l.ID)
 		if err != nil {
 			return nil, err
 		}
-		discussionPeer, _, err := b.discussion(ctx, peer.InputPeer(), m)
+		if l.TopicID > 0 {
+			if err := verifyLinkedTopic(ctx, b.api, archiveInputPeer(peer), l.TopicID); err != nil {
+				return nil, err
+			}
+			if !linkedTopicMember(m, l.TopicID) {
+				return nil, fmt.Errorf("message %d does not belong to linked forum topic %d", m.ID, l.TopicID)
+			}
+		}
+		discussionPeer, _, err := b.discussion(ctx, archiveInputPeer(peer), m)
 		if err != nil {
 			return nil, err
 		}
 		return b.messageAlbum(ctx, discussionPeer, l.Comment, l.Single)
 	}
-	return b.messageAlbum(ctx, peer.InputPeer(), l.ID, l.Single)
+	return b.resourceMessages(ctx, archiveInputPeer(peer), l.ID, l.Single, l.TopicID)
 }
 
 func getLinkedMessage(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, id int) (*tg.Message, error) {
+	raw, err := getLinkedRawMessage(ctx, api, peer, id)
+	if err != nil {
+		return nil, err
+	}
+	if m, ok := raw.(*tg.Message); ok {
+		return m, nil
+	}
+	if m, ok := raw.(*tg.MessageService); ok {
+		return nil, unsupportedLinkedService(m)
+	}
+	return nil, fmt.Errorf("message %d is unavailable or deleted", id)
+}
+
+func getLinkedRawMessage(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, id int) (tg.MessageClass, error) {
+	if id <= 0 {
+		return nil, fmt.Errorf("message ID must be positive")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	var res tg.MessagesMessagesClass
 	var err error
 	ids := []tg.InputMessageClass{&tg.InputMessageID{ID: id}}
@@ -550,12 +508,18 @@ func getLinkedMessage(ctx context.Context, api *tg.Client, peer tg.InputPeerClas
 		return nil, err
 	}
 	modified, ok := res.AsModified()
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
 	if !ok {
 		return nil, fmt.Errorf("unexpected message result %T", res)
 	}
 	for _, raw := range modified.GetMessages() {
-		if m, ok := raw.(*tg.Message); ok && m.ID == id {
-			return m, nil
+		if raw.GetID() == id {
+			if err := validateLinkedPeer(peer, raw); err != nil {
+				return nil, err
+			}
+			return raw, nil
 		}
 	}
 	return nil, fmt.Errorf("message %d is unavailable or deleted", id)
@@ -566,7 +530,12 @@ func (b *telegramLinkBackend) messageAlbum(ctx context.Context, peer tg.InputPee
 	if err != nil {
 		return nil, err
 	}
+	return b.albumFromMessage(ctx, peer, m, single, 0)
+}
+
+func (b *telegramLinkBackend) albumFromMessage(ctx context.Context, peer tg.InputPeerClass, m *tg.Message, single bool, topicID int) ([]resourceMessage, error) {
 	album := []*tg.Message{m}
+	var err error
 	if m.GroupedID != 0 && !single {
 		album, err = tutil.GetGroupedMessages(ctx, b.api, peer, m)
 		if err != nil {
@@ -578,6 +547,12 @@ func (b *telegramLinkBackend) messageAlbum(ctx context.Context, peer tg.InputPee
 	}
 	result := make([]resourceMessage, 0, len(album))
 	for _, m := range album {
+		if err := validateLinkedPeer(peer, m); err != nil {
+			return nil, err
+		}
+		if topicID > 0 && !linkedTopicMember(m, topicID) {
+			return nil, fmt.Errorf("album message %d does not belong to linked forum topic %d", m.ID, topicID)
+		}
 		result = append(result, resourceMessage{Peer: peer, Message: m})
 	}
 	return result, nil
@@ -646,7 +621,7 @@ func (b *telegramLinkBackend) historySince(ctx context.Context, peer tg.InputPee
 	for {
 		res, err := b.api.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{Peer: peer, MinID: after, OffsetID: offset, Limit: 100})
 		if err != nil {
-			return result, err
+			return result, fmt.Errorf("read bot %d response history after %d (offset %d): %w", tutil.GetInputPeerID(peer), after, offset, err)
 		}
 		modified, ok := res.AsModified()
 		if !ok {
@@ -760,7 +735,7 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 	// A fresh watermark excludes old resources belonging to previous posts.
 	res, err := b.api.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{Peer: bot.InputPeer(), Limit: 1})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("read bot %d request watermark: %w", bot.ID(), err)
 	}
 	modified, ok := res.AsModified()
 	if !ok {
@@ -775,7 +750,7 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 	}
 	var random [8]byte
 	if _, err := rand.Read(random[:]); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("generate bot %d request ID: %w", bot.ID(), err)
 	}
 	randomID := int64(binary.LittleEndian.Uint64(random[:]))
 	updates, err := b.api.MessagesStartBot(ctx, &tg.MessagesStartBotRequest{Bot: bot.InputUser(), Peer: bot.InputPeer(), RandomID: randomID, StartParam: start})
@@ -786,8 +761,10 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 		if seconds, ok := tgerr.AsFloodWait(err); ok {
 			return nil, &botCooldownError{seconds: int(seconds/time.Second) + 1}
 		}
-		return nil, err
+		return nil, fmt.Errorf("start bot %d: %w", bot.ID(), err)
 	}
+	responseCtx, cancelResponse := context.WithTimeout(ctx, time.Duration(b.opts.BotTimeout)*time.Second)
+	defer cancelResponse()
 	requestID := botRequestID(updates, randomID, bot.ID())
 	if b.updates != nil {
 		if b.watchedBots == nil {
@@ -799,6 +776,7 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 	seen := map[int]*tg.Message{}
 	fingerprints := map[int]string{}
 	lastChange := time.Now()
+	generation := int64(0)
 	collect := func(msgs []*tg.Message) error {
 		for _, m := range msgs {
 			if m.ID <= watermark || tutil.GetPeerID(m.PeerID) != bot.ID() {
@@ -818,6 +796,7 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 			if fingerprints[m.ID] != string(data) {
 				seen[m.ID], fingerprints[m.ID] = m, string(data)
 				lastChange = time.Now()
+				generation++
 			}
 		}
 		if len(seen) > b.opts.MaxBotMessages {
@@ -828,10 +807,12 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 	if err := collect(updateMessages(updates)); err != nil {
 		return nil, err
 	}
-	deadline := time.NewTimer(time.Duration(b.opts.BotTimeout) * time.Second)
-	defer deadline.Stop()
 	tick := time.NewTicker(time.Duration(b.opts.PollInterval) * time.Millisecond)
 	defer tick.Stop()
+	historyBase := time.Duration(b.opts.PollInterval) * time.Millisecond
+	historyInterval := historyBase
+	historyMaximum := max(5*time.Second, historyBase)
+	var nextHistory time.Time
 	finish := func() []resourceMessage {
 		ids := make([]int, 0, len(seen))
 		for id := range seen {
@@ -844,7 +825,17 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 		}
 		return result
 	}
+	responseError := func(err error) error {
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+		if responseCtx.Err() != nil {
+			return botResponseTimeout(bot.ID(), b.opts.BotTimeout, seen)
+		}
+		return err
+	}
 	for {
+		cycleGeneration := generation
 		if b.updates != nil {
 			msgs, err := b.updates.Snapshot(bot.ID(), watermark)
 			if collectErr := collect(msgs); collectErr != nil {
@@ -853,21 +844,32 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 			if err != nil {
 				return nil, err
 			}
-		}
-		msgs, err := b.historySince(ctx, bot.InputPeer(), watermark)
-		if collectErr := collect(msgs); collectErr != nil {
-			return nil, collectErr
-		}
-		if err != nil {
-			return nil, err
-		}
-		actionable := false
-		for _, m := range seen {
-			if _, ok := tmedia.GetMedia(m); ok || len(messageResourceLinks(m)) > 0 {
-				actionable = true
-				break
+			if generation != cycleGeneration {
+				historyInterval = historyBase
+				nextHistory = time.Time{}
 			}
 		}
+		// Poll live updates at the configured frequency, but back off history RPCs
+		// when nothing changes. A final history read proves the idle boundary.
+		actionable := botMessagesActionable(seen)
+		idle := actionable && time.Since(lastChange) >= time.Duration(b.opts.BotIdle)*time.Second
+		readHistory := !time.Now().Before(nextHistory) || idle
+		if readHistory {
+			msgs, err := b.historySince(responseCtx, bot.InputPeer(), watermark)
+			if collectErr := collect(msgs); collectErr != nil {
+				return nil, collectErr
+			}
+			if err != nil {
+				return nil, responseError(err)
+			}
+			if generation != cycleGeneration {
+				historyInterval = historyBase
+			} else {
+				historyInterval = min(historyMaximum, 2*historyInterval)
+			}
+			nextHistory = time.Now().Add(historyInterval)
+		}
+		actionable = botMessagesActionable(seen)
 		if !actionable {
 			for _, m := range seen {
 				if seconds, ok := botCooldown(m.Message, b.opts.FloodWait); ok {
@@ -875,15 +877,48 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 				}
 			}
 		}
-		if actionable && time.Since(lastChange) >= time.Duration(b.opts.BotIdle)*time.Second {
+		if actionable && time.Since(lastChange) >= time.Duration(b.opts.BotIdle)*time.Second && readHistory {
 			return finish(), nil
 		}
 		select {
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		case <-deadline.C:
-			return nil, fmt.Errorf("bot response did not settle within %d seconds (%d messages); adjust bot_timeout_seconds/bot_idle_seconds", b.opts.BotTimeout, len(seen))
+		case <-responseCtx.Done():
+			return nil, responseError(responseCtx.Err())
 		case <-tick.C:
 		}
 	}
+}
+
+func botMessagesActionable(messages map[int]*tg.Message) bool {
+	for _, m := range messages {
+		if _, ok := tmedia.GetMedia(m); ok || len(messageResourceLinks(m)) > 0 {
+			return true
+		}
+	}
+	return false
+}
+
+func botResponseTimeout(botID int64, seconds int, messages map[int]*tg.Message) error {
+	reason := "no actionable resource received"
+	if botMessagesActionable(messages) {
+		reason = "resource replies did not settle"
+	}
+	lastID := 0
+	summary := ""
+	for id, m := range messages {
+		if _, ok := tmedia.GetMedia(m); ok || len(messageResourceLinks(m)) > 0 || id < lastID {
+			continue
+		}
+		text := strings.Join(strings.Fields(m.Message), " ")
+		if text != "" {
+			lastID, summary = id, text
+		}
+	}
+	runes := []rune(summary)
+	if len(runes) > 160 {
+		summary = string(runes[:159]) + "…"
+	}
+	if summary == "" {
+		summary = "no text reply"
+	}
+	return fmt.Errorf("bot %d response did not settle within %d seconds (%d messages): %s; last non-resource reply: %q; adjust bot_timeout_seconds/bot_idle_seconds: %w", botID, seconds, len(messages), reason, summary, context.DeadlineExceeded)
 }

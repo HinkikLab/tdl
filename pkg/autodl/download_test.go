@@ -101,7 +101,9 @@ func TestBatchDownloadFailureAndResume(t *testing.T) {
 	require.Zero(t, done)
 	require.Equal(t, 1, failed)
 	require.FileExists(t, path+tempExt)
-	require.Equal(t, map[int]struct{}{0: {}}, downloader.NewPartsStore(path+tempExt, int64(len(data))).Done())
+	identity, err := downloader.FileIdentityOf(first.File())
+	require.NoError(t, err)
+	require.Equal(t, map[int]struct{}{0: {}}, downloader.NewPartsStore(path+tempExt, int64(len(data)), identity).Done())
 
 	second := newTestElem(path, int64(len(data)))
 	p := newProgress()
@@ -282,11 +284,13 @@ func TestIncompleteIncrementalWindowNeverAdvancesWithYes(t *testing.T) {
 	require.Equal(t, int64(100), state.GetLastTS())
 }
 
-func TestFinishedTargetsNeedNoPeerLookup(t *testing.T) {
+func TestOnlyNonMediaTerminalsSkipMetadataConfirmation(t *testing.T) {
 	state := NewState()
 	state.Finish(1, 2)
+	state.Skip(3)
+	state.Filter(4)
 	r := &Runner{}
-	require.Empty(t, r.missing([]int{1, 2}, state))
+	require.Equal(t, []int{1, 2}, r.missing([]int{1, 2, 3, 4}, state))
 }
 
 func TestMissingDoesNotTrustUnknownFileSize(t *testing.T) {

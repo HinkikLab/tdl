@@ -20,6 +20,13 @@ type Elem interface {
 	AsTakeout() bool
 }
 
+// FinalizingElem optionally commits or closes a file after its download workers
+// have settled. It returns local lifecycle errors; Download combines these with
+// the network error before notifying progress or recording a successful result.
+type FinalizingElem interface {
+	Finalize(downloadErr error) error
+}
+
 type File interface {
 	Location() tg.InputFileLocationClass
 	Size() int64

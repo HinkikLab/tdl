@@ -9,40 +9,52 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
+	"github.com/spf13/viper"
+	"go.uber.org/multierr"
 
-	"github.com/iyear/tdl/app/dl"
 	"github.com/iyear/tdl/core/dcpool"
 	"github.com/iyear/tdl/core/storage"
+	"github.com/iyear/tdl/core/tclient"
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/tutil"
+	"github.com/iyear/tdl/internal/transfer"
+	"github.com/iyear/tdl/pkg/consts"
 )
 
 // TagOptions selects media posts by the hashtag in their Telegram caption.
 type TagOptions struct {
-	Chat        string
-	TopicID     int // zero scans the complete chat
-	Tag         string
-	Tags        []string
-	TagMatch    string // any (default) or all
-	Dir         string
-	CheckOnly   bool
-	Takeout     bool
-	Threads     int
-	Limit       int
-	PoolSize    int
-	PoolSizeSet bool
-	Pool        dcpool.Pool
-	MaxPosts    int // zero scans the complete chat history
-	Window      ArchiveWindow
+	Chat            string
+	TopicID         int // zero scans the complete chat
+	Tag             string
+	Tags            []string
+	TagMatch        string // any (default) or all
+	Dir             string
+	CheckOnly       bool
+	Takeout         bool
+	Threads         int
+	Limit           int
+	PoolSize        int
+	PoolSizeSet     bool
+	Pool            dcpool.Pool
+	Manager         *peers.Manager
+	Delay           time.Duration
+	Reservations    *transfer.Reservations
+	Account         string // stable account scope supplied by batch; empty preserves standalone compatibility
+	AccountVerified bool   // Account already includes an authenticated Telegram user ID
+	MaxPosts        int    // zero scans the complete chat history
+	Window          ArchiveWindow
 
 	WriteMetadata *bool // nil enables meta.json output
 	OnResolved    func(string)
+	OnResult      func(transfer.Counts)
+	counts        *transfer.Counts
 }
 
 type tagMedia struct {
@@ -57,6 +69,8 @@ type tagMedia struct {
 
 type tagPost struct {
 	ChatID      int64      `json:"chat_id"`
+	Source      string     `json:"source,omitempty"`
+	Account     string     `json:"account,omitempty"`
 	MessageID   int        `json:"message_id"`
 	GroupedID   int64      `json:"grouped_id,omitempty"`
 	Tags        []string   `json:"tags"`
@@ -70,10 +84,21 @@ type tagPost struct {
 // DownloadTag walks the chat history so album members are included even when
 // Telegram only places a caption on one photo or video in the album.
 func DownloadTag(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts TagOptions) error {
+	account, err := archiveAccount(ctx, c, opts.Account, opts.AccountVerified)
+	if err != nil {
+		return err
+	}
+	opts.Account = account
 	return downloadTag(ctx, c.API(), c, kvd, opts)
 }
 
-func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd storage.Storage, opts TagOptions) error {
+func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd storage.Storage, opts TagOptions) (rerr error) {
+	opts.counts = &transfer.Counts{}
+	defer func() {
+		if opts.OnResult != nil {
+			opts.OnResult(*opts.counts)
+		}
+	}()
 	target, err := ParseTagTarget(opts.Chat, opts.TopicID)
 	if err != nil {
 		return err
@@ -92,14 +117,16 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 	if mode != "any" && mode != "all" {
 		return fmt.Errorf("tag match mode must be any or all")
 	}
-	manager := peers.Options{Storage: storage.NewPeers(kvd)}.Build(api)
+	manager := opts.Manager
+	if manager == nil {
+		manager = peers.Options{Storage: storage.NewPeers(kvd)}.Build(api)
+	}
 	chat := target.Chat
 	peer, err := tutil.GetInputPeer(ctx, manager, chat)
 	if err != nil {
 		return fmt.Errorf("resolve chat %q: %w", chat, err)
 	}
-
-	history, topic, err := tagHistory(ctx, api, peer.InputPeer(), target.TopicID)
+	history, topic, err := tagHistory(ctx, api, archiveInputPeer(peer), target.TopicID)
 	if err != nil {
 		return err
 	}
@@ -108,23 +135,73 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 		topicTitle = topic.Title
 	}
 	announceTarget(TargetName(peer, target.TopicID, topicTitle, target.TopicID == 0), opts.OnResolved)
-	var posts []tagPost
-	scanned := 0
+	if !opts.CheckOnly && opts.Pool == nil {
+		if c == nil {
+			return fmt.Errorf("tag archive requires a download pool")
+		}
+		poolSize := opts.PoolSize
+		if !opts.PoolSizeSet {
+			poolSize = viper.GetInt(consts.FlagPoolSize)
+		}
+		opts.Pool = dcpool.NewPool(c, int64(poolSize), tclient.NewDefaultMiddlewares(ctx, viper.GetDuration(consts.FlagReconnectTimeout))...)
+		defer multierr.AppendInvoke(&rerr, multierr.Close(opts.Pool))
+	}
+	if opts.Reservations == nil {
+		opts.Reservations = &transfer.Reservations{}
+	}
+	root := filepath.Join(opts.Dir, strconv.FormatInt(peer.ID(), 10))
+	scope := strings.Join(tags, "|") + ":" + mode
+	if target.TopicID > 0 {
+		scope += ":topic:" + strconv.Itoa(target.TopicID)
+	}
+	sum := sha256.Sum256([]byte(scope))
+	manifestPath := filepath.Join(root, fmt.Sprintf("index_%x.json", sum[:6]))
+	var index *tagIndex
+	defer func() {
+		if index != nil {
+			rerr = multierr.Append(rerr, index.abort())
+		}
+	}()
+	delay := &transfer.Delay{Duration: opts.Delay}
+	selected, scanned := 0, 0
 	complete, err := scanArchiveHistory(ctx, history, opts.Window, func(album []*tg.Message) (bool, error) {
 		var pending []tagMedia
 		for _, m := range album {
 			scanned++
+			opts.counts.Messages++
 			if media, ok := photoOrVideo(m); ok {
-				pending = append(pending, tagMedia{ID: m.ID, Type: "message", File: media.Name,
-					Size: media.Size, Date: m.Date, Text: m.Message, GroupedID: m.GroupedID})
+				pending = append(pending, tagMedia{ID: m.ID, Type: "message", File: media.Name, Size: media.Size, Date: m.Date, Text: m.Message, GroupedID: m.GroupedID})
 			}
 		}
-		if len(pending) > 0 {
-			if post, ok := matchAlbum(pending, tags, mode, peer.ID(), chat); ok {
-				posts = append(posts, post)
-				if opts.MaxPosts > 0 && len(posts) >= opts.MaxPosts {
-					return false, nil
+		if post, ok := matchAlbumIfMedia(pending, tags, mode, peer.ID(), chat); ok {
+			post.Source, post.Account = archiveSource(archiveInputPeer(peer)), opts.Account
+			selected++
+			opts.counts.Posts++
+			if opts.CheckOnly {
+				opts.counts.Files += int64(len(post.Messages))
+				fmt.Printf("  %d: %d photo/video file(s), %s\n", post.MessageID, len(post.Messages), post.Directory)
+			} else {
+				if index == nil {
+					if err := os.MkdirAll(root, 0o755); err != nil {
+						return false, err
+					}
+					index, err = newTagIndex(manifestPath, peer.ID(), opts.Reservations)
+					if err != nil {
+						return false, err
+					}
+					fmt.Printf("Archive: %s\n", root)
 				}
+				if err := archiveTagPost(ctx, root, post, album, archiveInputPeer(peer), opts, delay); err != nil {
+					return false, err
+				}
+				for _, m := range post.Messages {
+					if err := index.append(m); err != nil {
+						return false, err
+					}
+				}
+			}
+			if opts.MaxPosts > 0 && selected >= opts.MaxPosts {
+				return false, nil
 			}
 		}
 		return true, nil
@@ -132,67 +209,26 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Scanned %d messages; found %d posts matching %s (%s).\n", scanned, len(posts), strings.Join(tags, ", "), mode)
+	fmt.Printf("Scanned %d messages; found %d posts matching %s (%s).\n", scanned, selected, strings.Join(tags, ", "), mode)
 	if opts.CheckOnly {
-		for _, post := range posts {
-			fmt.Printf("  %d: %d photo/video file(s), %s\n", post.MessageID, len(post.Messages), post.Directory)
-		}
 		return nil
 	}
-	if len(posts) == 0 {
-		return nil
-	}
-
-	root := filepath.Join(opts.Dir, strconv.FormatInt(peer.ID(), 10))
-	if err := os.MkdirAll(root, 0o755); err != nil {
-		return err
-	}
-	groupDirByMessage := make(map[int]string)
-	manifest := struct {
-		ID       int64     `json:"id"`
-		Messages []Message `json:"messages"`
-	}{ID: peer.ID()}
-	for _, post := range posts {
-		dir := filepath.Join(root, post.Directory)
-		if err := migrateTagDirectory(root, dir, post.MessageID); err != nil {
+	if index != nil {
+		if err := index.commit(); err != nil {
 			return err
 		}
-		if err := os.MkdirAll(dir, 0o755); err != nil {
-			return err
-		}
-		if err := writeArchiveMetadata(dir, post, opts.WriteMetadata); err != nil {
-			return err
-		}
-		for _, m := range post.Messages {
-			groupDirByMessage[m.ID] = post.Directory
-			manifest.Messages = append(manifest.Messages, Message{
-				ID: m.ID, Type: "message", File: m.File, Date: m.Date, Text: m.Text,
-			})
-		}
 	}
-	scope := strings.Join(tags, "|") + ":" + mode
-	if target.TopicID > 0 {
-		scope += ":topic:" + strconv.Itoa(target.TopicID)
-	}
-	sum := sha256.Sum256([]byte(scope))
-	manifestPath := filepath.Join(root, fmt.Sprintf("index_%x.json", sum[:6]))
-	if err := writeTagJSON(manifestPath, manifest); err != nil {
-		return err
-	}
-	fmt.Printf("Archive: %s\n", root)
-	err = dl.Run(ctx, c, kvd, dl.Options{
-		Dir: root, Files: []string{manifestPath}, Continue: true,
-		SkipSame: true, Takeout: opts.Takeout,
-		Threads: opts.Threads, Limit: opts.Limit,
-		PoolSize: opts.PoolSize, PoolSizeSet: opts.PoolSizeSet,
-		Pool:              opts.Pool,
-		Template:          `{{.GroupDir}}/{{.MessageID}}_{{filenamify .FileName}}`,
-		GroupDirByMessage: groupDirByMessage,
-	})
-	if err == nil && !complete && opts.Window.Until > 0 {
+	if !complete && opts.Window.Until > 0 {
 		return fmt.Errorf("max_posts truncated the incremental archive window; keeping last_ts")
 	}
-	return err
+	return nil
+}
+
+func matchAlbumIfMedia(pending []tagMedia, tags []string, mode string, id int64, chat string) (tagPost, bool) {
+	if len(pending) == 0 {
+		return tagPost{}, false
+	}
+	return matchAlbum(pending, tags, mode, id, chat)
 }
 
 func normalizeTag(raw string) (string, error) {
@@ -358,9 +394,10 @@ func postDirectory(caption string, id int, matchedTag string) string {
 
 // migrateTagDirectory moves an archive made with an older folder naming rule
 // only when its metadata confirms the same Telegram message ID.
-func migrateTagDirectory(root, target string, id int) error {
+func migrateTagDirectory(root, target string, post tagPost) error {
+	id := post.MessageID
 	if _, err := os.Stat(target); err == nil {
-		return nil
+		return checkArchiveOwner(target, post)
 	} else if !os.IsNotExist(err) {
 		return err
 	}
@@ -378,10 +415,9 @@ func migrateTagDirectory(root, target string, id int) error {
 		if err != nil {
 			continue
 		}
-		var meta struct {
-			MessageID int `json:"message_id"`
-		}
-		if json.Unmarshal(b, &meta) != nil || meta.MessageID != id {
+		var meta tagPost
+		if json.Unmarshal(b, &meta) != nil || !sameArchiveOwner(meta, post) {
+			fmt.Printf("Archive %s has incompatible or unverified source/account metadata; preserved for recovery\n", candidate)
 			continue
 		}
 		if source != "" {

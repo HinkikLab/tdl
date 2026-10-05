@@ -16,6 +16,7 @@ import (
 	"golang.org/x/net/proxy"
 
 	"github.com/iyear/tdl/core/logctx"
+	"github.com/iyear/tdl/core/middlewares/layer"
 	"github.com/iyear/tdl/core/middlewares/recovery"
 	"github.com/iyear/tdl/core/middlewares/retry"
 	"github.com/iyear/tdl/core/util/netutil"
@@ -79,7 +80,7 @@ func New(ctx context.Context, o Options) (*telegram.Client, error) {
 		RetryInterval:  5 * time.Second,
 		MaxRetries:     5,
 		DialTimeout:    10 * time.Second,
-		Middlewares:    append(NewDefaultMiddlewares(ctx, o.ReconnectTimeout), o.Middlewares...),
+		Middlewares:    clientMiddlewares(ctx, o.ReconnectTimeout, o.Middlewares),
 		Clock:          tclock,
 		Logger:         logctx.From(ctx).Named("td"),
 	}
@@ -93,6 +94,12 @@ func NewDefaultMiddlewares(ctx context.Context, timeout time.Duration) []telegra
 		retry.New(5),
 		floodwait.NewSimpleWaiter(),
 	}
+}
+
+func clientMiddlewares(ctx context.Context, timeout time.Duration, middlewares []telegram.Middleware) []telegram.Middleware {
+	// The layer adapter must see the final request after custom middleware
+	// has added wrappers such as invokeWithTakeout or invokeAfterMsg.
+	return append(append(NewDefaultMiddlewares(ctx, timeout), middlewares...), layer.New())
 }
 
 func newBackoff(timeout time.Duration) backoff.BackOff {

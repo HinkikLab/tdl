@@ -105,8 +105,8 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 		Threads:  viper.GetInt(consts.FlagThreads),
 	})
 
-	go fwProgress.Render()
-	defer prog.Wait(ctx, fwProgress)
+	stopRender := prog.Start(fwProgress)
+	defer stopRender()
 
 	return fw.Forward(ctx)
 }

@@ -173,6 +173,26 @@ func sameFileLocation(a, b tg.InputFileLocationClass) bool {
 	}
 }
 
+func sourcePeerMatches(peer tg.InputPeerClass, actual tg.PeerClass) bool {
+	switch requested := peer.(type) {
+	case *tg.InputPeerChannel:
+		received, ok := actual.(*tg.PeerChannel)
+		return ok && received.ChannelID == requested.ChannelID
+	case *tg.InputPeerChat:
+		received, ok := actual.(*tg.PeerChat)
+		return ok && received.ChatID == requested.ChatID
+	case *tg.InputPeerUser:
+		received, ok := actual.(*tg.PeerUser)
+		return ok && received.UserID == requested.UserID
+	case *tg.InputPeerSelf:
+		// InputPeerSelf does not expose the account ID for comparison.
+		_, ok := actual.(*tg.PeerUser)
+		return ok
+	default:
+		return false
+	}
+}
+
 func refreshMessageFile(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, id int, file File) (tg.InputFileLocationClass, error) {
 	logctx.From(ctx).Info("Refresh expired file reference", zap.Int("message_id", id))
 	ids := []tg.InputMessageClass{&tg.InputMessageID{ID: id}}
@@ -195,6 +215,9 @@ func refreshMessageFile(ctx context.Context, api *tg.Client, peer tg.InputPeerCl
 	for _, msg := range modified.GetMessages() {
 		if msg.GetID() != id {
 			continue
+		}
+		if message, ok := msg.(*tg.Message); ok && message.PeerID != nil && !sourcePeerMatches(peer, message.PeerID) {
+			return nil, errors.Errorf("source message %d belongs to a different peer than %T", id, peer)
 		}
 		media, ok := tmedia.GetMedia(msg)
 		if !ok {

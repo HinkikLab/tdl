@@ -17,9 +17,10 @@ import (
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
+	"github.com/stretchr/testify/require"
+
 	"github.com/iyear/tdl/core/downloader"
 	"github.com/iyear/tdl/core/tmedia"
-	"github.com/stretchr/testify/require"
 )
 
 type linkedRPC func(context.Context, bin.Encoder, bin.Decoder) error
@@ -177,7 +178,7 @@ func TestLinkedArchiveReissuesChainAndResumesStableFile(t *testing.T) {
 	dir := filepath.Join(root, post.Directory)
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	path := filepath.Join(dir, name)
-	f, parts, err := downloader.OpenPartial(path+".tmp", int64(len(data)))
+	f, parts, err := downloader.OpenPartialFile(path+".tmp", linkedMediaFile{md})
 	require.NoError(t, err)
 	_, err = f.WriteAt(data[:downloader.MaxPartSize], 0)
 	require.NoError(t, err)
@@ -485,9 +486,11 @@ func TestBotLiveUpdatesRetainSelfDeletedFilesAndCleanupLateReplies(t *testing.T)
 	require.NoError(t, opts.Normalize())
 	updates := &BotUpdates{}
 	var deleted []int
+	historyCalls := 0
 	api := tg.NewClient(linkedRPC(func(ctx context.Context, in bin.Encoder, out bin.Decoder) error {
 		switch req := in.(type) {
 		case *tg.MessagesGetHistoryRequest:
+			historyCalls++
 			return linkedReply(&tg.MessagesMessages{}, out) // the bot deleted its files before the next history poll
 		case *tg.MessagesStartBotRequest:
 			require.NoError(t, updates.Handle(ctx, &tg.Updates{Updates: []tg.UpdateClass{&tg.UpdateNewMessage{Message: linkedDocument(2, 99, "fresh", []byte("notes"))}, &tg.UpdateDeleteMessages{Messages: []int{2}}}}))
@@ -503,6 +506,7 @@ func TestBotLiveUpdatesRetainSelfDeletedFilesAndCleanupLateReplies(t *testing.T)
 	require.NoError(t, err)
 	require.Len(t, msgs, 1)
 	require.Equal(t, 2, msgs[0].Message.ID)
+	require.LessOrEqual(t, historyCalls, 12, "self-deleted resources remain complete while idle history polling backs off")
 	require.NoError(t, updates.Handle(context.Background(), &tg.Updates{Updates: []tg.UpdateClass{&tg.UpdateNewMessage{Message: &tg.Message{ID: 3, PeerID: &tg.PeerUser{UserID: 100}, Message: "done"}}, &tg.UpdateNewMessage{Message: &tg.Message{ID: 9, PeerID: &tg.PeerUser{UserID: 200}, Message: "unrelated"}}}}))
 	require.NoError(t, cleanupLinked(context.Background(), b))
 	require.Equal(t, []int{1, 2, 3}, deleted)

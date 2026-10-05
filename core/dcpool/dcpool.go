@@ -10,6 +10,7 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/iyear/tdl/core/logctx"
+	"github.com/iyear/tdl/core/middlewares/layer"
 	"github.com/iyear/tdl/core/middlewares/takeout"
 )
 
@@ -40,10 +41,12 @@ type pool struct {
 
 func NewPool(c *telegram.Client, size int64, middlewares ...telegram.Middleware) Pool {
 	return &pool{
-		api:         c,
-		size:        size,
-		mu:          &sync.Mutex{},
-		middlewares: middlewares,
+		api:  c,
+		size: size,
+		mu:   &sync.Mutex{},
+		// Pool invokers bypass the primary client's middleware chain. Keep
+		// the protocol adapter innermost, after any caller-added wrappers.
+		middlewares: append(append([]telegram.Middleware(nil), middlewares...), layer.New()),
 		invokers:    make(map[int]tg.Invoker),
 		closes:      make(map[int]func() error),
 		takeout:     0,

@@ -3,6 +3,7 @@ package autodl
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -15,6 +16,7 @@ import (
 	"github.com/go-faster/errors"
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/iyear/tdl/core/dcpool"
@@ -23,6 +25,7 @@ import (
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/fsutil"
 	"github.com/iyear/tdl/core/util/tutil"
+	"github.com/iyear/tdl/internal/transfer"
 	"github.com/iyear/tdl/pkg/tplfunc"
 	"github.com/iyear/tdl/pkg/utils"
 )
@@ -78,12 +81,15 @@ type iter struct {
 	ids     []int
 	opts    *iterOptions
 
-	tpl     *nameTemplate
-	include map[string]struct{}
-	exclude map[string]struct{}
+	tpl          *nameTemplate
+	reservations *transfer.Reservations
+	delay        transfer.Delay
+	include      map[string]struct{}
+	exclude      map[string]struct{}
 
-	cursor  int
-	pending []*tg.Message
+	cursor      int
+	rangeCursor int
+	pending     []*tg.Message
 
 	mu       sync.Mutex
 	finished map[int]struct{}
@@ -96,11 +102,18 @@ type iter struct {
 
 // iterOptions carries the per job download settings.
 type iterOptions struct {
-	template string
-	include  []string
-	exclude  []string
-	takeout  bool
-	batch    int
+	state *State
+	// A configured interval is consumed in bounded batches without an ID list.
+	rangeStart, rangeEnd int
+	isFinished           func(int) bool
+	template             string
+	include              []string
+	exclude              []string
+	takeout              bool
+	batch                int
+	delay                time.Duration
+	reservations         *transfer.Reservations
+	onCounts             func(transfer.Counts)
 	// onSkip is called with the ids that turned out to have no media.
 	onSkip func(ids []int)
 	// onFinish is called with the ids that are already downloaded.
@@ -135,18 +148,25 @@ func newIter(pool dcpool.Pool, manager *peers.Manager, dialog peers.Peer, dir st
 	batch = min(batch, DefaultBatchSize)
 	opts.batch = batch
 
+	reservations := opts.reservations
+	if reservations == nil {
+		reservations = &transfer.Reservations{}
+	}
 	return &iter{
-		pool:     pool,
-		manager:  manager,
-		dialog:   dialog,
-		dir:      dir,
-		ids:      ids,
-		opts:     opts,
-		tpl:      tpl,
-		include:  include,
-		exclude:  exclude,
-		finished: make(map[int]struct{}),
-		elems:    make(chan downloader.Elem, 1),
+		pool:         pool,
+		manager:      manager,
+		dialog:       dialog,
+		dir:          dir,
+		ids:          ids,
+		rangeCursor:  opts.rangeStart,
+		opts:         opts,
+		tpl:          tpl,
+		reservations: reservations,
+		delay:        transfer.Delay{Duration: opts.delay},
+		include:      include,
+		exclude:      exclude,
+		finished:     make(map[int]struct{}),
+		elems:        make(chan downloader.Elem, 1),
 	}, nil
 }
 
@@ -172,7 +192,7 @@ func (i *iter) process(ctx context.Context) bool {
 		return false
 	}
 
-	for len(i.pending) > 0 || i.cursor < len(i.ids) {
+	for len(i.pending) > 0 || i.cursor < len(i.ids) || i.rangeCursor < i.opts.rangeEnd {
 		if len(i.pending) > 0 {
 			msg := i.pending[0]
 			i.pending[0] = nil
@@ -188,9 +208,24 @@ func (i *iter) process(ctx context.Context) bool {
 			}
 			continue
 		}
-		end := min(i.cursor+i.opts.batch, len(i.ids))
-		batch := i.ids[i.cursor:end]
-		i.cursor = end
+		var batch []int
+		if i.opts.rangeEnd > i.opts.rangeStart {
+			batch = make([]int, 0, i.opts.batch)
+			for i.rangeCursor < i.opts.rangeEnd && len(batch) < i.opts.batch {
+				id := i.rangeCursor
+				i.rangeCursor++
+				if !i.isFinished(id) {
+					batch = append(batch, id)
+				}
+			}
+			if len(batch) == 0 {
+				continue
+			}
+		} else {
+			end := min(i.cursor+i.opts.batch, len(i.ids))
+			batch = i.ids[i.cursor:end]
+			i.cursor = end
+		}
 
 		found, gone, err := tutil.GetMessages(ctx, i.pool.Default(ctx), i.dialog.InputPeer(), batch)
 		if err != nil {
@@ -199,6 +234,7 @@ func (i *iter) process(ctx context.Context) bool {
 		}
 
 		if len(gone) > 0 {
+			i.count(transfer.Counts{Messages: int64(len(gone)), MessagesUnavailable: int64(len(gone))})
 			i.markSkipped(ctx, gone)
 		}
 
@@ -222,20 +258,31 @@ func (i *iter) push(ctx context.Context, from peers.Peer, msg *tg.Message) bool 
 	id := msg.ID
 
 	item, ok := tmedia.GetMedia(msg)
+	i.count(transfer.Counts{Messages: 1})
 	if !ok {
+		i.count(transfer.Counts{MessagesNoMedia: 1})
 		i.markSkipped(ctx, []int{id})
 		return false
 	}
+	i.count(transfer.Counts{Files: 1})
 
 	ext := strings.ToLower(filepath.Ext(item.Name))
 	if len(i.include) > 0 {
 		if _, ok := i.include[ext]; !ok {
+			i.count(transfer.Counts{FilesFiltered: 1})
+			if i.opts.state != nil {
+				i.opts.state.Filter(id)
+			}
 			i.markDone(id)
 			return false
 		}
 	}
 	if len(i.exclude) > 0 {
 		if _, ok := i.exclude[ext]; ok {
+			i.count(transfer.Counts{FilesFiltered: 1})
+			if i.opts.state != nil {
+				i.opts.state.Filter(id)
+			}
 			i.markDone(id)
 			return false
 		}
@@ -260,23 +307,65 @@ func (i *iter) push(ctx context.Context, from peers.Peer, msg *tg.Message) bool 
 		i.err = err
 		return false
 	}
-	if stat, err := os.Stat(path); err == nil && stat.Mode().IsRegular() && stat.Size() == item.Size {
+	identity, err := downloader.FileIdentityOf(mediaFile{item, peerID(from), id})
+	if err != nil {
+		i.err = err
+		return false
+	}
+	path, err = i.reservations.Reserve(path, fmt.Sprintf("%s/message:%d/media:%v", peerKey(from), id, identity))
+	if err != nil {
+		i.err = err
+		return false
+	}
+	record, recorded := MediaRecord{}, false
+	if i.opts.state != nil {
+		record, recorded = i.opts.state.Media(id)
+	}
+	stat, statErr := os.Stat(path)
+	compatible := !recorded || record.Identity == identity && record.Path == canonicalPath(path) && record.MatchesStat(stat)
+	if compatible && statErr == nil && stat.Mode().IsRegular() && stat.Size() == item.Size {
 		// Only trust a pre-existing file after resolving the message in a batch
 		// and comparing it with Telegram's authoritative size.
+		if i.opts.state != nil {
+			if err := i.opts.state.CompleteMedia(id, identity, path); err != nil {
+				i.err = err
+				return false
+			}
+		}
+		i.count(transfer.Counts{FilesExisting: 1})
 		i.markDone(id)
 		return false
 	}
+	if i.opts.state != nil {
+		i.opts.state.ForgetMedia(id)
+	}
+	if recorded && !compatible {
+		if statErr == nil && stat.Mode().IsRegular() {
+			backup, err := transfer.PreserveFile(path)
+			if err != nil {
+				i.err = err
+				return false
+			}
+			logctx.From(ctx).Warn("Changed completed media preserved; downloading current identity", zap.String("recovery_path", backup))
+		}
+	}
 
 	e := newElem(from, id, mediaFile{item, peerID(from), id}, item.Date, path)
+	if err := i.delay.Wait(ctx); err != nil {
+		i.err = err
+		return false
+	}
 	if err = e.start(i.opts.takeout); err != nil {
 		i.err = errors.Wrap(err, "create file")
 		return false
 	}
+	if paths := e.store.RecoveryPaths(); len(paths) > 0 {
+		logctx.From(ctx).Warn("Unverified partial download preserved; downloading this media again", zap.Strings("recovery_paths", paths))
+	}
 
 	select {
 	case <-ctx.Done():
-		_ = e.closeFile()
-		i.err = ctx.Err()
+		i.err = multierr.Append(ctx.Err(), e.closeFile())
 		return false
 	case i.elems <- e:
 	}
@@ -293,14 +382,17 @@ func (i *iter) Value() downloader.Elem { return <-i.elems }
 // The downloader stops asking for elements as soon as the iterator fails, so
 // the queued files would otherwise keep their progress trackers alive forever.
 // It must only be called after the download has returned.
-func (i *iter) Drain() {
+func (i *iter) Drain() (err error) {
 	for {
 		select {
-		case e := <-i.elems:
-			_ = e.(*elem).closeFile()
+		case e, ok := <-i.elems:
+			if !ok {
+				return err
+			}
+			multierr.AppendInto(&err, e.(*elem).closeFile())
 		default:
 			close(i.elems)
-			return
+			return err
 		}
 	}
 }
@@ -333,9 +425,11 @@ func (i *iter) Finished() []int {
 
 // markDone records an id as handled.
 func (i *iter) markDone(id int) {
-	i.mu.Lock()
-	i.finished[id] = struct{}{}
-	i.mu.Unlock()
+	if i.opts.isFinished == nil {
+		i.mu.Lock()
+		i.finished[id] = struct{}{}
+		i.mu.Unlock()
+	}
 
 	if i.opts.onFinish != nil {
 		i.opts.onFinish([]int{id})
@@ -344,11 +438,13 @@ func (i *iter) markDone(id int) {
 
 // markSkipped records ids that have no media, e.g. deleted messages.
 func (i *iter) markSkipped(ctx context.Context, ids []int) {
-	i.mu.Lock()
-	for _, id := range ids {
-		i.finished[id] = struct{}{}
+	if i.opts.isFinished == nil {
+		i.mu.Lock()
+		for _, id := range ids {
+			i.finished[id] = struct{}{}
+		}
+		i.mu.Unlock()
 	}
-	i.mu.Unlock()
 
 	if len(ids) > 0 {
 		logctx.From(ctx).Info("Skip unavailable messages",
@@ -362,6 +458,9 @@ func (i *iter) markSkipped(ctx context.Context, ids []int) {
 }
 
 func (i *iter) isFinished(id int) bool {
+	if i.opts.isFinished != nil {
+		return i.opts.isFinished(id)
+	}
 	i.mu.Lock()
 	defer i.mu.Unlock()
 
@@ -370,3 +469,9 @@ func (i *iter) isFinished(id int) bool {
 }
 
 func peerID(p peers.Peer) int64 { return p.ID() }
+
+func (i *iter) count(counts transfer.Counts) {
+	if i.opts.onCounts != nil {
+		i.opts.onCounts(counts)
+	}
+}

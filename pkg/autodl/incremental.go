@@ -2,10 +2,6 @@ package autodl
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
-	"os"
-	"path/filepath"
 	"sort"
 	"strings"
 	"time"
@@ -22,6 +18,7 @@ import (
 
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/tmedia"
+	"github.com/iyear/tdl/core/util/tutil"
 	"github.com/iyear/tdl/pkg/texpr"
 )
 
@@ -62,7 +59,7 @@ func (r *Runner) planIncremental(ctx context.Context, job *Job, link Link, dir s
 	}
 
 	now := time.Now().Unix()
-	overlap := pick(num(r.opts.OverlapSeconds), num(job.Overlap), num(r.cfg.OverlapSeconds), DefaultOverlapSeconds)
+	overlap := r.overlapSeconds(job)
 
 	start := int64(0)
 	if state.GetLastTS() > 0 {
@@ -84,7 +81,7 @@ func (r *Runner) planIncremental(ctx context.Context, job *Job, link Link, dir s
 		formatLastTS(state.GetLastTS()),
 		overlap)
 
-	ids, _, err := r.collectIDs(ctx, job, dialog, start, now, dir)
+	ids, err := r.collectIDs(ctx, job, dialog, start, now, dir)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -100,10 +97,7 @@ func (r *Runner) planIncremental(ctx context.Context, job *Job, link Link, dir s
 
 // collectIDs walks the history of the dialog inside [start, end] and returns
 // the ids of the messages that carry media.
-//
-// The first return value holds the message ids, the second the timestamps that
-// were seen.
-func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, start, end int64, dir string) ([]int, []int64, error) {
+func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, start, end int64, dir string) ([]int, error) {
 	api := r.pool.Default(ctx)
 
 	// an export_filter is an expr expression evaluated for every message, the
@@ -112,7 +106,7 @@ func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, st
 	if f := strings.TrimSpace(job.ExportFilter); f != "" {
 		compiled, err := expr.Compile(f, expr.AsBool())
 		if err != nil {
-			return nil, nil, errors.Wrapf(err, "compile export_filter %q", f)
+			return nil, errors.Wrapf(err, "compile export_filter %q", f)
 		}
 		filter = compiled
 	}
@@ -123,6 +117,8 @@ func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, st
 	var q2 messages.Query
 	if job.ReplyPostID != nil && *job.ReplyPostID > 0 {
 		q2 = q.GetReplies(dialog.InputPeer()).MsgID(*job.ReplyPostID)
+	} else if num(job.TopicID) > 0 {
+		q2 = q.GetReplies(dialog.InputPeer()).MsgID(*job.TopicID)
 	} else {
 		q2 = q.GetHistory(dialog.InputPeer())
 	}
@@ -134,24 +130,26 @@ func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, st
 
 	seen := make(map[int]struct{})
 	out := make([]int, 0)
-	dates := make([]int64, 0, 64)
-	exported := make([]exportMessage, 0)
+	var export *exportStream
+	if !r.opts.CheckOnly {
+		var err error
+		export, err = newExportStream(dir, dialog.ID())
+		if err != nil {
+			logctx.From(ctx).Warn("Create export json", zap.Error(err))
+		}
+	}
+	defer func() {
+		if export != nil {
+			export.Abort()
+		}
+	}()
 	scanned := 0
-
-loop:
-	for it.Next(ctx) {
-		msg := it.Value()
-		m, ok := msg.Msg.(*tg.Message)
-		if !ok {
-			continue
+	accept := func(m *tg.Message) error {
+		if int64(m.Date) < start || int64(m.Date) > end {
+			return nil
 		}
-
-		if m.Date < int(start) {
-			break loop
-		}
-
 		if scanned++; scanned > maxIncrementalScan {
-			return nil, nil, errors.Errorf("incremental scan exceeded %d messages; keeping last_ts to avoid losing older messages", maxIncrementalScan)
+			return errors.Errorf("incremental scan exceeded %d messages; keeping last_ts to avoid losing older messages", maxIncrementalScan)
 		}
 
 		if job.TopicID != nil && *job.TopicID > 0 {
@@ -161,44 +159,46 @@ loop:
 			if m.ID != *job.TopicID {
 				top, ok := m.GetReplyTo()
 				if !ok {
-					continue
+					return nil
 				}
 				header, ok := top.(*tg.MessageReplyHeader)
 				if !ok {
-					continue
+					return nil
 				}
 				topicID := header.ReplyToMsgID
 				if id, ok := header.GetReplyToTopID(); ok {
 					topicID = id
 				}
 				if topicID != *job.TopicID {
-					continue
+					return nil
 				}
 			}
 		}
 
 		media, hasMedia := tmedia.GetMedia(m)
 		if !hasMedia && !job.ExportAll {
-			continue
+			return nil
 		}
 
 		if filter != nil {
 			res, err := texpr.Run(filter, texpr.ConvertEnvMessage(m))
 			if err != nil {
-				return nil, nil, errors.Wrap(err, "run export_filter")
+				return errors.Wrap(err, "run export_filter")
 			}
 			keep, _ := res.(bool)
 			if !keep {
-				continue
+				return nil
 			}
 		}
 
 		if _, ok := seen[m.ID]; ok {
-			continue
+			return nil
 		}
 		seen[m.ID] = struct{}{}
 		out = append(out, m.ID)
-		dates = append(dates, int64(m.Date))
+		if r.opts.CheckOnly {
+			return nil
+		}
 
 		name := ""
 		if media != nil {
@@ -214,22 +214,56 @@ loop:
 			item.Date = m.Date
 			item.Text = m.Message
 		}
-		exported = append(exported, item)
+		if export != nil {
+			if err := export.Add(item); err != nil {
+				logctx.From(ctx).Warn("Write export json", zap.Error(err))
+				export.Abort()
+				export = nil
+			}
+		}
+		return nil
+	}
+	// Include root media explicitly to preserve the previous topic selection
+	// contract while querying replies on the server.
+	if num(job.TopicID) > 0 && job.ReplyPostID == nil {
+		found, _, err := tutil.GetMessages(ctx, api, dialog.InputPeer(), []int{*job.TopicID})
+		if err != nil {
+			return nil, errors.Wrap(err, "resolve topic root")
+		}
+		if root := found[*job.TopicID]; root != nil {
+			if err := accept(root); err != nil {
+				return nil, err
+			}
+		}
+	}
+	for it.Next(ctx) {
+		m, ok := it.Value().Msg.(*tg.Message)
+		if !ok {
+			continue
+		}
+		if int64(m.Date) < start {
+			break
+		}
+		if err := accept(m); err != nil {
+			return nil, err
+		}
 	}
 
 	if err := it.Err(); err != nil {
-		return nil, nil, errors.Wrap(err, "iterate history")
+		return nil, errors.Wrap(err, "iterate history")
 	}
 
 	sort.Ints(out)
 
 	// Keep the export on disk for debugging, exactly like the python script
 	// kept its export json files around.
-	if err := writeExport(dir, dialog, exported); err != nil {
-		logctx.From(ctx).Warn("Write export json", zap.Error(err))
+	if export != nil {
+		if err := export.Finalize(); err != nil {
+			logctx.From(ctx).Warn("Write export json", zap.Error(err))
+		}
 	}
 
-	return out, dates, nil
+	return out, nil
 }
 
 // maxIncrementalScan bounds how many history messages one incremental window
@@ -237,31 +271,15 @@ loop:
 // crawl of the whole chat.
 const maxIncrementalScan = 100000
 
-// writeExport stores the exported window under <dir>/.tdl_tmp so it can be
-// inspected afterwards.
-func writeExport(dir string, dialog peers.Peer, msgs []exportMessage) error {
-	tmp := filepath.Join(dir, tmpDirName)
-	if err := os.MkdirAll(tmp, 0o755); err != nil {
-		return err
-	}
-
-	name := fmt.Sprintf("tdl-export-%d-%d.json", dialog.ID(), time.Now().Unix())
-	path := filepath.Join(tmp, name)
-
-	b, err := json.MarshalIndent(exportFile{ID: dialog.ID(), Messages: msgs}, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	return os.WriteFile(path, b, 0o644)
-}
-
 // advanceIncremental moves the job's timestamp forward once the window has
 // been fully processed.
 //
 // The timestamp only advances when nothing is missing, so a failed download is
 // retried by the next run instead of being skipped forever.
 func (r *Runner) advanceIncremental(ctx context.Context, job *Job, store *stateStore, state *State, targets []int, endTS int64) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	log := logctx.From(ctx)
 
 	missing := state.Missing(targets)
@@ -276,8 +294,13 @@ func (r *Runner) advanceIncremental(ctx context.Context, job *Job, store *stateS
 		return nil
 	}
 
+	previous := state.GetLastTS()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
 	state.SetLastTS(endTS)
 	if err := store.Save(); err != nil {
+		state.SetLastTS(previous)
 		return errors.Wrap(err, "save state")
 	}
 

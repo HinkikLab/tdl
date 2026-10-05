@@ -71,7 +71,7 @@
       "subdir": "06-tag-single"
     },
     {
-      "_comment": "7. Any caption hashtag in an ID range / 多标签范围归档：[100,110) 内命中 #教程 或 #示例 即保留整组相册。write_metadata=false 仅保存媒体。",
+      "_comment": "7. Any caption hashtag in an ID range / 多标签范围归档：[100,110) 内命中 #教程 或 #示例 即保留整组相册。write_metadata=false 不输出说明/可见元数据，保留内部续传记录。",
       "chat_url": "https://t.me/example_channel",
       "tags": ["#教程", "#示例"],
       "tag_match": "any",
@@ -108,6 +108,7 @@
         "bot_idle_seconds": 3,
         "poll_interval_ms": 500,
         "max_bot_messages": 500,
+        "max_topic_messages": 1000,
         "rerequest_limit": 3,
         "flood_retries": 5,
         "flood_wait_seconds": 30,

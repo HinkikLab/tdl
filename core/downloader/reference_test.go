@@ -252,6 +252,7 @@ func TestRefreshMessageFileValidatesAttachment(t *testing.T) {
 			peer := tg.InputPeerClass(&tg.InputPeerChannel{ChannelID: 123})
 			if mode == "private chat" {
 				peer = &tg.InputPeerUser{UserID: 123}
+				msg.PeerID = &tg.PeerUser{UserID: 123}
 			}
 			switch mode {
 			case "photo":
@@ -297,6 +298,51 @@ func TestRefreshMessageFileValidatesAttachment(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestRefreshMessageFileValidatesSourcePeer(t *testing.T) {
+	for _, source := range []struct {
+		name                                 string
+		peer                                 tg.InputPeerClass
+		matching, differentID, differentKind tg.PeerClass
+	}{
+		{"channel", &tg.InputPeerChannel{ChannelID: 123}, &tg.PeerChannel{ChannelID: 123}, &tg.PeerChannel{ChannelID: 124}, &tg.PeerChat{ChatID: 123}},
+		{"chat", &tg.InputPeerChat{ChatID: 123}, &tg.PeerChat{ChatID: 123}, &tg.PeerChat{ChatID: 124}, &tg.PeerUser{UserID: 123}},
+		{"user", &tg.InputPeerUser{UserID: 123}, &tg.PeerUser{UserID: 123}, &tg.PeerUser{UserID: 124}, &tg.PeerChannel{ChannelID: 123}},
+	} {
+		for _, result := range []struct {
+			name  string
+			peer  tg.PeerClass
+			valid bool
+		}{
+			{"matching", source.matching, true},
+			{"different ID", source.differentID, false},
+			{"different kind", source.differentKind, false},
+		} {
+			t.Run(source.name+"/"+result.name, func(t *testing.T) {
+				file := &testElem{size: 20, loc: &tg.InputDocumentFileLocation{ID: 42}}
+				message := referenceMessage([]byte("fresh"), 20)
+				message.PeerID = result.peer
+				api := tg.NewClient(rpcFunc(func(_ context.Context, input bin.Encoder, output bin.Decoder) error {
+					messages := []tg.MessageClass{message}
+					if _, channel := source.peer.(*tg.InputPeerChannel); channel {
+						require.IsType(t, &tg.ChannelsGetMessagesRequest{}, input)
+						return referenceResult(&tg.MessagesChannelMessages{Messages: messages}, output)
+					}
+					require.IsType(t, &tg.MessagesGetMessagesRequest{}, input)
+					return referenceResult(&tg.MessagesMessages{Messages: messages}, output)
+				}))
+				location, err := refreshMessageFile(context.Background(), api, source.peer, 7, file)
+				if result.valid {
+					require.NoError(t, err)
+					require.Equal(t, []byte("fresh"), fileReference(location))
+				} else {
+					require.ErrorContains(t, err, "belongs to a different peer")
+					require.Nil(t, location, "matching media identity cannot authorize a different source peer")
+				}
+			})
+		}
 	}
 }
 

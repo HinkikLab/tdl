@@ -1,18 +1,15 @@
 package chat
 
 import (
-	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"fmt"
-	"io"
 	"os"
 	"path/filepath"
 	"sort"
 	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/flytam/filenamify"
@@ -20,16 +17,13 @@ import (
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/telegram/query"
 	"github.com/gotd/td/tg"
-	pw "github.com/jedib0t/go-pretty/v6/progress"
 	"go.uber.org/multierr"
 
 	"github.com/iyear/tdl/core/dcpool"
-	"github.com/iyear/tdl/core/downloader"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/tutil"
-	"github.com/iyear/tdl/pkg/prog"
-	"github.com/iyear/tdl/pkg/utils"
+	"github.com/iyear/tdl/internal/transfer"
 )
 
 type LinkedOptions struct {
@@ -41,11 +35,19 @@ type LinkedOptions struct {
 	CheckOnly, Takeout       bool
 	Threads, Limit           int
 	Pool                     dcpool.Pool
+	Manager                  *peers.Manager
+	Delay                    time.Duration
+	Reservations             *transfer.Reservations
+	Account                  string
+	AccountVerified          bool
+	delay                    *transfer.Delay
 	Links                    LinkOptions
 	Include, Exclude         []string
 	BotUpdates               *BotUpdates
 	WriteMetadata            *bool // nil enables meta.json output
 	OnResolved               func(string)
+	OnResult                 func(transfer.Counts)
+	counts                   *transfer.Counts
 }
 
 type archivedResource struct {
@@ -71,10 +73,21 @@ type linkedPost struct {
 // DownloadLinked processes one source post at a time. Ephemeral bot messages
 // are requested just before download, rather than exported for a later pass.
 func DownloadLinked(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts LinkedOptions) (rerr error) {
+	account, err := archiveAccount(ctx, c, opts.Account, opts.AccountVerified)
+	if err != nil {
+		return err
+	}
+	opts.Account = account
 	return downloadLinked(ctx, c.API(), kvd, opts)
 }
 
 func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, opts LinkedOptions) (rerr error) {
+	opts.counts = &transfer.Counts{}
+	defer func() {
+		if opts.OnResult != nil {
+			opts.OnResult(*opts.counts)
+		}
+	}()
 	if err := opts.Links.Normalize(); err != nil {
 		return err
 	}
@@ -97,7 +110,14 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 	if opts.MaxPosts < 0 {
 		return fmt.Errorf("max_posts must not be negative")
 	}
-	manager := peers.Options{Storage: storage.NewPeers(kvd)}.Build(api)
+	manager := opts.Manager
+	if manager == nil {
+		manager = peers.Options{Storage: storage.NewPeers(kvd)}.Build(api)
+	}
+	if opts.Reservations == nil {
+		opts.Reservations = &transfer.Reservations{}
+	}
+	opts.delay = &transfer.Delay{Duration: opts.Delay}
 	peer, err := tutil.GetInputPeer(ctx, manager, source.Chat)
 	if err != nil {
 		return err
@@ -134,17 +154,20 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 		if !opts.Window.matches(album) {
 			return nil
 		}
+		opts.counts.Messages += int64(len(album))
 		post, ok := linkedSourcePost(album, tags, mode, peer.ID(), source.Chat)
 		if !ok {
 			return nil
 		}
+		post.Source, post.Account = archiveSource(archiveInputPeer(peer)), opts.Account
+		opts.counts.Posts++
 		var links []resourceLink
 		for _, m := range album {
 			links = append(links, messageResourceLinks(m)...)
 		}
 		if len(links) == 0 && defaultOn(opts.Links.ScanComments) {
 			for _, m := range album {
-				comments, err := backend.Comments(ctx, peer.InputPeer(), m, opts.Links.CommentLimit)
+				comments, err := backend.Comments(ctx, archiveInputPeer(peer), m, opts.Links.CommentLimit)
 				if err != nil {
 					return fmt.Errorf("post %d comments: %w", post.MessageID, err)
 				}
@@ -156,11 +179,13 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 		links = uniqueResourceLinks(links)
 		if len(links) == 0 {
 			skipped++
+			opts.counts.PostsNoLinks++
 			return nil
 		}
 		for _, link := range links {
 			if err := opts.Unavailable.lookup(link); err != nil {
 				skipped++
+				opts.counts.PostsUnavailable++
 				fmt.Printf("Post %d skipped: %s\n", post.MessageID, err)
 				return nil
 			}
@@ -170,10 +195,11 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 		if opts.CheckOnly {
 			return nil
 		}
-		err := archiveLinkedPost(ctx, root, post, album, peer.InputPeer(), links, resolver, opts)
+		err := archiveLinkedPost(ctx, root, post, album, archiveInputPeer(peer), links, resolver, opts)
 		if isUnavailableResource(err) {
 			selected--
 			skipped++
+			opts.counts.PostsUnavailable++
 			fmt.Printf("Post %d skipped: %s\n", post.MessageID, err)
 			err = nil
 		}
@@ -192,7 +218,7 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 	}
 	complete := true
 	if source.ID > 0 {
-		album, err := backend.messageAlbum(ctx, peer.InputPeer(), source.ID, false)
+		album, err := backend.messageAlbum(ctx, archiveInputPeer(peer), source.ID, false)
 		if err != nil {
 			return err
 		}
@@ -204,7 +230,7 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 			return err
 		}
 	} else {
-		q := query.NewQuery(api).Messages().GetHistory(peer.InputPeer())
+		q := query.NewQuery(api).Messages().GetHistory(archiveInputPeer(peer))
 		complete, err = scanArchiveHistory(ctx, q, opts.Window, runPost)
 		failures = multierr.Append(failures, err)
 	}
@@ -282,12 +308,28 @@ func linkedFingerprint(roots []resourceLink, opts LinkedOptions) string {
 	}
 	sort.Strings(keys)
 	b, _ := json.Marshal(struct {
-		Keys             []string
-		Previews         bool
-		Include, Exclude []string
-	}{keys, defaultOn(opts.Links.IncludePreviews), opts.Include, opts.Exclude})
+		Version                                         int
+		Keys                                            []string
+		Previews                                        bool
+		Include, Exclude                                []string
+		Depth, Links, Messages, TopicMessages, Comments int
+		ScanComments                                    bool
+	}{2, keys, defaultOn(opts.Links.IncludePreviews), normalizedArchiveExtensions(opts.Include), normalizedArchiveExtensions(opts.Exclude), opts.Links.MaxDepth, opts.Links.MaxLinks, opts.Links.MaxBotMessages, opts.Links.MaxTopicMessages, opts.Links.CommentLimit, defaultOn(opts.Links.ScanComments)})
 	sum := sha256.Sum256(b)
 	return fmt.Sprintf("%x", sum)
+}
+
+func normalizedArchiveExtensions(items []string) []string {
+	seen := make(map[string]struct{}, len(items))
+	for _, item := range items {
+		seen[strings.TrimPrefix(strings.ToLower(strings.TrimSpace(item)), ".")] = struct{}{}
+	}
+	result := make([]string, 0, len(seen))
+	for item := range seen {
+		result = append(result, item)
+	}
+	sort.Strings(result)
+	return result
 }
 
 func completedLinkedPost(dir string, post tagPost, hash string) *linkedPost {
@@ -296,7 +338,7 @@ func completedLinkedPost(dir string, post tagPost, hash string) *linkedPost {
 		return nil
 	}
 	var saved linkedPost
-	if json.Unmarshal(b, &saved) != nil || saved.Version != 1 || !saved.Complete || saved.ChatID != post.ChatID || saved.MessageID != post.MessageID || saved.LinkHash != hash || len(saved.Resources) == 0 {
+	if json.Unmarshal(b, &saved) != nil || saved.Version != 1 || !saved.Complete || !sameArchiveOwner(saved.tagPost, post) || saved.LinkHash != hash || len(saved.Resources) == 0 {
 		return nil
 	}
 	for _, file := range saved.Resources {
@@ -345,8 +387,28 @@ func linkedExtensionAllowed(name string, include, exclude []string) bool {
 
 func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*tg.Message, peer tg.InputPeerClass, roots []resourceLink, resolver *linkResolver, opts LinkedOptions) error {
 	dir := filepath.Join(root, post.Directory)
+	if opts.Reservations == nil {
+		opts.Reservations = &transfer.Reservations{}
+	}
+	if err := checkArchiveOwner(dir, post); err != nil {
+		return err
+	}
+	if defaultOn(opts.WriteMetadata) {
+		if _, err := opts.Reservations.Reserve(filepath.Join(dir, "meta.json"), fmt.Sprintf("linked-metadata:%d:%d", post.ChatID, post.MessageID)); err != nil {
+			return err
+		}
+	}
 	hash := linkedFingerprint(roots, opts)
 	if saved := completedLinkedPost(dir, post, hash); saved != nil {
+		for _, file := range saved.Resources {
+			if _, err := opts.Reservations.Reserve(filepath.Join(dir, file.File), fmt.Sprintf("linked:%d:%d:%s", post.ChatID, post.MessageID, file.Identity)); err != nil {
+				return err
+			}
+		}
+		if opts.counts != nil {
+			opts.counts.Files += int64(len(saved.Resources))
+			opts.counts.FilesExisting += int64(len(saved.Resources))
+		}
 		if err := writeArchiveMetadata(dir, saved, opts.WriteMetadata); err != nil {
 			return err
 		}
@@ -360,11 +422,19 @@ func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return err
 	}
-	if err := migrateTagDirectory(root, dir, post.MessageID); err != nil {
+	if err := migrateTagDirectory(root, dir, post); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
+	}
+	if opts.Reservations == nil {
+		opts.Reservations = &transfer.Reservations{}
+	}
+	if defaultOn(opts.WriteMetadata) {
+		if _, err := opts.Reservations.Reserve(filepath.Join(dir, "meta.json"), fmt.Sprintf("linked-metadata:%d:%d", post.ChatID, post.MessageID)); err != nil {
+			return err
+		}
 	}
 	meta := linkedPost{tagPost: post, Version: 1, LinkHash: hash, Hops: hops}
 	for _, l := range roots {
@@ -387,18 +457,33 @@ func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*
 	for _, resource := range files {
 		md := resource.Media
 		key := resourceIdentity(md)
-		if seen[key] || !linkedExtensionAllowed(md.Name, opts.Include, opts.Exclude) {
+		if seen[key] {
 			continue
 		}
 		seen[key] = true
+		if opts.counts != nil {
+			opts.counts.Files++
+		}
+		if !linkedExtensionAllowed(md.Name, opts.Include, opts.Exclude) {
+			if opts.counts != nil {
+				opts.counts.FilesFiltered++
+			}
+			continue
+		}
 		name, err := resourceFileName(md)
 		if err != nil {
 			return err
 		}
 		meta.Resources = append(meta.Resources, archivedResource{Identity: key, ChatID: tutil.GetInputPeerID(resource.Peer), MessageID: resource.Message.ID, File: name, Size: md.Size, DC: md.DC, Text: resource.Message.Message})
-		path := filepath.Join(dir, name)
+		path, err := opts.Reservations.Reserve(filepath.Join(dir, name), fmt.Sprintf("linked:%d:%d:%s", post.ChatID, post.MessageID, key))
+		if err != nil {
+			return err
+		}
 		stat, err := os.Stat(path)
 		if err == nil && stat.Mode().IsRegular() && stat.Size() == md.Size {
+			if opts.counts != nil {
+				opts.counts.FilesExisting++
+			}
 			continue
 		}
 		if err != nil && !os.IsNotExist(err) {
@@ -412,24 +497,7 @@ func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*
 	if err := writeArchiveMetadata(dir, meta, opts.WriteMetadata); err != nil {
 		return err
 	}
-	w := prog.New(utils.Byte.FormatBinaryBytes)
-	progress := &linkedProgress{writer: w, trackers: map[*linkedElem]*pw.Tracker{}}
-	renderDone := make(chan struct{})
-	go func() { w.Render(); close(renderDone) }()
-	iter := &linkedIter{elems: elems}
-	err = downloader.New(downloader.Options{Pool: opts.Pool, Threads: opts.Threads, Iter: iter, Progress: progress, SkipParts: true}).Download(ctx, max(1, opts.Limit))
-	// Render initializes asynchronously. Stop until it acknowledges completion,
-	// including the case where a small download finishes before Render starts.
-renderWait:
-	for {
-		w.Stop()
-		select {
-		case <-renderDone:
-			break renderWait
-		case <-time.After(10 * time.Millisecond):
-		}
-	}
-	if err = multierr.Combine(err, progress.err); err != nil {
+	if err = runArchiveMedia(ctx, opts.Pool, opts.Threads, opts.Limit, elems, opts.delay, opts.counts); err != nil {
 		return err
 	}
 	meta.Hops = session.hops
@@ -445,195 +513,3 @@ renderWait:
 	meta.Complete = true
 	return writeArchiveMetadata(dir, meta, opts.WriteMetadata)
 }
-
-type linkedSession struct {
-	mu       sync.Mutex
-	resolver *linkResolver
-	roots    []resourceLink
-	files    []linkedResource
-	hops     []linkHop
-	requests int
-}
-
-func mediaReference(md *tmedia.Media) []byte {
-	switch l := md.InputFileLoc.(type) {
-	case *tg.InputDocumentFileLocation:
-		return l.FileReference
-	case *tg.InputPhotoFileLocation:
-		return l.FileReference
-	}
-	return nil
-}
-
-func (s *linkedSession) refresh(ctx context.Context, old linkedResource) (*tmedia.Media, error) {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	key := resourceIdentity(old.Media)
-	find := func() *tmedia.Media {
-		for _, f := range s.files {
-			if resourceIdentity(f.Media) == key && f.Media.Size == old.Media.Size && f.Media.DC == old.Media.DC && !bytes.Equal(mediaReference(old.Media), mediaReference(f.Media)) {
-				return f.Media
-			}
-		}
-		return nil
-	}
-	if fresh := find(); fresh != nil {
-		return fresh, nil
-	}
-	// Try the original message before reissuing the complete link chain.
-	if backend, ok := s.resolver.backend.(*telegramLinkBackend); ok {
-		if msg, err := getLinkedMessage(ctx, backend.api, old.Peer, old.Message.ID); err == nil {
-			if md, ok := tmedia.GetMedia(msg); ok && resourceIdentity(md) == key && md.Size == old.Media.Size && md.DC == old.Media.DC && !bytes.Equal(mediaReference(old.Media), mediaReference(md)) {
-				return md, nil
-			}
-		}
-	}
-	if s.requests >= *s.resolver.opts.ReRequestLimit {
-		return nil, fmt.Errorf("resource rerequest_limit exhausted")
-	}
-	s.requests++
-	fmt.Printf("Source message expired; requesting resource links again (%d/%d)\n", s.requests, *s.resolver.opts.ReRequestLimit)
-	files, hops, err := s.resolver.Resolve(ctx, s.roots)
-	if err != nil {
-		return nil, err
-	}
-	if len(s.files) > 0 && !sameLinkedResources(s.files, files) {
-		return nil, fmt.Errorf("resource set changed after reissuing the chain; rerun to archive the new set")
-	}
-	s.files, s.hops = files, hops
-	if fresh := find(); fresh != nil {
-		return fresh, nil
-	}
-	return nil, fmt.Errorf("reissued resources do not contain the same file with a fresh reference: %s", key)
-}
-
-func sameLinkedResources(a, b []linkedResource) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	identities := map[string]string{}
-	for _, f := range a {
-		identities[resourceIdentity(f.Media)] = fmt.Sprintf("%d:%d", f.Media.Size, f.Media.DC)
-	}
-	for _, f := range b {
-		if identities[resourceIdentity(f.Media)] != fmt.Sprintf("%d:%d", f.Media.Size, f.Media.DC) {
-			return false
-		}
-	}
-	return true
-}
-
-type linkedMediaFile struct{ media *tmedia.Media }
-
-func (f linkedMediaFile) Location() tg.InputFileLocationClass { return f.media.InputFileLoc }
-func (f linkedMediaFile) Size() int64                         { return f.media.Size }
-func (f linkedMediaFile) DC() int                             { return f.media.DC }
-
-type linkedElem struct {
-	resource linkedResource
-	path     string
-	session  *linkedSession
-	file     *os.File
-	parts    *downloader.PartsStore
-	takeout  bool
-}
-
-func (e *linkedElem) File() downloader.File { return linkedMediaFile{e.resource.Media} }
-func (e *linkedElem) To() io.WriterAt       { return e.file }
-func (e *linkedElem) AsTakeout() bool       { return e.takeout }
-func (e *linkedElem) RefreshFile(ctx context.Context, current tg.InputFileLocationClass) (downloader.File, error) {
-	old := e.resource
-	media := *old.Media
-	media.InputFileLoc = current
-	old.Media = &media
-	md, err := e.session.refresh(ctx, old)
-	if err != nil {
-		return nil, err
-	}
-	return linkedMediaFile{md}, nil
-}
-
-type linkedIter struct {
-	elems   []*linkedElem
-	current *linkedElem
-	err     error
-}
-
-func (it *linkedIter) Next(ctx context.Context) bool {
-	if it.err != nil || len(it.elems) == 0 {
-		return false
-	}
-	if it.err = ctx.Err(); it.err != nil {
-		return false
-	}
-	e := it.elems[0]
-	it.elems = it.elems[1:]
-	e.file, e.parts, it.err = downloader.OpenPartial(e.path+".tmp", e.resource.Media.Size)
-	if it.err != nil {
-		return false
-	}
-	it.current = e
-	return true
-}
-func (it *linkedIter) Value() downloader.Elem { return it.current }
-func (it *linkedIter) Err() error             { return it.err }
-
-type linkedProgress struct {
-	writer   pw.Writer
-	mu       sync.Mutex
-	trackers map[*linkedElem]*pw.Tracker
-	err      error
-}
-
-func (p *linkedProgress) OnAdd(elem downloader.Elem) {
-	e := elem.(*linkedElem)
-	t := prog.AppendTracker(p.writer, utils.Byte.FormatBinaryBytes, filepath.Base(e.path), e.File().Size())
-	p.mu.Lock()
-	p.trackers[e] = t
-	p.mu.Unlock()
-}
-func (p *linkedProgress) OnDownload(elem downloader.Elem, s downloader.ProgressState) {
-	p.mu.Lock()
-	t := p.trackers[elem.(*linkedElem)]
-	p.mu.Unlock()
-	if t != nil {
-		t.SetValue(s.Downloaded)
-	}
-}
-func (p *linkedProgress) OnDone(elem downloader.Elem, err error) {
-	e := elem.(*linkedElem)
-	err = multierr.Combine(err, e.parts.Flush(), e.file.Close())
-	if err == nil {
-		stat, statErr := os.Stat(e.path + ".tmp")
-		if statErr != nil {
-			err = statErr
-		} else if stat.Size() != e.File().Size() {
-			err = fmt.Errorf("downloaded file size mismatch")
-		}
-	}
-	if err == nil {
-		err = os.Rename(e.path+".tmp", e.path)
-	}
-	if err == nil {
-		e.parts.Remove()
-		ts := time.Unix(int64(e.resource.Message.Date), 0)
-		_ = os.Chtimes(e.path, ts, ts)
-	}
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	if err == nil {
-		p.trackers[e].MarkAsDone()
-	} else {
-		p.trackers[e].MarkAsErrored()
-		p.err = multierr.Append(p.err, err)
-	}
-}
-func (p *linkedProgress) Resume(elem downloader.Elem) (map[int]struct{}, int64, bool) {
-	e := elem.(*linkedElem)
-	done := e.parts.Done()
-	return done, e.File().Size(), len(done) > 0
-}
-func (p *linkedProgress) PartDone(elem downloader.Elem, index int) {
-	elem.(*linkedElem).parts.PartDone(index)
-}
-func (p *linkedProgress) Reset(elem downloader.Elem) { elem.(*linkedElem).parts.Reset() }

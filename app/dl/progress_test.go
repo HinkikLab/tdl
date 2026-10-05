@@ -21,9 +21,10 @@ func TestConcurrentProgressKeepsSeparatePartStores(t *testing.T) {
 	p := newProgress(pw.NewWriter(), it, Options{})
 	dir := t.TempDir()
 	makeElem := func(id int, name string) *iterElem {
-		f, s, err := downloader.OpenPartial(filepath.Join(dir, name+tempExt), 2*downloader.MaxPartSize)
+		media := &tmedia.Media{Size: 2 * downloader.MaxPartSize, DC: 2, InputFileLoc: &tg.InputDocumentFileLocation{ID: int64(id)}}
+		f, s, err := downloader.OpenPartialFile(filepath.Join(dir, name+tempExt), mediaDownloadFile{media})
 		require.NoError(t, err)
-		return &iterElem{id: id, logicalPos: id, from: (&peers.Manager{}).Channel(&tg.Channel{ID: 123}), fromMsg: &tg.Message{ID: id}, file: &tmedia.Media{Size: 2 * downloader.MaxPartSize}, to: f, parts: s}
+		return &iterElem{id: id, logicalPos: id, from: (&peers.Manager{}).Channel(&tg.Channel{ID: 123}), fromMsg: &tg.Message{ID: id}, file: media, to: f, parts: s}
 	}
 	a := makeElem(1, "a")
 	b := makeElem(2, "b")
@@ -44,8 +45,12 @@ func TestConcurrentProgressKeepsSeparatePartStores(t *testing.T) {
 	}
 	wg.Wait()
 	require.Empty(t, it.Finished())
-	require.Equal(t, map[int]struct{}{0: {}}, downloader.NewPartsStore(a.to.Name(), a.Size()).Done())
-	require.Equal(t, map[int]struct{}{1: {}}, downloader.NewPartsStore(b.to.Name(), b.Size()).Done())
+	aIdentity, err := downloader.FileIdentityOf(a)
+	require.NoError(t, err)
+	bIdentity, err := downloader.FileIdentityOf(b)
+	require.NoError(t, err)
+	require.Equal(t, map[int]struct{}{0: {}}, downloader.NewPartsStore(a.to.Name(), a.Size(), aIdentity).Done())
+	require.Equal(t, map[int]struct{}{1: {}}, downloader.NewPartsStore(b.to.Name(), b.Size(), bIdentity).Done())
 	require.FileExists(t, a.to.Name())
 	require.FileExists(t, b.to.Name())
 	count := 0

@@ -3,13 +3,12 @@ package chat
 import (
 	"context"
 	"fmt"
-	"net/url"
-	"strconv"
-	"strings"
 
 	"github.com/gotd/td/telegram/query"
 	"github.com/gotd/td/telegram/query/messages"
 	"github.com/gotd/td/tg"
+
+	"github.com/iyear/tdl/core/util/tgref"
 )
 
 // TagTarget identifies a whole chat or one forum topic within it.
@@ -26,80 +25,18 @@ func ParseTagTarget(raw string, topicID int) (TagTarget, error) {
 	if topicID < 0 {
 		return target, fmt.Errorf("topic_id must be positive")
 	}
-	raw = strings.TrimSpace(raw)
-	if raw == "" {
-		return target, fmt.Errorf("chat is required")
+	ref, err := tgref.Parse(raw, tgref.Options{AllowBare: true})
+	if err != nil {
+		return target, err
 	}
-	if !strings.ContainsAny(raw, "/.:") {
-		target.Chat = strings.TrimPrefix(raw, "@")
-	} else {
-		if !strings.Contains(raw, "://") {
-			raw = "https://" + strings.TrimPrefix(raw, "//")
-		}
-		u, err := url.Parse(raw)
-		if err != nil {
-			return target, fmt.Errorf("invalid chat URL: %w", err)
-		}
-		host := strings.ToLower(u.Hostname())
-		if (u.Scheme != "https" && u.Scheme != "http") ||
-			(host != "t.me" && host != "telegram.me" && host != "telegram.dog") || u.User != nil || u.Port() != "" {
-			return target, fmt.Errorf("chat_url must be an http(s) Telegram link")
-		}
-		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
-		if parts[0] == "s" {
-			parts = parts[1:]
-		}
-		if len(parts) == 0 || parts[0] == "" {
-			return target, fmt.Errorf("chat_url is missing a chat")
-		}
-		if parts[0] == "c" {
-			parts = parts[1:]
-			if len(parts) == 0 {
-				return target, fmt.Errorf("chat_url is missing a private chat ID")
-			}
-			if id, err := strconv.ParseInt(parts[0], 10, 64); err != nil || id <= 0 {
-				return target, fmt.Errorf("private chat ID must be a positive integer")
-			}
-		}
-		if len(parts) > 3 {
-			return target, fmt.Errorf("chat_url must identify a chat or forum topic")
-		}
-		target.Chat = parts[0]
-		for i, part := range parts[1:] {
-			id, err := strconv.Atoi(part)
-			if err != nil || id <= 0 {
-				return target, fmt.Errorf("topic/message ID must be a positive integer")
-			}
-			if i == 0 {
-				target.TopicID = id
-			}
-		}
-		q, err := url.ParseQuery(u.RawQuery)
-		if err != nil {
-			return target, fmt.Errorf("invalid chat URL query: %w", err)
-		}
-		for key := range q {
-			if key != "thread" {
-				return target, fmt.Errorf("tag job chat_url does not support %q; use a chat or topic link", key)
-			}
-		}
-		if q.Has("thread") {
-			values := q["thread"]
-			if len(values) != 1 {
-				return target, fmt.Errorf("chat_url must contain only one thread ID")
-			}
-			id, err := strconv.Atoi(values[0])
-			if err != nil || id <= 0 {
-				return target, fmt.Errorf("thread ID must be a positive integer")
-			}
-			if len(parts) == 3 && target.TopicID != id {
-				return target, fmt.Errorf("thread ID conflicts with the topic ID in chat_url")
-			}
-			target.TopicID = id
+	for key := range ref.Query {
+		if key != "thread" {
+			return target, fmt.Errorf("tag job chat_url does not support %q; use a chat or topic link", key)
 		}
 	}
-	if !telegramUsername.MatchString(target.Chat) {
-		return target, fmt.Errorf("invalid chat name or ID %q", target.Chat)
+	target.Chat, target.TopicID = ref.Chat, ref.TopicID
+	if target.TopicID == 0 {
+		target.TopicID = ref.MessageID
 	}
 	if topicID > 0 {
 		if target.TopicID != 0 && target.TopicID != topicID {

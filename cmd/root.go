@@ -80,14 +80,16 @@ func New() *cobra.Command {
 				return cmd.Help()
 			}
 
-			path, namespace, err := autodl.AutoStart(cmd.Context(), kv.From(cmd.Context()),
-				viper.GetString(consts.FlagNamespace))
+			f := &batchFlags{mode: autodl.ModeAuto, overlapSeconds: -1}
+			prepared, err := autodl.PrepareAutoStart(cmd.Context(), kv.From(cmd.Context()), f.options(cmd))
 			if err != nil {
 				return err
 			}
-			if path == "" {
+			if prepared == nil {
 				return cmd.Help()
 			}
+			path, namespace := prepared.ConfigPath(), prepared.EffectiveOptions().Namespace
+			cmd.SetContext(context.WithValue(cmd.Context(), preparedBatchKey{}, prepared))
 
 			// the config may select another account than the default one
 			if namespace != "" && !cmd.Flags().Changed(consts.FlagNamespace) {
@@ -100,7 +102,7 @@ func New() *cobra.Command {
 			return NewBatch().RunE(cmd, nil)
 		},
 		PersistentPreRunE: func(cmd *cobra.Command, args []string) error {
-			if cmd.Annotations[batchInitAnnotation] == "true" {
+			if cmd.Annotations[batchInitAnnotation] == "true" || offlineBatchValidation(cmd) {
 				return nil
 			}
 			// init logger
@@ -145,7 +147,7 @@ func New() *cobra.Command {
 			return nil
 		},
 		PersistentPostRunE: func(cmd *cobra.Command, args []string) error {
-			if cmd.Annotations[batchInitAnnotation] == "true" {
+			if cmd.Annotations[batchInitAnnotation] == "true" || offlineBatchValidation(cmd) {
 				return nil
 			}
 			return multierr.Combine(

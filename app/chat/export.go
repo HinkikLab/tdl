@@ -98,14 +98,8 @@ func Export(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts E
 
 	tracker := prog.AppendTracker(pw, progress.FormatNumber, fmt.Sprintf("%s-%d", peer.VisibleName(), peer.ID()), 0)
 
-	go pw.Render()
-	defer func() {
-		if rerr != nil {
-			pw.Stop()
-			return
-		}
-		prog.Wait(ctx, pw)
-	}()
+	stopRender := prog.Start(pw)
+	defer stopRender()
 
 	var q messages.Query
 	switch {

@@ -12,6 +12,10 @@ Telegram client and connection pool, with resumable file downloads.
 
 ## Quick start
 
+For an offline check of configuration, effective options and state-path
+ownership, run `tdl batch -c config.json --validate-only`. It does not open
+account storage.
+
 1. Generate an annotated configuration without logging in or connecting to Telegram:
 
 {{< command >}}
@@ -154,7 +158,7 @@ messages 100 through 109:
 | --- | --- |
 | `_comment` | Documentation only; ignored |
 | `chat_url` | Required. Public home/post, private home `https://t.me/c/1234567890/` and post links, comment links, links without a scheme and `/s/` preview links are accepted; the account must have access |
-| `chat` | Incremental source for ordinary message jobs: username, numeric ID or Telegram URL. Archives always use `chat_url` |
+| `chat` | Optional source confirmation for ordinary message jobs: username, numeric ID or Telegram URL. It must resolve to the same effective channel/discussion as `chat_url`; conflicts fail before scanning, downloading or writing completion state. Archives use `chat_url` |
 | `subdir` | Relative job directory under `download_base`; absolute paths and escaping `..` paths are rejected; use distinct directories for distinct jobs |
 | `comment` | Default false; true selects the linked discussion group. A legacy integer also selects comment mode and sets the start ID if omitted. Prefer a boolean with explicit endpoints |
 | `start_comment` / `end_comment` | Positive integers, start inclusive, end exclusive, end greater than start; maximum range 1,000,000. Direct jobs use these same legacy field names |
@@ -176,7 +180,8 @@ messages 100 through 109:
 incremental lookback are not used by direct ID-range scanning.
 `export_all: true` includes non-media messages in the plan; it does not turn
 text into downloadable files. Use an archive mode to preserve post descriptions.
-Incremental export files are retained under `<job directory>/.tdl_tmp/`.
+During downloads, incremental export files are retained under
+`<job directory>/.tdl_tmp/`. Read-only planning does not write exports.
 
 Private forum home URLs such as `https://t.me/c/2255983776/` are accepted by
 tag archives, linked-resource archives, incremental scans and message-range jobs.
@@ -219,12 +224,14 @@ override the global value:
 }
 ```
 
-Disabling metadata still skips exact-size completed media and resumes partial
-downloads. A linked archive without saved metadata resolves its resource links
+Disabling visible metadata still validates completed media and resumes partial
+downloads. Tag archives keep a minimal internal completion record without captions.
+A linked archive without saved metadata resolves its resource links
 again on reruns; `meta.json` allows it to skip a completed post before resolution.
 Existing `message.json` files remain readable for archive migration and completion
-checks. Changing this setting preserves existing files. Download indices and
-resume state are separate from per-post metadata and remain in use.
+checks. Changing this setting preserves existing files. Resume state is
+separate from per-post metadata. Tag scans pass discovered media directly to
+the downloader and no longer need a JSON download index.
 The standalone tag command supports `--write-metadata=false` as well.
 
 ### Message and comment ranges
@@ -287,7 +294,9 @@ several tags match, the first matching tag in config order becomes the prefix.
 If a caption consists only of hashtags, the folder uses every hashtag in its
 original order without `#` and keeps the message ID suffix to avoid collisions.
 A caption on any album member selects the whole
-album. Reruns skip completed files by size and resume partial downloads.
+album. Reruns compare current media identity and committed file size/mtime,
+then reuse valid files or resume partial downloads. A minimal `.tdl-completed.json`
+without caption content preserves tag completion checks even when visible metadata is disabled.
 
 Tags may include or omit `#`; Unicode letters, digits and underscores are
 accepted. Matching is case-insensitive and requires a complete hashtag:
@@ -340,6 +349,11 @@ Resolution handles plain URLs, hidden text URLs and inline URL buttons, bot
 start links, `tg://` links, public/private message links, comment links and whole
 resource albums. When a post has no resource link, its associated comments are
 searched. Bots may return further links to bots or group messages.
+Resource links to forum-topic roots confirmed by Telegram scan the topic up to
+`max_topic_messages`, retain complete albums across pages, and resolve further
+links within the topic. Ordinary resource messages retain their single-message
+or album behavior; topic/reply restrictions on the primary source still apply.
+Explicit resource topic paths and `thread` parameters validate message and album membership.
 Each post is resolved and downloaded before the next one is requested.
 
 Files go into `<download_base>/<subdir>/<main-chat-id>/<main caption [post ID]>/`
@@ -357,10 +371,11 @@ partial files even when their message IDs change.
 | `cleanup_bot_messages` | `true` | delete this post's bot requests and responses after downloads settle |
 | `max_depth` | `8` | maximum chain depth, at most `32` |
 | `max_links` | `100` | maximum distinct resolved links per post, at most `1000` |
-| `bot_timeout_seconds` | `60` | response collection timeout after a successful start RPC; existing middleware handles Telegram RPC flood waits |
+| `bot_timeout_seconds` | `60` | total response time after a successful start, including history RPC waits; existing middleware handles waits before sending the request |
 | `bot_idle_seconds` | `3` | quiet interval after receiving media or another entry link |
-| `poll_interval_ms` | `500` | history polling interval, alongside live updates that retain self-deleted messages |
+| `poll_interval_ms` | `500` | update-check/minimum history interval; unchanged history backs off up to max(5s, configured interval), new/edited replies reset it, live updates retain self-deleted messages |
 | `max_bot_messages` | `500` | maximum responses to one bot request |
+| `max_topic_messages` | `1000` | maximum messages per confirmed resource topic, including the root, service messages and deleted placeholders; exceeding the limit fails the post, at most `100000` |
 | `rerequest_limit` | `3` | full-chain reissues per post after expired file references; `0` disables |
 | `flood_retries` | `5` | retries after a bot's textual rate limit; `0` disables |
 | `flood_wait_seconds` | `30` | wait when an explicit rate-limit message gives no duration |
@@ -370,7 +385,7 @@ Zero selects defaults for most numeric `link_options`; only
 `rerequest_limit` / `flood_retries` use `0` to disable retries.
 `scan_comments`, `include_previews` and `cleanup_bot_messages` can be set false.
 Other upper bounds are: timeout 3600 seconds, idle 300 seconds, polling 60000 ms,
-bot messages / comment limit 10000, reissues 10, flood retries 20, fallback
+bot messages / comment limit 10000, topic messages 100000, reissues 10, flood retries 20, fallback
 wait 3600 seconds and maximum wait 86400 seconds.
 Idle and polling intervals must be shorter than the timeout, and
 `flood_wait_seconds` must not exceed `max_flood_wait_seconds`.
@@ -394,8 +409,8 @@ when a bot sends several batches with long pauses.
 
 This mode validates files through archive manifests and supports timestamp
 `incremental` selection of source posts. Comment-range mode and topic/reply selectors
-are unsupported. Group links must
-identify accessible messages. Invite links, group home links, external web
+are unsupported for primary-source selection. Resource group links must
+identify accessible messages or confirmed topic roots. Invite links, group home links, external web
 redirects, callback buttons, captcha and payment steps are not automatically
 executed. Unrecognized custom rate-limit text results in a response timeout.
 
@@ -439,6 +454,7 @@ Use `tdl batch init` to generate examples. The following flags execute batch job
 | Flag | Default / effect |
 | --- | --- |
 | `-c`, `--config` | Auto-discovered in the working directory; explicit paths win |
+| `--validate-only` | Offline validation of configuration, expressions, templates, precedence and known path conflicts; does not open account storage |
 | `--check-only` | Preview without media downloads or advancing timestamps; range jobs report ID plans without proving availability, tag/linked jobs scan entries |
 | `-y`, `--yes` | Answer runtime confirmations; cannot advance incomplete incremental windows |
 | `--mode auto/comment/direct` | Default auto; override range/incremental jobs' comment switch |
@@ -455,7 +471,7 @@ Use `tdl batch init` to generate examples. The following flags execute batch job
 | `--batch-pool` | Connection pool size; explicit 0 is unlimited |
 | `-n`, `--ns` | Global namespace; explicit values override configuration |
 | `-t`, `--threads` / `-l`, `--limit` / `--pool` | Global performance settings; override configuration only when explicitly supplied |
-| `--delay` | Global per-file delay, e.g. `1s`, default 0 |
+| `--delay` | File-start interval across all batch families, e.g. `1s`, default 0; waits honor cancellation and bot text backoff keeps its separate settings |
 
 {{< command >}}
 tdl batch -c config.json -y --check-only
@@ -466,10 +482,12 @@ tdl batch --retry-skipped
 {{< /command >}}
 
 `--check-only` still requires a logged-in client and may read Telegram; an
-ordinary range plan may not query messages. Range/incremental jobs can create
-local directories or export files. Do not combine it with `--retry-skipped`
-for a read-only check, since that flag modifies unavailable-message state.
-Use `tdl batch init` for offline generation without an account.
+ordinary range plan may not query messages. It does not create download
+directories, archives, exports or state files, and does not bind or migrate
+legacy state. With `--retry-skipped`, retries are planned in memory without
+changing saved records. Account caches and logs retain normal client behavior.
+Use `--validate-only` for offline validation and `tdl batch init` to generate
+configuration without an account.
 
 {{< hint info >}}
 `--batch-threads` / `--batch-limit` / `--batch-pool` win over the global
@@ -482,14 +500,17 @@ python script used.
 
 Batch download resumes on two levels:
 
-1. **Message level**: every finished message is recorded, with batched writes to the state file
-   (default `<download dir>/tdl_state.json`), so the next run skips it without
-   requesting it again. Deleted and media-less messages are recorded as well, so
-   they are not retried on every run.
+1. **Message level**: committed media identity, actual path, size and mtime are recorded,
+   with batched writes to the state file (default `<download dir>/tdl_state.json`).
+   Reruns query current media metadata in batches and validate the final file.
+   Valid files are reused; missing, truncated or changed records are downloaded again.
+   This check does not hash the whole payload. Deleted, media-less and extension-filtered
+   messages have separate terminal records and are not requested on every run.
 2. **Part level**: files are transferred in 1 MiB parts and the finished parts
    are tracked in `<file>.tmp.parts`. After an interrupt, the next run only
-   fetches the missing parts instead of restarting the file. The parts are
-   discarded automatically when the file size changes on the server.
+   fetches the missing parts instead of restarting the file. Journals bind the
+   media kind, file ID, photo size selection, size, DC and part specification.
+   Fresh references and reissued bot message IDs preserve the same file identity.
 
 Successful downloads clean up their `.tmp` and `.parts` files; interrupted ones
 keep them for the next run.
@@ -498,9 +519,11 @@ Both batch mode and `tdl dl` keep a separate parts journal for each concurrent
 file. During downloads, journals are checkpointed after 32 new parts or on the
 next write at least one second after the last checkpoint. Normal completion or
 cancellation flushes the remaining records. Forcefully terminating the process
-may require downloading up to 31 unrecorded parts again. Legacy journals without
-a version cannot prove that their temporary files were preserved, so those
-unfinished files restart after upgrading.
+may require downloading up to 31 unrecorded parts again. Unbound legacy
+journals (including v1), orphan temporary files and changed file identities
+cannot be safely reused. Their bytes and journals are preserved together under
+unique `.unverified` backup paths, which are reported, before a fresh download.
+Atomic journal replacement does not guarantee data durability after power loss.
 
 ## Troubleshooting
 
@@ -599,6 +622,17 @@ Tag and linked archives validate completion through files/manifests. Incremental
 archives also use this state file for `last_ts`, without marking IDs as downloaded.
 Changing tags or link selection rules triggers the scope check.
 
+The new job identity binds the actual peer kind/ID, effective discussion mode,
+account namespace and authenticated user ID, selection/filter rules, canonical absolute output paths and
+output semantics. Performance and retry settings do not change the identity.
+Nonempty v2, archive-v1 and unscoped legacy states cannot prove these conditions
+and are explicitly refused without changing their files. Use a new subdirectory
+or state path to rescan. Unbound old parts and tag payloads are preserved as
+`.unverified` backups before downloading again; unverifiable completion records
+are never silently claimed by a new job.
+Preflight rejects shared state paths before login, and execution rejects
+colliding dynamically named media targets.
+
 ## Performance
 
 Compared to the python script, the batch mode:
@@ -612,6 +646,8 @@ Compared to the python script, the batch mode:
 - picks the thread count per file size (like `tdl dl`) and resumes at part
   granularity instead of restarting whole files.
 - buffers message metadata while opening files on demand, caches resolved
-  dialogs, and avoids resolving already completed jobs;
+  dialogs, and downloads discovered tag albums directly;
+- queries selected forum topics using `getReplies`, retaining root media within the window/filter;
+- uses bounded range cursors and streamed diagnostic exports; unchanged state avoids repeated serialization/writes;
 - batches parts journal writes and removes the fixed 200 ms progress delay
   from small file downloads.

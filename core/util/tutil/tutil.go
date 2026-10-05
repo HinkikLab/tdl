@@ -3,15 +3,15 @@ package tutil
 import (
 	"context"
 	"fmt"
-	"net/url"
 	"sort"
 	"strconv"
-	"strings"
 
 	"github.com/go-faster/errors"
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/telegram/query"
 	"github.com/gotd/td/tg"
+
+	"github.com/iyear/tdl/core/util/tgref"
 )
 
 // ErrMessageDeleted is returned when a message is detected as deleted.
@@ -19,77 +19,37 @@ var ErrMessageDeleted = errors.New("message may be deleted")
 
 // ParseMessageLink return dialog id, msg id, error
 func ParseMessageLink(ctx context.Context, manager *peers.Manager, s string) (peers.Peer, int, error) {
-	parse := func(from, msg string) (peers.Peer, int, error) {
-		ch, err := GetInputPeer(ctx, manager, from)
-		if err != nil {
-			return nil, 0, errors.Wrap(err, "input peer")
-		}
-
-		m, err := strconv.Atoi(msg)
-		if err != nil {
-			return nil, 0, errors.Wrap(err, "parse message id")
-		}
-
-		return ch, m, nil
-	}
-
-	u, err := url.Parse(s)
+	ref, err := tgref.Parse(s, tgref.Options{AllowTG: true})
 	if err != nil {
 		return nil, 0, err
 	}
-
-	paths := strings.Split(strings.TrimPrefix(u.Path, "/"), "/")
-
-	// https://t.me/opencfdchannel/4434?comment=360409
-	if c := u.Query().Get("comment"); c != "" {
-		peer, err := GetInputPeer(ctx, manager, paths[0])
-		if err != nil {
-			return nil, 0, errors.Wrap(err, "input peer")
-		}
-
+	if ref.Bot || ref.MessageID == 0 {
+		return nil, 0, fmt.Errorf("message link must identify a post: %s", s)
+	}
+	peer, err := GetInputPeer(ctx, manager, ref.Chat)
+	if err != nil {
+		return nil, 0, errors.Wrap(err, "input peer")
+	}
+	if ref.CommentID > 0 {
 		ch, ok := peer.(peers.Channel)
 		if !ok || !ch.IsBroadcast() {
 			return nil, 0, errors.New("not channel")
 		}
-
 		raw, err := ch.FullRaw(ctx)
 		if err != nil {
 			return nil, 0, errors.Wrap(err, "full raw")
 		}
-
 		linked, ok := raw.GetLinkedChatID()
 		if !ok {
 			return nil, 0, errors.New("no linked chat")
 		}
-
-		return parse(strconv.FormatInt(linked, 10), c)
-	}
-
-	switch len(paths) {
-	case 2:
-		// https://t.me/telegram/193
-		// https://t.me/myhostloc/1485524?thread=1485523
-		return parse(paths[0], paths[1])
-	case 3:
-		// https://t.me/c/1697797156/151
-		// https://t.me/iFreeKnow/45662/55005
-		if paths[0] == "c" {
-			return parse(paths[1], paths[2])
+		peer, err = GetInputPeer(ctx, manager, strconv.FormatInt(linked, 10))
+		if err != nil {
+			return nil, 0, errors.Wrap(err, "input discussion peer")
 		}
-
-		// "45662" means topic id, we don't need it
-		return parse(paths[0], paths[2])
-	case 4:
-		// https://t.me/c/1492447836/251015/251021
-		if paths[0] != "c" {
-			return nil, 0, fmt.Errorf("invalid message link")
-		}
-
-		// "251015" means topic id, we don't need it
-		return parse(paths[1], paths[3])
-	default:
-		return nil, 0, fmt.Errorf("invalid message link: %s", s)
+		return peer, ref.CommentID, nil
 	}
+	return peer, ref.MessageID, nil
 }
 
 func GetInputPeer(ctx context.Context, manager *peers.Manager, from string) (peers.Peer, error) {
@@ -212,7 +172,15 @@ func GetMessages(ctx context.Context, c *tg.Client, peer tg.InputPeerClass, msgs
 	}
 
 	ids := make([]tg.InputMessageClass, 0, len(msgs))
+	requested := make(map[int]struct{}, len(msgs))
 	for _, id := range msgs {
+		if id <= 0 {
+			return nil, nil, errors.New("message ID must be positive")
+		}
+		if _, exists := requested[id]; exists {
+			continue
+		}
+		requested[id] = struct{}{}
 		ids = append(ids, &tg.InputMessageID{ID: id})
 	}
 
@@ -221,31 +189,47 @@ func GetMessages(ctx context.Context, c *tg.Client, peer tg.InputPeerClass, msgs
 		return ids[i].(*tg.InputMessageID).ID > ids[j].(*tg.InputMessageID).ID
 	})
 
-	channel, ok := toInputChannel(peer)
-	if !ok {
-		return nil, nil, errors.Errorf("peer %d is not a channel", GetInputPeerID(peer))
+	var res tg.MessagesMessagesClass
+	var err error
+	if channel, ok := toInputChannel(peer); ok {
+		res, err = c.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{Channel: channel, ID: ids})
+	} else {
+		switch peer.(type) {
+		case *tg.InputPeerChat, *tg.InputPeerUser, *tg.InputPeerSelf:
+			res, err = c.MessagesGetMessages(ctx, ids)
+		default:
+			return nil, nil, errors.Errorf("unsupported message source peer %T", peer)
+		}
 	}
-
-	res, err := c.ChannelsGetMessages(ctx, &tg.ChannelsGetMessagesRequest{
-		Channel: channel,
-		ID:      ids,
-	})
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "channels get messages")
+		return nil, nil, errors.Wrap(err, "get messages")
 	}
 
 	found := make(map[int]*tg.Message, len(msgs))
 	missing := make(map[int]struct{})
 
-	out, ok := res.(*tg.MessagesChannelMessages)
-	if !ok {
+	var messages []tg.MessageClass
+	switch out := res.(type) {
+	case *tg.MessagesChannelMessages:
+		messages = out.Messages
+	case *tg.MessagesMessages:
+		messages = out.Messages
+	case *tg.MessagesMessagesSlice:
+		messages = out.Messages
+	default:
 		return nil, nil, errors.Errorf("unexpected messages type %T", res)
 	}
 
-	for _, m := range out.Messages {
+	for _, m := range messages {
 		msg, ok := m.(*tg.Message)
 		if !ok {
 			continue
+		}
+		if _, ok := requested[msg.ID]; !ok {
+			continue
+		}
+		if msg.PeerID != nil && !messagePeerMatches(peer, msg.PeerID) {
+			return nil, nil, errors.Errorf("message %d belongs to a different peer than %T/%d", msg.ID, peer, GetInputPeerID(peer))
 		}
 		found[msg.ID] = msg
 	}
@@ -265,6 +249,24 @@ func GetMessages(ctx context.Context, c *tg.Client, peer tg.InputPeerClass, msgs
 	sort.Ints(gone)
 
 	return found, gone, nil
+}
+
+func messagePeerMatches(input tg.InputPeerClass, actual tg.PeerClass) bool {
+	switch p := input.(type) {
+	case *tg.InputPeerChannel:
+		r, ok := actual.(*tg.PeerChannel)
+		return ok && r.ChannelID == p.ChannelID
+	case *tg.InputPeerChat:
+		r, ok := actual.(*tg.PeerChat)
+		return ok && r.ChatID == p.ChatID
+	case *tg.InputPeerUser:
+		r, ok := actual.(*tg.PeerUser)
+		return ok && r.UserID == p.UserID
+	case *tg.InputPeerSelf:
+		return true
+	default:
+		return false
+	}
 }
 
 // toInputChannel converts a channel peer into the input channel form required
@@ -329,6 +331,14 @@ func GetGroupedMessages(ctx context.Context, c *tg.Client, peer tg.InputPeerClas
 		} else {
 			messages = append(messages, m)
 		}
+	}
+
+	if err := it.Err(); err != nil {
+		// A partial selection cannot authorize committing a complete album.
+		return nil, errors.Wrap(err, "get grouped messages")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
 	}
 
 	// reverse messages from oldest to latest, so we can forward them in order

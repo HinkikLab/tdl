@@ -73,6 +73,9 @@ func (d *Downloader) Download(ctx context.Context, limit int) error {
 		wg.Go(func() error {
 			d.opts.Progress.OnAdd(elem)
 			err := d.download(wgctx, elem)
+			if finalizer, ok := elem.(FinalizingElem); ok {
+				err = multierr.Append(err, finalizer.Finalize(err))
+			}
 			d.opts.Progress.OnDone(elem, err)
 
 			if err != nil {
@@ -102,7 +105,7 @@ func (d *Downloader) Download(ctx context.Context, limit int) error {
 	if iterErr != nil {
 		cancel()
 	}
-	// Progress callbacks own files and state; wait even if resolution fails.
+	// Finalizers and progress callbacks own files/state; always wait for workers.
 	err := wg.Wait()
 	if iterErr != nil {
 		err = multierr.Append(err, errors.Wrap(iterErr, "iter"))

@@ -1,12 +1,11 @@
 package autodl
 
 import (
-	"os"
 	"path/filepath"
 	"sync"
-	"time"
 
 	pw "github.com/jedib0t/go-pretty/v6/progress"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/iyear/tdl/core/downloader"
@@ -24,10 +23,12 @@ type JobLogger interface {
 
 // jobContext is the state a progress handler needs.
 type jobContext struct {
-	job    *Job
-	state  *State
-	store  *stateStore
-	logger JobLogger
+	job         *Job
+	state       *State
+	store       *stateStore
+	logger      JobLogger
+	onCommitted func(*elem)
+	onFailed    func(*elem)
 }
 
 // jobProgress renders the progress of one job and commits every finished
@@ -42,6 +43,7 @@ type jobProgress struct {
 	done    int
 	failed  int
 	skipped int
+	err     error
 }
 
 func newJobProgress(w pw.Writer, ctx *jobContext) *jobProgress {
@@ -101,22 +103,25 @@ func (p *jobProgress) OnDone(e downloader.Elem, err error) {
 	p.mu.Unlock()
 
 	if err == nil {
-		err = el.finish()
+		identity, identityErr := downloader.FileIdentityOf(el.file)
+		if identityErr != nil {
+			err = identityErr
+		} else {
+			err = p.ctx.state.CompleteMedia(el.msgID, identity, el.path)
+		}
 		if err == nil {
-			// keep the message date as the file time, like the regular
-			// downloader does
-			if el.date > 0 {
-				ts := time.Unix(el.date, 0)
-				_ = os.Chtimes(el.path, ts, ts)
-			}
-
 			p.mu.Lock()
 			p.done++
 			p.mu.Unlock()
 
-			p.ctx.state.Finish(el.msgID)
+			if p.ctx.onCommitted != nil {
+				p.ctx.onCommitted(el)
+			}
 			if serr := p.ctx.store.SaveThrottled(); serr != nil {
 				p.ctx.logger.Warn("Save state", zap.Error(serr))
+				p.mu.Lock()
+				p.err = multierr.Append(p.err, serr)
+				p.mu.Unlock()
 			}
 
 			if tracker != nil {
@@ -132,6 +137,7 @@ func (p *jobProgress) OnDone(e downloader.Elem, err error) {
 
 	p.mu.Lock()
 	p.failed++
+	p.err = multierr.Append(p.err, err)
 	p.mu.Unlock()
 
 	if tracker != nil {
@@ -142,7 +148,12 @@ func (p *jobProgress) OnDone(e downloader.Elem, err error) {
 		zap.String("file", filepath.Base(el.path)),
 		zap.Int("message_id", el.msgID),
 		zap.Error(err))
+	if p.ctx.onFailed != nil {
+		p.ctx.onFailed(el)
+	}
 }
+
+func (p *jobProgress) Err() error { p.mu.Lock(); defer p.mu.Unlock(); return p.err }
 
 // markSkipped counts messages that have no downloadable media.
 func (p *jobProgress) markSkipped(n int) {

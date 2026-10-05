@@ -2,7 +2,6 @@ package autodl
 
 import (
 	"context"
-	"strings"
 
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/storage/keygen"
@@ -39,32 +38,40 @@ func LoggedIn(ctx context.Context, kv storage.Storage) bool {
 // other outcome means the caller should fall back to the regular behaviour
 // (printing help).
 func AutoStart(ctx context.Context, engine kv.Storage, namespace string) (string, string, error) {
-	path, ok := FindConfig()
-	if !ok {
-		return "", "", nil
-	}
-
-	cfg, err := LoadConfig(path)
-	if err != nil {
+	prepared, err := PrepareAutoStart(ctx, engine, Options{Namespace: namespace})
+	if err != nil || prepared == nil {
 		return "", "", err
 	}
+	return prepared.ConfigPath(), prepared.EffectiveOptions().Namespace, nil
+}
 
-	if ns := strings.TrimSpace(cfg.Namespace); ns != "" {
-		namespace = ns
+// PrepareAutoStart uses the same snapshot and namespace rules as explicit
+// batch execution. The returned snapshot must also be used for execution.
+func PrepareAutoStart(ctx context.Context, engine kv.Storage, opts Options) (*PreparedRun, error) {
+	path, ok := FindConfig()
+	if !ok {
+		return nil, nil
 	}
 
+	opts.ConfigPath = path
+	prepared, err := Prepare(opts)
+	if err != nil {
+		return nil, err
+	}
+	namespace := prepared.EffectiveOptions().Namespace
+
 	if engine == nil {
-		return "", "", nil
+		return nil, nil
 	}
 
 	ns, err := engine.Open(namespace)
 	if err != nil {
-		return "", "", nil // not logged in (or no namespace yet)
+		return nil, nil // not logged in (or no namespace yet)
 	}
 
 	if !LoggedIn(ctx, ns) {
-		return "", "", nil
+		return nil, nil
 	}
 
-	return path, namespace, nil
+	return prepared, nil
 }

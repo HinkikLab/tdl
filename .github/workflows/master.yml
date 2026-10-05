@@ -38,6 +38,16 @@ jobs:
           working-directory: ${{ matrix.directory }}
   unit-test:
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: false
+      matrix:
+        directory:
+          - .
+          - core
+          - extension
+    defaults:
+      run:
+        working-directory: ${{ matrix.directory }}
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -47,9 +57,13 @@ jobs:
           go-version-file: go.mod
           cache: true
       - name: Build
-        run: go build
+        run: go build ./...
       - name: Unit Test
         run: go test -v $(go list ./... | grep -v /test) # skip e2e test
+      - name: Race Test
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race $(go list ./... | grep -v /test)
   e2e-test:
     runs-on: ubuntu-22.04
     if: false # skip e2e test for now, since it is not stable

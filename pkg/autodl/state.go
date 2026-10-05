@@ -9,7 +9,21 @@ import (
 	"time"
 
 	"github.com/go-faster/errors"
+
+	"github.com/iyear/tdl/core/downloader"
 )
+
+// MediaRecord binds a committed message to the exact media and output path.
+type MediaRecord struct {
+	Identity  downloader.FileIdentity `json:"identity"`
+	Path      string                  `json:"path"`
+	Size      int64                   `json:"size"`
+	ModTimeNS int64                   `json:"mod_time_ns"`
+}
+
+func (record MediaRecord) MatchesStat(info os.FileInfo) bool {
+	return info != nil && info.Mode().IsRegular() && record.ModTimeNS != 0 && record.Size == info.Size() && record.ModTimeNS == info.ModTime().UnixNano()
+}
 
 // State is the persisted progress of one job.
 //
@@ -30,13 +44,21 @@ type State struct {
 	// for example deleted messages.
 	Skipped []int `json:"skipped"`
 	// LastTS is the newest export timestamp that has been fully processed.
-	LastTS int64 `json:"last_ts"`
+	LastTS       int64               `json:"last_ts"`
+	MediaRecords map[int]MediaRecord `json:"media,omitempty"`
+	Filtered     []int               `json:"filtered,omitempty"`
 
 	mu       sync.Mutex
 	finished map[int]struct{}
 	skipped  map[int]struct{}
+	media    map[int]MediaRecord
+	filtered map[int]struct{}
 	// needsScopeSave is set when a legacy unscoped file is claimed by a job.
 	needsScopeSave bool
+	revision       uint64
+	persisted      uint64
+	persistedPath  string
+	saveMu         sync.Mutex
 }
 
 // NewState returns an empty state.
@@ -44,6 +66,9 @@ func NewState() *State {
 	return &State{
 		finished: make(map[int]struct{}),
 		skipped:  make(map[int]struct{}),
+		media:    make(map[int]MediaRecord),
+		filtered: make(map[int]struct{}),
+		revision: 1,
 	}
 }
 
@@ -68,16 +93,21 @@ func loadState(path, scope string) (*State, error) {
 	}
 
 	var raw struct {
-		Scope    string `json:"scope"`
-		Finished []int  `json:"finished"`
-		Skipped  []int  `json:"skipped"`
-		LastTS   int64  `json:"last_ts"`
+		Scope        string              `json:"scope"`
+		Finished     []int               `json:"finished"`
+		Skipped      []int               `json:"skipped"`
+		LastTS       int64               `json:"last_ts"`
+		MediaRecords map[int]MediaRecord `json:"media"`
+		Filtered     []int               `json:"filtered"`
 	}
 	if err = json.Unmarshal(b, &raw); err != nil {
 		return nil, errors.Wrapf(err, "parse state %s", path)
 	}
 	if scope != "" && raw.Scope != "" && raw.Scope != scope {
-		return nil, errors.Errorf("state %s belongs to %q, not %q; use a distinct subdir or state file", path, raw.Scope, scope)
+		return nil, errors.Errorf("state %s belongs to %q, not %q; preserved unchanged: use a new state file/subdir to rescan, or keep a backup before explicitly resetting it", path, raw.Scope, scope)
+	}
+	if scope != "" && raw.Scope == "" && (len(raw.Finished) > 0 || len(raw.Skipped) > 0 || len(raw.MediaRecords) > 0 || len(raw.Filtered) > 0 || raw.LastTS > 0) {
+		return nil, errors.Errorf("legacy state %s has no verifiable source identity; preserved unchanged: use a new state file/subdir to rescan, or keep a backup before explicitly resetting it", path)
 	}
 
 	s.Scope = raw.Scope
@@ -93,6 +123,19 @@ func loadState(path, scope string) (*State, error) {
 		s.skipped[id] = struct{}{}
 		s.finished[id] = struct{}{}
 	}
+	for id, record := range raw.MediaRecords {
+		s.media[id] = record
+		s.finished[id] = struct{}{}
+	}
+	for _, id := range raw.Filtered {
+		s.filtered[id] = struct{}{}
+		s.finished[id] = struct{}{}
+	}
+	s.persistedPath = canonicalPath(path)
+	s.persisted = s.revision
+	if s.needsScopeSave {
+		s.revision++
+	}
 
 	return s, nil
 }
@@ -102,18 +145,31 @@ func (s *State) Save(path string) error {
 	if path == "" {
 		return nil
 	}
+	s.saveMu.Lock()
+	defer s.saveMu.Unlock()
 
 	s.mu.Lock()
+	if s.persisted == s.revision && s.persistedPath == canonicalPath(path) {
+		if _, err := os.Stat(path); err == nil {
+			s.mu.Unlock()
+			return nil
+		}
+	}
+	revision := s.revision
 	raw := struct {
-		Scope    string `json:"scope,omitempty"`
-		Finished []int  `json:"finished"`
-		Skipped  []int  `json:"skipped"`
-		LastTS   int64  `json:"last_ts"`
+		Scope        string              `json:"scope,omitempty"`
+		Finished     []int               `json:"finished"`
+		Skipped      []int               `json:"skipped"`
+		LastTS       int64               `json:"last_ts"`
+		MediaRecords map[int]MediaRecord `json:"media,omitempty"`
+		Filtered     []int               `json:"filtered,omitempty"`
 	}{
-		Scope:    s.Scope,
-		Finished: s.finishedIDs(),
-		Skipped:  s.skippedIDs(),
-		LastTS:   s.LastTS,
+		Scope:        s.Scope,
+		Finished:     s.finishedIDs(),
+		Skipped:      s.skippedIDs(),
+		LastTS:       s.LastTS,
+		MediaRecords: s.mediaRecords(),
+		Filtered:     s.filteredIDs(),
 	}
 	s.mu.Unlock()
 
@@ -138,6 +194,8 @@ func (s *State) Save(path string) error {
 	}
 	s.mu.Lock()
 	s.needsScopeSave = false
+	s.persisted = revision
+	s.persistedPath = canonicalPath(path)
 	s.mu.Unlock()
 	return nil
 }
@@ -166,6 +224,9 @@ func (s *State) Finish(ids ...int) {
 	defer s.mu.Unlock()
 
 	for _, id := range ids {
+		if _, exists := s.finished[id]; !exists {
+			s.revision++
+		}
 		s.finished[id] = struct{}{}
 	}
 }
@@ -176,9 +237,99 @@ func (s *State) Skip(ids ...int) {
 	defer s.mu.Unlock()
 
 	for _, id := range ids {
+		if _, exists := s.skipped[id]; !exists {
+			s.revision++
+		}
+		delete(s.media, id)
+		delete(s.filtered, id)
 		s.finished[id] = struct{}{}
 		s.skipped[id] = struct{}{}
 	}
+}
+
+// CompleteMedia records completion only after the payload has been committed.
+func (s *State) CompleteMedia(id int, identity downloader.FileIdentity, path string) error {
+	info, err := os.Stat(path)
+	if err != nil {
+		return errors.Wrap(err, "stat committed media")
+	}
+	if !info.Mode().IsRegular() || info.Size() != identity.Size {
+		return errors.Errorf("committed media %s has size %d, expected %d", path, info.Size(), identity.Size)
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	record := MediaRecord{Identity: identity, Path: canonicalPath(path), Size: info.Size(), ModTimeNS: info.ModTime().UnixNano()}
+	if previous, ok := s.media[id]; !ok || previous != record {
+		s.revision++
+	}
+	s.media[id] = record
+	s.finished[id] = struct{}{}
+	delete(s.skipped, id)
+	delete(s.filtered, id)
+	return nil
+}
+
+func (s *State) Media(id int) (MediaRecord, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	record, ok := s.media[id]
+	return record, ok
+}
+
+// Filter marks messages excluded by this job's immutable extension selection.
+func (s *State) Filter(ids ...int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, id := range ids {
+		if _, ok := s.filtered[id]; !ok {
+			s.revision++
+		}
+		s.filtered[id] = struct{}{}
+		s.finished[id] = struct{}{}
+		delete(s.media, id)
+		delete(s.skipped, id)
+	}
+}
+
+func (s *State) IsTerminalWithoutMedia(id int) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, skipped := s.skipped[id]
+	_, filtered := s.filtered[id]
+	return skipped || filtered
+}
+
+// ForgetMedia clears an invalid completion record so a failed replacement is
+// retried and cannot advance the incremental timestamp.
+func (s *State) ForgetMedia(id int) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.finished[id]; ok {
+		s.revision++
+	}
+	delete(s.finished, id)
+	delete(s.media, id)
+	delete(s.skipped, id)
+	delete(s.filtered, id)
+}
+
+func (s *State) mediaRecords() map[int]MediaRecord {
+	if len(s.media) == 0 {
+		return nil
+	}
+	out := make(map[int]MediaRecord, len(s.media))
+	for id, record := range s.media {
+		out[id] = record
+	}
+	return out
+}
+func (s *State) filteredIDs() []int {
+	out := make([]int, 0, len(s.filtered))
+	for id := range s.filtered {
+		out = append(out, id)
+	}
+	sort.Ints(out)
+	return out
 }
 
 // ClearSkipped forgets every id that was recorded as unavailable and returns
@@ -193,6 +344,9 @@ func (s *State) ClearSkipped() int {
 	defer s.mu.Unlock()
 
 	n := len(s.skipped)
+	if n > 0 {
+		s.revision++
+	}
 	for id := range s.skipped {
 		delete(s.skipped, id)
 		delete(s.finished, id)
@@ -206,7 +360,10 @@ func (s *State) SetLastTS(ts int64) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	s.LastTS = ts
+	if s.LastTS != ts {
+		s.LastTS = ts
+		s.revision++
+	}
 }
 
 // GetLastTS returns the incremental timestamp.
@@ -288,11 +445,8 @@ func LoadStateStore(path string, scopes ...string) (*stateStore, *State, error) 
 	}
 
 	store := &stateStore{path: path, state: st}
-	if st.needsScopeSave {
-		if err := store.Save(); err != nil {
-			return nil, nil, errors.Wrap(err, "bind legacy state scope")
-		}
-	}
+	// Loading is read-only. Empty legacy documents bind in memory and are
+	// persisted only after an explicitly mutating execution succeeds.
 	return store, st, nil
 }
 

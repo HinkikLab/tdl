@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/spf13/cobra"
+	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 
 	"github.com/iyear/tdl/pkg/autodl"
@@ -65,4 +66,35 @@ func TestBatchPoolOverridesGlobalUnlimitedPool(t *testing.T) {
 	opts := f.options(cmd)
 	require.True(t, opts.PoolSizeSet)
 	require.Equal(t, 4, opts.PoolSize)
+}
+
+func TestBatchOfflineValidationDoesNotOpenAccountStorage(t *testing.T) {
+	viper.Reset()
+	t.Cleanup(viper.Reset)
+	root := t.TempDir()
+	path := filepath.Join(root, "config.json")
+	require.NoError(t, os.WriteFile(path, []byte(`{"namespace":"config_account","download_base":"`+filepath.ToSlash(filepath.Join(root, "not-created"))+`","jobs":[{"chat_url":"https://t.me/course","incremental":true}]}`), 0o600))
+	cmd := New()
+	var output bytes.Buffer
+	cmd.SetOut(&output)
+	cmd.SetErr(&output)
+	cmd.SetArgs([]string{"batch", "--validate-only", "--config", path, "--storage", "type=not-a-storage-driver"})
+	require.NoError(t, cmd.Execute())
+	require.Contains(t, output.String(), "Batch configuration valid")
+	require.Contains(t, output.String(), "namespace=config_account")
+	require.NoDirExists(t, filepath.Join(root, "not-created"))
+}
+
+func TestBatchOverrideOriginIdentifiesBatchAndGlobalFlags(t *testing.T) {
+	cmd := &cobra.Command{}
+	cmd.Flags().Int(consts.FlagPoolSize, 8, "")
+	cmd.Flags().Int(consts.FlagThreads, 4, "")
+	cmd.Flags().Int(consts.FlagLimit, 2, "")
+	cmd.Flags().Int("batch-pool", 0, "")
+	require.NoError(t, cmd.Flags().Set(consts.FlagPoolSize, "0"))
+	require.NoError(t, cmd.Flags().Set(consts.FlagThreads, "3"))
+	opts := (&batchFlags{limit: 5}).options(cmd)
+	require.Equal(t, "global flag", opts.Origins.Pool)
+	require.Equal(t, "global flag", opts.Origins.Threads)
+	require.Equal(t, "batch flag", opts.Origins.Limit)
 }

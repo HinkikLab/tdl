@@ -5,6 +5,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/binary"
+	"encoding/json"
 	"fmt"
 	"maps"
 	"os"
@@ -19,6 +20,7 @@ import (
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
 	"go.uber.org/atomic"
+	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
 	"github.com/iyear/tdl/core/dcpool"
@@ -27,6 +29,7 @@ import (
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/fsutil"
 	"github.com/iyear/tdl/core/util/tutil"
+	"github.com/iyear/tdl/internal/transfer"
 	"github.com/iyear/tdl/pkg/filterMap"
 	"github.com/iyear/tdl/pkg/tmessage"
 	"github.com/iyear/tdl/pkg/tplfunc"
@@ -56,9 +59,13 @@ type iter struct {
 	opts    Options
 	delay   time.Duration
 
-	mu          *sync.Mutex
-	finished    map[int]struct{}
-	fingerprint string
+	mu                *sync.Mutex
+	finished          map[int]struct{}
+	completed         map[string]completion
+	selectedKeys      map[string]struct{}
+	reservations      *transfer.Reservations
+	fingerprint       string
+	legacyFingerprint string
 	// This param is kept for potential future use but is currently unused.
 	// preSum       []int
 	logicalPos   int // logical position for finished tracking
@@ -96,6 +103,15 @@ func newIter(pool dcpool.Pool, manager *peers.Manager, dialog [][]*tmessage.Dial
 
 	// to keep fingerprint stable
 	sortDialogs(dialogs, opts.Desc)
+	root, err := transfer.CanonicalPath(opts.Dir)
+	if err != nil {
+		return nil, err
+	}
+	opts.Dir = root
+	reservations := opts.Reservations
+	if reservations == nil {
+		reservations = &transfer.Reservations{}
+	}
 
 	return &iter{
 		pool:    pool,
@@ -107,9 +123,13 @@ func newIter(pool dcpool.Pool, manager *peers.Manager, dialog [][]*tmessage.Dial
 		tpl:     tpl,
 		delay:   delay,
 
-		mu:          &sync.Mutex{},
-		finished:    make(map[int]struct{}),
-		fingerprint: fingerprint(dialogs),
+		mu:                &sync.Mutex{},
+		finished:          make(map[int]struct{}),
+		fingerprint:       downloadFingerprint(dialogs, opts),
+		legacyFingerprint: fingerprint(dialogs),
+		completed:         make(map[string]completion),
+		selectedKeys:      make(map[string]struct{}),
+		reservations:      reservations,
 		// This param is kept for potential future use but is currently unused.
 		// preSum:       preSum(dialogs),
 		logicalPos:     0,
@@ -205,12 +225,6 @@ func (i *iter) process(ctx context.Context) (ret bool, skip bool) {
 		return i.processGrouped(ctx, message, from, startLogicalPos)
 	}
 
-	// check if finished
-	if _, ok := i.finished[startLogicalPos]; ok {
-		i.logicalPos++ // increment logical position even if skipped
-		return false, true
-	}
-
 	ret, skip = i.processSingle(ctx, message, from, startLogicalPos)
 	i.logicalPos++ // increment logical position after processing
 	return ret, skip
@@ -256,11 +270,43 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 		i.err = errors.Wrap(err, "resolve output path")
 		return false, false
 	}
+	identity, err := downloader.FileIdentityOf(mediaDownloadFile{item})
+	if err != nil {
+		i.err = err
+		return false, false
+	}
+	encoded, _ := json.Marshal(struct {
+		Peer     string
+		Message  int
+		Identity downloader.FileIdentity
+		Path     string
+	}{from.InputPeer().TypeName() + ":" + fmt.Sprint(from.ID()), message.ID, identity, finalPath})
+	resumeKey := fmt.Sprintf("%x", sha256.Sum256(encoded))
+	if _, seen := i.selectedKeys[resumeKey]; seen {
+		return false, true
+	}
+	i.selectedKeys[resumeKey] = struct{}{}
+	finalPath, err = i.reservations.Reserve(finalPath, resumeKey)
+	if err != nil {
+		i.err = err
+		return false, false
+	}
+	if saved, ok := i.completed[resumeKey]; ok {
+		if stat, err := os.Stat(saved.Path); err == nil && saved.Target == finalPath && saved.Size == item.Size && stat.Mode().IsRegular() && stat.Size() == item.Size && stat.ModTime().UnixNano() == saved.ModTime {
+			if saved.Path != finalPath {
+				if _, err := i.reservations.Reserve(saved.Path, resumeKey); err != nil {
+					i.err = err
+					return false, false
+				}
+			}
+			return false, true
+		}
+	}
 
 	if i.opts.SkipSame {
 		if stat, err := os.Stat(finalPath); err == nil {
 			if fsutil.GetNameWithoutExt(toName.String()) == fsutil.GetNameWithoutExt(stat.Name()) &&
-				stat.Size() == item.Size {
+				stat.Mode().IsRegular() && stat.Size() == item.Size {
 				return false, true
 			}
 		}
@@ -274,10 +320,13 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 		return false, false
 	}
 
-	to, parts, err := downloader.OpenPartial(path, item.Size)
+	to, parts, err := downloader.OpenPartialFile(path, mediaDownloadFile{item})
 	if err != nil {
 		i.err = errors.Wrap(err, "create file")
 		return false, false
+	}
+	for _, recoveryPath := range parts.RecoveryPaths() {
+		logctx.From(ctx).Warn("Preserved unverified partial download", zap.String("path", recoveryPath))
 	}
 
 	i.elem <- &iterElem{
@@ -291,7 +340,8 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 		to:    to,
 		parts: parts,
 
-		opts: i.opts,
+		opts:      i.opts,
+		finalPath: finalPath, requestedPath: finalPath, resumeKey: resumeKey, reservations: i.reservations,
 	}
 
 	return true, false
@@ -308,11 +358,6 @@ func (i *iter) processGrouped(ctx context.Context, message *tg.Message, from pee
 
 	for idx, msg := range grouped {
 		logicalPos := startLogicalPos + idx
-
-		// check if this grouped message is already finished
-		if _, ok := i.finished[logicalPos]; ok {
-			continue
-		}
 
 		ret, skip := i.processSingle(ctx, msg, from, logicalPos)
 
@@ -341,6 +386,21 @@ func (i *iter) Err() error {
 	return i.err
 }
 
+// Drain closes album members prepared before a later member failed, or before
+// cancellation prevented Value from consuming the queue. Call after workers
+// settle; these members never reached Progress.OnAdd.
+func (i *iter) Drain() error {
+	var err error
+	for {
+		select {
+		case elem := <-i.elem:
+			err = multierr.Append(err, elem.(*iterElem).Finalize(context.Canceled))
+		default:
+			return err
+		}
+	}
+}
+
 func (i *iter) SetFinished(finished map[int]struct{}) {
 	i.mu.Lock()
 	defer i.mu.Unlock()
@@ -364,6 +424,57 @@ func (i *iter) Finish(id int) {
 	defer i.mu.Unlock()
 
 	i.finished[id] = struct{}{}
+}
+
+type mediaDownloadFile struct{ media *tmedia.Media }
+
+func (f mediaDownloadFile) Location() tg.InputFileLocationClass { return f.media.InputFileLoc }
+func (f mediaDownloadFile) Size() int64                         { return f.media.Size }
+func (f mediaDownloadFile) DC() int                             { return f.media.DC }
+
+type completion struct {
+	Path    string `json:"path"`
+	Target  string `json:"target"`
+	Size    int64  `json:"size"`
+	ModTime int64  `json:"mod_time_ns"`
+}
+
+func (i *iter) Complete(e *iterElem) {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	if i.completed == nil {
+		i.completed = make(map[string]completion)
+	}
+	if e.resumeKey != "" {
+		if stat, err := os.Stat(e.finalPath); err == nil && stat.Mode().IsRegular() && stat.Size() == e.Size() {
+			i.completed[e.resumeKey] = completion{Path: e.finalPath, Target: e.requestedPath, Size: e.Size(), ModTime: stat.ModTime().UnixNano()}
+		}
+	}
+}
+func (i *iter) Completed() map[string]completion {
+	i.mu.Lock()
+	defer i.mu.Unlock()
+	return maps.Clone(i.completed)
+}
+func downloadFingerprint(dialogs []*tmessage.Dialog, opts Options) string {
+	type source struct {
+		Kind     string
+		ID       int64
+		Messages []int
+	}
+	sources := make([]source, 0, len(dialogs))
+	for _, dialog := range dialogs {
+		sources = append(sources, source{dialog.Peer.TypeName(), tutil.GetInputPeerID(dialog.Peer), dialog.Messages})
+	}
+	b, _ := json.Marshal(struct {
+		Version          int
+		Sources          []source
+		Dir, Template    string
+		Include, Exclude []string
+		Group, Rewrite   bool
+		Dirs             map[int]string
+	}{2, sources, opts.Dir, opts.Template, opts.Include, opts.Exclude, opts.Group, opts.RewriteExt, opts.GroupDirByMessage})
+	return fmt.Sprintf("v2-%x", sha256.Sum256(b))
 }
 
 func (i *iter) Total() int {

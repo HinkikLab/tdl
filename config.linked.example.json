@@ -21,6 +21,7 @@
         "bot_idle_seconds": 3,
         "poll_interval_ms": 500,
         "max_bot_messages": 500,
+        "max_topic_messages": 1000,
         "comment_limit": 100,
         "rerequest_limit": 3,
         "flood_retries": 5,

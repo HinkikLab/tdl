@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
@@ -19,6 +20,7 @@ import (
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/tclient"
+	"github.com/iyear/tdl/internal/transfer"
 	"github.com/iyear/tdl/pkg/consts"
 	"github.com/iyear/tdl/pkg/key"
 	"github.com/iyear/tdl/pkg/prog"
@@ -46,6 +48,10 @@ type Options struct {
 	PoolSize          int // optional per-run override
 	PoolSizeSet       bool
 	Pool              dcpool.Pool // optional shared pool for batch jobs
+	Manager           *peers.Manager
+	Delay             time.Duration
+	DelaySet          bool
+	Reservations      *transfer.Reservations
 
 	// resume opts
 	Continue, Restart bool
@@ -88,9 +94,16 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 		return serve(ctx, kvd, pool, dialogs, opts.Port, opts.Takeout)
 	}
 
-	manager := peers.Options{Storage: storage.NewPeers(kvd)}.Build(pool.Default(ctx))
+	manager := opts.Manager
+	if manager == nil {
+		manager = peers.Options{Storage: storage.NewPeers(kvd)}.Build(pool.Default(ctx))
+	}
+	delay := opts.Delay
+	if !opts.DelaySet {
+		delay = viper.GetDuration(consts.FlagDelay)
+	}
 
-	it, err := newIter(pool, manager, dialogs, opts, viper.GetDuration(consts.FlagDelay))
+	it, err := newIter(pool, manager, dialogs, opts, delay)
 	if err != nil {
 		return err
 	}
@@ -106,7 +119,7 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 
 	defer func() { // save progress
 		if rerr != nil { // download is interrupted
-			multierr.AppendInto(&rerr, saveProgress(ctx, kvd, it))
+			multierr.AppendInto(&rerr, saveProgress(context.WithoutCancel(ctx), kvd, it))
 		} else { // if finished, we should clear resume key
 			multierr.AppendInto(&rerr, kvd.Delete(ctx, key.Resume(it.Fingerprint())))
 		}
@@ -147,9 +160,9 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 
 	color.Green("All files will be downloaded to '%s' dir", opts.Dir)
 
-	go dlProgress.Render()
+	stopRender := prog.Start(dlProgress)
 	defer func() {
-		prog.Wait(ctx, dlProgress)
+		stopRender()
 
 		// Notify user if any messages were skipped due to deletion
 		// This is deferred to ensure it shows after progress rendering completes
@@ -166,7 +179,8 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 		}
 	}()
 
-	return downloader.Download(ctx, limit)
+	rerr = downloader.Download(ctx, limit)
+	return multierr.Append(rerr, it.Drain())
 }
 
 func collectDialogs(parsers []parser) ([][]*tmessage.Dialog, error) {
@@ -190,13 +204,29 @@ func resume(ctx context.Context, kvd storage.Storage, iter *iter, ask bool) erro
 		return err
 	}
 	if len(b) == 0 { // no progress
+		if iter.legacyFingerprint != "" {
+			legacy, legacyErr := kvd.Get(ctx, key.Resume(iter.legacyFingerprint))
+			if legacyErr != nil && !errors.Is(legacyErr, storage.ErrNotFound) {
+				return legacyErr
+			}
+			if len(legacy) > 0 {
+				color.Yellow("Legacy positional download state retained; outputs will be checked and unverified partials preserved before downloading again")
+			}
+		}
 		return nil
 	}
 
-	finished := make(map[int]struct{})
-	if err = json.Unmarshal(b, &finished); err != nil {
+	var saved struct {
+		Version   int                   `json:"version"`
+		Completed map[string]completion `json:"completed"`
+	}
+	if err = json.Unmarshal(b, &saved); err != nil {
 		return err
 	}
+	if saved.Version != 2 {
+		return fmt.Errorf("unsupported download resume version; legacy positional state is retained for recovery")
+	}
+	finished := saved.Completed
 
 	// finished is empty, no need to resume
 	if len(finished) == 0 {
@@ -224,16 +254,19 @@ func resume(ctx context.Context, kvd storage.Storage, iter *iter, ask bool) erro
 		return kvd.Delete(ctx, key.Resume(iter.Fingerprint()))
 	}
 
-	iter.SetFinished(finished)
+	iter.completed = finished
 	return nil
 }
 
 func saveProgress(ctx context.Context, kvd storage.Storage, it *iter) error {
-	finished := it.Finished()
+	finished := it.Completed()
 	logctx.From(ctx).Debug("Save progress",
 		zap.Int("finished", len(finished)))
 
-	b, err := json.Marshal(finished)
+	b, err := json.Marshal(struct {
+		Version   int                   `json:"version"`
+		Completed map[string]completion `json:"completed"`
+	}{2, finished})
 	if err != nil {
 		return err
 	}

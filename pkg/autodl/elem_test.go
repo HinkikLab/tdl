@@ -7,16 +7,16 @@ import (
 	"testing"
 
 	"github.com/gotd/td/tg"
-
-	"github.com/iyear/tdl/core/downloader"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/iyear/tdl/core/downloader"
 )
 
 // testFile is a downloader.File with a controllable size.
 type testFile struct{ size int64 }
 
-func (f testFile) Location() tg.InputFileLocationClass { return &tg.InputDocumentFileLocation{} }
+func (f testFile) Location() tg.InputFileLocationClass { return &tg.InputDocumentFileLocation{ID: 42} }
 func (f testFile) Size() int64                         { return f.size }
 func (f testFile) DC() int                             { return 2 }
 
@@ -46,12 +46,16 @@ func TestElemLifecycle(t *testing.T) {
 	require.FileExists(t, sidecar)
 
 	// the next run must find those parts again
-	store := downloader.NewPartsStore(path+tempExt, e.file.Size())
+	identity, err := downloader.FileIdentityOf(e.file)
+	require.NoError(t, err)
+	store := downloader.NewPartsStore(path+tempExt, e.file.Size(), identity)
 	done := store.Done()
 	assert.Len(t, done, 2)
 	assert.Contains(t, done, 0)
 	assert.Contains(t, done, 1)
 
+	_, err = e.to.WriteAt(bytes.Repeat([]byte{3}, downloader.MaxPartSize), 2*downloader.MaxPartSize)
+	require.NoError(t, err)
 	require.NoError(t, e.finish())
 	assert.FileExists(t, path)
 	assert.NoFileExists(t, sidecar)
@@ -81,7 +85,9 @@ func TestElemResumePreAllocates(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, size, stat.Size())
 
-	store := downloader.NewPartsStore(path+tempExt, size)
+	identity, err := downloader.FileIdentityOf(second.file)
+	require.NoError(t, err)
+	store := downloader.NewPartsStore(path+tempExt, size, identity)
 	assert.Len(t, store.Done(), 2)
 	got := make([]byte, len(data))
 	_, err = second.to.ReadAt(got, 0)
@@ -130,6 +136,8 @@ func TestElemFinishRenamesAndClearsParts(t *testing.T) {
 	e := newTestElem(path, downloader.MaxPartSize)
 	require.NoError(t, e.start(false))
 
+	_, err := e.to.WriteAt(bytes.Repeat([]byte{1}, downloader.MaxPartSize), 0)
+	require.NoError(t, err)
 	require.NoError(t, e.finish())
 	assert.FileExists(t, path)
 	assert.NoFileExists(t, downloader.PartsPath(path+tempExt))

@@ -3,19 +3,15 @@ package dl
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/fatih/color"
-	"github.com/gabriel-vasile/mimetype"
 	"github.com/go-faster/errors"
 	pw "github.com/jedib0t/go-pretty/v6/progress"
+	"go.uber.org/multierr"
 
 	"github.com/iyear/tdl/core/downloader"
-	"github.com/iyear/tdl/core/util/fsutil"
 	"github.com/iyear/tdl/pkg/prog"
 	"github.com/iyear/tdl/pkg/utils"
 )
@@ -87,6 +83,9 @@ func (p *progress) OnDownload(elem downloader.Elem, state downloader.ProgressSta
 
 func (p *progress) OnDone(elem downloader.Elem, err error) {
 	e := elem.(*iterElem)
+	if !e.finalized {
+		err = multierr.Combine(err, e.Finalize(err))
+	}
 
 	tracker, ok := p.trackers.Load(e.id)
 	if !ok {
@@ -94,17 +93,6 @@ func (p *progress) OnDone(elem downloader.Elem, err error) {
 	}
 	t := tracker.(*pw.Tracker)
 	defer p.trackers.Delete(e.id)
-	if e.parts != nil {
-		if flushErr := e.parts.Flush(); flushErr != nil && err == nil {
-			err = errors.Wrap(flushErr, "save partial progress")
-		}
-	}
-
-	if err := e.to.Close(); err != nil {
-		p.fail(t, elem, errors.Wrap(err, "close file"))
-		return
-	}
-
 	if err != nil {
 		if !errors.Is(err, context.Canceled) { // don't report user cancel
 			p.fail(t, elem, errors.Wrap(err, "progress"))
@@ -115,49 +103,9 @@ func (p *progress) OnDone(elem downloader.Elem, err error) {
 		return
 	}
 
-	if err := p.donePost(e); err != nil {
-		p.fail(t, elem, errors.Wrap(err, "post file"))
-		return
-	}
 	p.it.Finish(e.logicalPos)
+	p.it.Complete(e)
 	t.MarkAsDone()
-}
-
-func (p *progress) donePost(elem *iterElem) error {
-	newfile := strings.TrimSuffix(filepath.Base(elem.to.Name()), tempExt)
-
-	if p.opts.RewriteExt {
-		mime, err := mimetype.DetectFile(elem.to.Name())
-		if err != nil {
-			return errors.Wrap(err, "detect mime")
-		}
-		ext := mime.Extension()
-		if ext != "" && (filepath.Ext(newfile) != ext) {
-			newfile = fsutil.GetNameWithoutExt(newfile) + ext
-		}
-	}
-
-	newpath := filepath.Join(filepath.Dir(elem.to.Name()), newfile)
-	if err := os.Rename(elem.to.Name(), newpath); err != nil {
-		return errors.Wrap(err, "rename file")
-	}
-
-	// the element is complete, its parts are not needed anymore
-	if elem.parts != nil {
-		elem.parts.Remove()
-	}
-
-	// Set file modification time to message date if available
-	if elem.file.Date > 0 {
-		fileTime := time.Unix(elem.file.Date, 0)
-		if err := os.Chtimes(newpath, fileTime, fileTime); err != nil {
-			// The payload is already complete and renamed. A filesystem that
-			// rejects timestamp metadata must not make it download again.
-			p.pw.Log(color.YellowString("%s warning: set file time: %s", newpath, err))
-		}
-	}
-
-	return nil
 }
 
 func (p *progress) fail(t *pw.Tracker, elem downloader.Elem, err error) {

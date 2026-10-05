@@ -7,7 +7,6 @@ import (
 
 	"github.com/go-faster/errors"
 	"github.com/gotd/td/telegram"
-	"github.com/iyear/tdl/app/chat"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
@@ -24,10 +23,11 @@ const batchDisableEnv = "TDL_NO_BATCH"
 // batchFlags holds the batch command line options. They mirror the python
 // script arguments one to one, plus the tdl specific performance overrides.
 type batchFlags struct {
-	config    string
-	checkOnly bool
-	yes       bool
-	mode      string
+	config       string
+	checkOnly    bool
+	validateOnly bool
+	yes          bool
+	mode         string
 
 	incremental    bool
 	stateFile      string
@@ -73,11 +73,31 @@ func (f *batchFlags) options(global *cobra.Command) autodl.Options {
 		StateFile:    f.stateFile,
 		RetrySkipped: f.retrySkipped,
 		Delay:        viper.GetDuration(consts.FlagDelay),
+		Namespace:    viper.GetString(consts.FlagNamespace),
+		NamespaceSet: changed(global, consts.FlagNamespace),
 	}
 
 	if f.overlapSeconds >= 0 {
 		v := f.overlapSeconds
 		opts.OverlapSeconds = &v
+	}
+	if poolSizeSet {
+		opts.Origins.Pool = "global flag"
+		if changed(global, "batch-pool") {
+			opts.Origins.Pool = "batch flag"
+		}
+	}
+	if opts.Threads > 0 {
+		opts.Origins.Threads = "global flag"
+		if f.threads > 0 {
+			opts.Origins.Threads = "batch flag"
+		}
+	}
+	if opts.Limit > 0 {
+		opts.Origins.Limit = "global flag"
+		if f.limit > 0 {
+			opts.Origins.Limit = "batch flag"
+		}
 	}
 
 	return opts
@@ -172,14 +192,24 @@ Partial downloads keep their parts so only missing parts are fetched again.`,
 				}
 			}
 
-			parsed, err := autodl.LoadConfigForRun(cfg, f.incremental)
-			if err != nil {
-				return err
+			opts := f.options(cmd)
+			opts.ConfigPath = cfg
+			prepared, _ := cmd.Context().Value(preparedBatchKey{}).(*autodl.PreparedRun)
+			if prepared == nil {
+				var err error
+				prepared, err = autodl.Prepare(opts)
+				if err != nil {
+					return err
+				}
+			}
+			if f.validateOnly {
+				fmt.Fprintln(cmd.OutOrStdout(), "Batch configuration valid:", prepared)
+				return nil
 			}
 
 			// the namespace of the config is honoured unless the user picked
 			// one explicitly with -n/--ns
-			if ns := strings.TrimSpace(parsed.Namespace); ns != "" && !changed(cmd, consts.FlagNamespace) {
+			if ns := prepared.EffectiveOptions().Namespace; ns != "" && !changed(cmd, consts.FlagNamespace) {
 				viper.Set(consts.FlagNamespace, ns)
 
 				if cmd.Flags().Lookup(consts.FlagNamespace) != nil {
@@ -187,27 +217,19 @@ Partial downloads keep their parts so only missing parts are fetched again.`,
 				}
 			}
 
-			opts := f.options(cmd)
-			opts.ConfigPath = cfg
-			for _, job := range parsed.Jobs {
-				if job.FollowLinks {
-					opts.BotUpdates = &chat.BotUpdates{}
-					break
-				}
-			}
-
 			var updates telegram.UpdateHandler
-			if opts.BotUpdates != nil {
-				updates = opts.BotUpdates
+			if prepared.BotUpdates() != nil {
+				updates = prepared.BotUpdates()
 			}
 			return tRunWithUpdates(cmd.Context(), updates, func(ctx context.Context, c *telegram.Client, kvd storage.Storage) error {
-				return autodl.Run(logctx.Named(ctx, "batch"), c, kvd, opts)
+				return autodl.RunPrepared(logctx.Named(ctx, "batch"), c, kvd, prepared)
 			})
 		},
 	}
 
 	cmd.Flags().StringVarP(&f.config, "config", "c", "", "config file path (default: config.json in the working directory)")
 	cmd.Flags().BoolVar(&f.checkOnly, "check-only", false, "only check and report what would be downloaded")
+	cmd.Flags().BoolVar(&f.validateOnly, "validate-only", false, "validate the configuration and options offline without opening account storage")
 	cmd.Flags().BoolVarP(&f.yes, "yes", "y", false, "answer yes to every confirmation")
 	cmd.Flags().StringVar(&f.mode, "mode", autodl.ModeAuto, fmt.Sprintf("download mode: [%s] (overrides the \"comment\" setting of a job)",
 		strings.Join([]string{autodl.ModeAuto, autodl.ModeComment, autodl.ModeDirect}, ", ")))
@@ -232,4 +254,15 @@ Partial downloads keep their parts so only missing parts are fetched again.`,
 	cmd.AddCommand(NewBatchInit())
 
 	return cmd
+}
+
+type preparedBatchKey struct{}
+
+func offlineBatchValidation(cmd *cobra.Command) bool {
+	flag := cmd.Flags().Lookup("validate-only")
+	if flag == nil {
+		return false
+	}
+	value, _ := cmd.Flags().GetBool("validate-only")
+	return value
 }

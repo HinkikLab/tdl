@@ -18,25 +18,29 @@ import (
 	"github.com/mattn/go-runewidth"
 	"go.uber.org/zap"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/util/tutil"
+	"github.com/iyear/tdl/pkg/console"
+	uimessages "github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/texpr"
 )
 
 //go:generate go-enum --names --values --flag --nocase
 
 type Dialog struct {
-	ID          int64   `json:"id" comment:"ID of dialog"`
-	Type        string  `json:"type" comment:"Type of dialog. Can be 'private', 'channel' or 'group'"`
-	VisibleName string  `json:"visible_name,omitempty" comment:"Title of channel and group, first and last name of user. If empty, output '-'"`
-	Username    string  `json:"username,omitempty" comment:"Username of dialog. If empty, output '-'"`
-	Topics      []Topic `json:"topics,omitempty" comment:"Topics of dialog. If not set, output '-'"`
+	ID          int64   `json:"id" comment:"ID of dialog" comment_id:"fields.id_of_dialog"`
+	Type        string  `json:"type" comment:"Type of dialog. Can be 'private', 'channel' or 'group'" comment_id:"fields.type_of_dialog_can_be_private_channel_or_group"`
+	VisibleName string  `json:"visible_name,omitempty" comment:"Title of channel and group, first and last name of user. If empty, output '-'" comment_id:"fields.title_of_channel_and_group_first_and_last_name_of_user_if_empty_output"`
+	Username    string  `json:"username,omitempty" comment:"Username of dialog. If empty, output '-'" comment_id:"fields.username_of_dialog_if_empty_output"`
+	Topics      []Topic `json:"topics,omitempty" comment:"Topics of dialog. If not set, output '-'" comment_id:"fields.topics_of_dialog_if_not_set_output"`
 }
 
 type Topic struct {
-	ID    int    `json:"id" comment:"ID of topic"`
-	Title string `json:"title" comment:"Title of topic"`
+	ID    int    `json:"id" comment:"ID of topic" comment_id:"fields.id_of_topic"`
+	Title string `json:"title" comment:"Title of topic" comment_id:"fields.title_of_topic"`
 }
 
 // ListOutput
@@ -68,16 +72,16 @@ func List(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Lis
 		fg := texpr.NewFieldsGetter(nil)
 		fields, err := fg.Walk(&Dialog{})
 		if err != nil {
-			return fmt.Errorf("failed to walk fields: %w", err)
+			return diagnostic.Describe(fmt.Errorf("failed to walk fields: %w", err), corei18n.Message{ID: "errors.message.failed_to_walk_fields_value", Args: map[string]any{"Arg1": err}})
 		}
 
-		fmt.Print(fg.Sprint(fields, true))
+		fmt.Print(fg.SprintContext(ctx, fields, true))
 		return nil
 	}
 	// compile filter
 	filter, err := expr.Compile(opts.Filter, expr.AsBool())
 	if err != nil {
-		return fmt.Errorf("failed to compile filter: %w", err)
+		return diagnostic.Describe(fmt.Errorf("failed to compile filter: %w", err), corei18n.Message{ID: "errors.message.failed_to_compile_filter_value", Args: map[string]any{"Arg1": err}})
 	}
 
 	// Manually iterate through dialogs to handle errors gracefully
@@ -128,7 +132,7 @@ func List(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Lis
 		// filter
 		b, err := texpr.Run(filter, r)
 		if err != nil {
-			return fmt.Errorf("failed to run filter: %w", err)
+			return diagnostic.Describe(fmt.Errorf("failed to run filter: %w", err), corei18n.Message{ID: "errors.message.failed_to_run_filter_value", Args: map[string]any{"Arg1": err}})
 		}
 		if !b.(bool) {
 			continue
@@ -139,28 +143,32 @@ func List(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Lis
 
 	switch opts.Output {
 	case ListOutputTable:
-		printTable(result)
+		printTable(ctx, result)
 	case ListOutputJson:
 		bytes, err := json.MarshalIndent(result, "", "\t")
 		if err != nil {
-			return fmt.Errorf("marshal json: %w", err)
+			return diagnostic.Describe(fmt.Errorf("marshal json: %w", err), corei18n.Message{ID: "errors.message.marshal_json_value", Args: map[string]any{"Arg1": err}})
 		}
 
 		fmt.Println(string(bytes))
 	default:
-		return fmt.Errorf("unknown output: %s", opts.Output)
+		return diagnostic.Describe(fmt.Errorf("unknown output: %s", opts.Output), corei18n.Message{ID: "errors.message.unknown_output_value", Args: map[string]any{"Arg1": opts.Output}})
 	}
 
 	return nil
 }
 
-func printTable(result []*Dialog) {
+func printTable(ctx context.Context, result []*Dialog) {
+	header := strings.Fields(console.Translate(ctx, uimessages.ChatListHeader()))
+	if len(header) != 5 {
+		header = []string{"ID", "Type", "VisibleName", "Username", "Topics"}
+	}
 	fmt.Printf("%s %s %s %s %s\n",
-		trunc("ID", 10),
-		trunc("Type", 8),
-		trunc("VisibleName", 20),
-		trunc("Username", 20),
-		"Topics")
+		trunc(header[0], 10),
+		trunc(header[1], 8),
+		trunc(header[2], 20),
+		trunc(header[3], 20),
+		trunc(header[4], 10))
 
 	for _, r := range result {
 		fmt.Printf("%s %s %s %s %s\n",
@@ -283,7 +291,7 @@ func fetchTopics(ctx context.Context, api *tg.Client, peer tg.InputPeerClass) ([
 
 		topics, err := api.MessagesGetForumTopics(ctx, req)
 		if err != nil {
-			return nil, errors.Wrap(err, "get forum topics")
+			return nil, diagnostic.Describe(errors.Wrap(err, "get forum topics"), corei18n.Message{ID: "errors.context.get_forum_topics", Args: map[string]any{"Reason": err}})
 		}
 
 		// If no topics returned, we're done
@@ -557,7 +565,7 @@ func fetchDialogsWithErrorHandling(ctx context.Context, api *tg.Client) ([]dialo
 						// Can't continue pagination without access hash
 						log.Error("failed to get user for offset, stopping pagination",
 							zap.Int64("user_id", peerType.UserID))
-						color.Red("Error: failed to get user for offset, stopping pagination. User ID: %d", peerType.UserID)
+						color.Red("%s", console.Translate(ctx, uimessages.ChatPaginationUser(peerType.UserID)))
 						return allElems, skipped
 					}
 				case *tg.PeerChat:
@@ -572,7 +580,7 @@ func fetchDialogsWithErrorHandling(ctx context.Context, api *tg.Client) ([]dialo
 						// Can't continue pagination without access hash
 						log.Error("failed to get channel for offset, stopping pagination",
 							zap.Int64("channel_id", peerType.ChannelID))
-						color.Red("Error: failed to get channel for offset, stopping pagination. Channel ID: %d", peerType.ChannelID)
+						color.Red("%s", console.Translate(ctx, uimessages.ChatPaginationChannel(peerType.ChannelID)))
 						return allElems, skipped
 					}
 				}

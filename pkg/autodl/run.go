@@ -3,6 +3,7 @@ package autodl
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/fatih/color"
@@ -14,10 +15,14 @@ import (
 
 	"github.com/iyear/tdl/app/chat"
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/tclient"
 	"github.com/iyear/tdl/internal/transfer"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 // Options configures a batch run.
@@ -112,7 +117,7 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 // RunPrepared executes the exact snapshot validated before account setup.
 func RunPrepared(ctx context.Context, c *telegram.Client, kvd storage.Storage, prepared *PreparedRun) error {
 	if prepared == nil {
-		return errors.New("nil prepared batch run")
+		return diagnostic.Describe(errors.New("nil prepared batch run"), corei18n.Message{ID: "errors.message.nil_prepared_batch_run"})
 	}
 	return runPrepared(ctx, c, kvd, prepared.cfg, prepared.opts)
 }
@@ -139,7 +144,7 @@ func runPrepared(ctx context.Context, c *telegram.Client, kvd storage.Storage, c
 	r.manager = peers.Options{Storage: storage.NewPeers(kvd)}.Build(r.pool.Default(ctx))
 	self, err := c.Self(ctx)
 	if err != nil {
-		return errors.Wrap(err, "resolve authorized batch account")
+		return diagnostic.Describe(errors.Wrap(err, "resolve authorized batch account"), corei18n.Message{ID: "errors.context.resolve_authorized_batch_account", Args: map[string]any{"Reason": err}})
 	}
 	r.account = fmt.Sprintf("%s:user:%d", opts.Namespace, self.ID)
 
@@ -151,8 +156,8 @@ func runPrepared(ctx context.Context, c *telegram.Client, kvd storage.Storage, c
 		zap.Int("threads", threads),
 		zap.Int("limit", limit))
 
-	color.Green("Batch download: %d job(s) from %s", len(cfg.Jobs), opts.ConfigPath)
-	color.Cyan("Performance: pool=%d threads=%d limit=%d", poolSize, threads, limit)
+	color.Green("%s", console.Translate(ctx, messages.BatchStarted(len(cfg.Jobs), opts.ConfigPath)))
+	color.Cyan("%s", console.Translate(ctx, messages.BatchPerformance(poolSize, threads, limit)))
 
 	var failed int
 	var failures error
@@ -167,8 +172,8 @@ func runPrepared(ctx context.Context, c *telegram.Client, kvd storage.Storage, c
 
 		announced := false
 		announce := func(target string) {
-			color.Blue("\n[%d/%d] %s", idx+1, len(cfg.Jobs), target)
-			color.Cyan("Source: %s", job.ChatURL)
+			color.Blue("\n%s", console.Translate(jobCtx, messages.BatchJobStarting(idx+1, len(cfg.Jobs), target)))
+			color.Cyan("%s", console.Translate(jobCtx, messages.BatchSource(job.ChatURL)))
 			announced = true
 		}
 		err := r.runJob(jobCtx, job, threads, limit, announce)
@@ -176,21 +181,48 @@ func runPrepared(ctx context.Context, c *telegram.Client, kvd storage.Storage, c
 		if !announced {
 			announce(job.ChatURL)
 		}
-		color.Cyan("%s", formatJobSummary(result))
+		color.Cyan("%s", formatJobSummaryLocalized(jobCtx, result))
 		if err != nil {
 			failed++
-			multierr.AppendInto(&failures, errors.Wrapf(err, "job %d (%s)", idx+1, job.ChatURL))
-			log.Error("Job failed", zap.Int("job", idx+1), zap.Error(err))
-			color.Red("Job %d failed: %s", idx+1, err)
+			multierr.AppendInto(&failures, func() error {
+				messageArg2 := idx + 1
+				return diagnostic.Describe(errors.Wrapf(err, "job %d (%s)", messageArg2, job.ChatURL), corei18n.Message{ID: "errors.context.job_value_value", Args: map[string]any{"Arg1": messageArg2, "Arg2": job.ChatURL, "Reason": err}})
+			}())
+			log.Error("batch.job.failed", zap.String("event_id", "batch.job.failed"), zap.Int("job", idx+1), zap.Error(err))
+			color.Red("%s", console.Translate(jobCtx, messages.BatchJobFailed(idx+1, console.FormatError(err, corei18n.FromContext(jobCtx)))))
 		}
 	}
 
-	color.Green("\nBatch download finished: %d job(s), %d failed", len(cfg.Jobs), failed)
+	color.Green("\n%s", console.Translate(ctx, messages.BatchFinished(len(cfg.Jobs), failed)))
 	if failed > 0 {
-		return errors.Wrapf(failures, "%d job(s) failed", failed)
+		return diagnostic.Wrap("errors.batch.jobs_failed", map[string]any{"Count": failed}, failures)
 	}
 
 	return nil
+}
+
+func formatJobSummaryLocalized(ctx context.Context, result JobResult) string {
+	c := result.Counts
+	var reasons []string
+	for _, entry := range []struct {
+		count int64
+		kind  messages.BatchReasonKind
+	}{
+		{c.MessagesUnavailable, messages.UnavailableMessages},
+		{c.MessagesNoMedia, messages.MessagesWithoutMedia},
+		{c.PostsUnavailable, messages.UnavailablePosts},
+		{c.PostsNoLinks, messages.PostsWithoutLinks},
+	} {
+		if entry.count > 0 {
+			reasons = append(reasons, console.Translate(ctx, messages.BatchReason(entry.kind, entry.count)))
+		}
+	}
+	return console.Translate(ctx, messages.BatchJobSummary(messages.BatchSummary{
+		Job: result.Job, Status: console.Translate(ctx, messages.BatchStatus(result.Status)),
+		Messages: c.Messages, Posts: c.Posts, Files: c.Files,
+		Downloaded: c.FilesDownloaded, Existing: c.FilesExisting, Filtered: c.FilesFiltered,
+		Failed: c.FilesFailed, Bytes: c.Bytes, Reasons: strings.Join(reasons, ", "),
+	}))
 }
 
 func (r *Runner) reserveStates() error {
@@ -202,7 +234,10 @@ func (r *Runner) reserveStates() error {
 			}
 		}
 		if err := r.reservations.ReserveState(r.statePath(job), fmt.Sprintf("job %d state", i+1)); err != nil {
-			return errors.Wrapf(err, "job %d state ownership", i+1)
+			return func() error {
+				messageArg2 := i + 1
+				return diagnostic.Describe(errors.Wrapf(err, "job %d state ownership", messageArg2), corei18n.Message{ID: "errors.context.job_value_state_ownership", Args: map[string]any{"Arg1": messageArg2, "Reason": err}})
+			}()
 		}
 	}
 	return nil

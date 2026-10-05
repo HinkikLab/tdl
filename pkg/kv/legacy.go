@@ -9,6 +9,8 @@ import (
 	"github.com/mitchellh/mapstructure"
 	"go.etcd.io/bbolt"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/pkg/validator"
 )
@@ -32,16 +34,16 @@ func newLegacy(opts map[string]any) (*legacy, error) {
 
 	var o options
 	if err := mapstructure.WeakDecode(opts, &o); err != nil {
-		return nil, errors.Wrap(err, "decode options")
+		return nil, diagnostic.Describe(errors.Wrap(err, "decode options"), corei18n.Message{ID: "errors.context.decode_options", Args: map[string]any{"Reason": err}})
 	}
 
 	if err := validator.Struct(&o); err != nil {
-		return nil, errors.Wrap(err, "validate options")
+		return nil, diagnostic.Describe(errors.Wrap(err, "validate options"), corei18n.Message{ID: "errors.context.validate_options", Args: map[string]any{"Reason": err}})
 	}
 
 	db, err := bbolt.Open(o.Path, os.ModePerm, boltOptions)
 	if err != nil {
-		return nil, errors.Wrap(err, "open db")
+		return nil, diagnostic.Describe(errors.Wrap(err, "open db"), corei18n.Message{ID: "errors.context.open_db", Args: map[string]any{"Reason": err}})
 	}
 
 	return &legacy{bolt: db}, nil
@@ -68,7 +70,7 @@ func (l *legacy) MigrateTo() (Meta, error) {
 			})
 		})
 	}); err != nil {
-		return nil, errors.Wrap(err, "iterate buckets")
+		return nil, diagnostic.Describe(errors.Wrap(err, "iterate buckets"), corei18n.Message{ID: "errors.context.iterate_buckets", Args: map[string]any{"Reason": err}})
 	}
 
 	return meta, nil
@@ -79,11 +81,11 @@ func (l *legacy) MigrateFrom(meta Meta) error {
 		for ns, pairs := range meta {
 			b, err := tx.CreateBucketIfNotExists([]byte(ns))
 			if err != nil {
-				return errors.Wrap(err, "create bucket")
+				return diagnostic.Describe(errors.Wrap(err, "create bucket"), corei18n.Message{ID: "errors.context.create_bucket", Args: map[string]any{"Reason": err}})
 			}
 			for key, value := range pairs {
 				if err = b.Put([]byte(key), value); err != nil {
-					return errors.Wrap(err, "put")
+					return diagnostic.Describe(errors.Wrap(err, "put"), corei18n.Message{ID: "errors.context.put", Args: map[string]any{"Reason": err}})
 				}
 			}
 		}
@@ -99,7 +101,7 @@ func (l *legacy) Namespaces() ([]string, error) {
 			return nil
 		})
 	}); err != nil {
-		return nil, errors.Wrap(err, "iterate namespaces")
+		return nil, diagnostic.Describe(errors.Wrap(err, "iterate namespaces"), corei18n.Message{ID: "errors.context.iterate_namespaces", Args: map[string]any{"Reason": err}})
 	}
 	return namespaces, nil
 }
@@ -110,13 +112,13 @@ func (l *legacy) Open(ns string) (storage.Storage, error) {
 
 func (l *legacy) open(ns string) (*legacyKV, error) {
 	if ns == "" {
-		return nil, errors.New("namespace is required")
+		return nil, diagnostic.Describe(errors.New("namespace is required"), corei18n.Message{ID: "errors.message.namespace_is_required"})
 	}
 	if err := l.bolt.Update(func(tx *bbolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte(ns))
 		return err
 	}); err != nil {
-		return nil, errors.Wrap(err, "create bucket")
+		return nil, diagnostic.Describe(errors.Wrap(err, "create bucket"), corei18n.Message{ID: "errors.context.create_bucket", Args: map[string]any{"Reason": err}})
 	}
 
 	return &legacyKV{db: l.bolt, ns: []byte(ns)}, nil

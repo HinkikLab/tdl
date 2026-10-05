@@ -10,14 +10,18 @@ import (
 	"github.com/go-faster/errors"
 	"github.com/jedib0t/go-pretty/v6/table"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
+	"github.com/iyear/tdl/pkg/console"
 	"github.com/iyear/tdl/pkg/extensions"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 var (
-	colorPrint = func(attrs ...color.Attribute) func(padding int, format string, a ...interface{}) {
-		return func(padding int, format string, a ...interface{}) {
+	colorPrint = func(attrs ...color.Attribute) func(ctx context.Context, padding int, message corei18n.Message) {
+		return func(ctx context.Context, padding int, message corei18n.Message) {
 			color.New(attrs...).Print(strings.Repeat("  ", padding) + "• ")
-			fmt.Printf(format+"\n", a...)
+			fmt.Println(console.Translate(ctx, message))
 		}
 	}
 	info = colorPrint(color.FgBlue, color.Bold)
@@ -28,7 +32,7 @@ var (
 func List(ctx context.Context, em *extensions.Manager) error {
 	exts, err := em.List(ctx, false)
 	if err != nil {
-		return errors.New("list extensions failed")
+		return diagnostic.Describe(errors.New("list extensions failed"), corei18n.Message{ID: "errors.message.list_extensions_failed"})
 	}
 
 	tb := table.NewWriter()
@@ -36,7 +40,12 @@ func List(ctx context.Context, em *extensions.Manager) error {
 	style := table.StyleColoredDark
 	tb.SetStyle(style)
 
-	tb.AppendHeader(table.Row{"NAME", "AUTHOR", "VERSION"})
+	headers := strings.Split(console.Translate(ctx, messages.ExtensionTableHeaders()), "\t")
+	header := make(table.Row, len(headers))
+	for index, value := range headers {
+		header[index] = value
+	}
+	tb.AppendHeader(header)
 	for _, e := range exts {
 		tb.AppendRow(table.Row{normalizeExtName(e.Name()), e.Owner(), e.CurrentVersion()})
 	}
@@ -48,17 +57,17 @@ func List(ctx context.Context, em *extensions.Manager) error {
 
 func Install(ctx context.Context, em *extensions.Manager, targets []string, force bool) error {
 	for _, target := range targets {
-		info(0, "installing extension %s...", normalizeExtName(target))
+		info(ctx, 0, messages.ExtensionInstalling(normalizeExtName(target)))
 
 		if err := em.Install(ctx, target, force); err != nil {
-			fail(1, "install extension %s failed: %s", normalizeExtName(target), err)
+			fail(ctx, 1, messages.ExtensionInstallFailed(normalizeExtName(target), console.FormatError(err, corei18n.FromContext(ctx))))
 			continue
 		}
 
 		if em.DryRun() {
-			succ(1, "extension %s will be installed", normalizeExtName(target))
+			succ(ctx, 1, messages.ExtensionWillInstall(normalizeExtName(target)))
 		} else {
-			succ(1, "extension %s installed", normalizeExtName(target))
+			succ(ctx, 1, messages.ExtensionInstalled(normalizeExtName(target)))
 		}
 	}
 
@@ -70,10 +79,10 @@ func Upgrade(ctx context.Context, em *extensions.Manager, targets []string) erro
 
 	exts, err := em.List(ctx, upgradeAll)
 	if err != nil {
-		return errors.Wrap(err, "list extensions with metadata")
+		return diagnostic.Describe(errors.Wrap(err, "list extensions with metadata"), corei18n.Message{ID: "errors.context.list_extensions_with_metadata", Args: map[string]any{"Reason": err}})
 	}
 	if len(exts) == 0 {
-		return errors.New("no extensions installed")
+		return diagnostic.Describe(errors.New("no extensions installed"), corei18n.Message{ID: "errors.message.no_extensions_installed"})
 	}
 
 	extMap := make(map[string]extensions.Extension)
@@ -87,29 +96,29 @@ func Upgrade(ctx context.Context, em *extensions.Manager, targets []string) erro
 	for _, target := range targets {
 		e, ok := extMap[strings.TrimPrefix(target, extensions.Prefix)]
 		if !ok {
-			fail(0, "extension %s not found", normalizeExtName(target))
+			fail(ctx, 0, messages.ExtensionNotFound(normalizeExtName(target)))
 			continue
 		}
 
-		info(0, "upgrading %s...", normalizeExtName(e.Name()))
+		info(ctx, 0, messages.ExtensionUpgrading(normalizeExtName(e.Name())))
 
 		if err = em.Upgrade(ctx, e); err != nil {
 			switch {
 			case errors.Is(err, extensions.ErrAlreadyUpToDate):
-				succ(1, "extension %s already up-to-date", normalizeExtName(e.Name()))
+				succ(ctx, 1, messages.ExtensionUpToDate(normalizeExtName(e.Name())))
 			case errors.Is(err, extensions.ErrOnlyGitHub):
-				fail(1, "extension %s can't be automatically upgraded by tdl", normalizeExtName(e.Name()))
+				fail(ctx, 1, messages.ExtensionCannotUpgrade(normalizeExtName(e.Name())))
 			default:
-				fail(1, "upgrade extension %s failed: %s", normalizeExtName(e.Name()), err)
+				fail(ctx, 1, messages.ExtensionUpgradeFailed(normalizeExtName(e.Name()), console.FormatError(err, corei18n.FromContext(ctx))))
 			}
 
 			continue
 		}
 
 		if em.DryRun() {
-			succ(1, "extension %s will be upgraded", normalizeExtName(e.Name()))
+			succ(ctx, 1, messages.ExtensionWillUpgrade(normalizeExtName(e.Name())))
 		} else {
-			succ(1, "extension %s upgraded", normalizeExtName(e.Name()))
+			succ(ctx, 1, messages.ExtensionUpgraded(normalizeExtName(e.Name())))
 		}
 	}
 
@@ -119,7 +128,7 @@ func Upgrade(ctx context.Context, em *extensions.Manager, targets []string) erro
 func Remove(ctx context.Context, em *extensions.Manager, targets []string) error {
 	exts, err := em.List(ctx, false)
 	if err != nil {
-		return errors.Wrap(err, "list extensions")
+		return diagnostic.Describe(errors.Wrap(err, "list extensions"), corei18n.Message{ID: "errors.context.list_extensions", Args: map[string]any{"Reason": err}})
 	}
 
 	extMap := make(map[string]extensions.Extension)
@@ -130,19 +139,19 @@ func Remove(ctx context.Context, em *extensions.Manager, targets []string) error
 	for _, target := range targets {
 		e, ok := extMap[strings.TrimPrefix(target, extensions.Prefix)]
 		if !ok {
-			fail(0, "extension %s not found", normalizeExtName(target))
+			fail(ctx, 0, messages.ExtensionNotFound(normalizeExtName(target)))
 			continue
 		}
 
 		if err = em.Remove(e); err != nil {
-			fail(0, "remove extension %s failed: %s", normalizeExtName(e.Name()), err)
+			fail(ctx, 0, messages.ExtensionRemoveFailed(normalizeExtName(e.Name()), console.FormatError(err, corei18n.FromContext(ctx))))
 			continue
 		}
 
 		if em.DryRun() {
-			succ(0, "extension %s will be removed", normalizeExtName(e.Name()))
+			succ(ctx, 0, messages.ExtensionWillRemove(normalizeExtName(e.Name())))
 		} else {
-			succ(0, "extension %s removed", normalizeExtName(e.Name()))
+			succ(ctx, 0, messages.ExtensionRemoved(normalizeExtName(e.Name())))
 		}
 	}
 

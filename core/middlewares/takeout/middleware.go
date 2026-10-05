@@ -7,6 +7,9 @@ import (
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/tg"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 type takeout struct {
@@ -18,7 +21,7 @@ type nopDecoder struct {
 }
 
 func (n nopDecoder) Decode(_ *bin.Buffer) error {
-	return errors.New("bin.Decoder is not implemented")
+	return diagnostic.Describe(errors.New("bin.Decoder is not implemented"), corei18n.Message{ID: "errors.message.bin_decoder_is_not_implemented"})
 }
 
 func (t takeout) Handle(next tg.Invoker) telegram.InvokeFunc {

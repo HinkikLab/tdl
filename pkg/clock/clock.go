@@ -6,6 +6,9 @@ import (
 
 	"github.com/beevik/ntp"
 	"github.com/gotd/td/clock"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 const defaultHost = "pool.ntp.org"
@@ -35,7 +38,7 @@ func New(ntpHost ...string) (clock.Clock, error) {
 	case 1:
 		host = ntpHost[0]
 	default:
-		return nil, fmt.Errorf("too many ntp hosts")
+		return nil, diagnostic.Describe(fmt.Errorf("too many ntp hosts"), corei18n.Message{ID: "errors.message.too_many_ntp_hosts"})
 	}
 
 	resp, err := ntp.Query(host)

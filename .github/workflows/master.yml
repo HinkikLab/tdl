@@ -56,6 +56,9 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - name: Check translation coverage
+        if: ${{ matrix.directory == '.' }}
+        run: go run ./tools/i18ncheck
       - name: Build
         run: go build ./...
       - name: Unit Test

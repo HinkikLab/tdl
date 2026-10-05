@@ -1,6 +1,7 @@
 package up
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -10,18 +11,28 @@ import (
 	pw "github.com/jedib0t/go-pretty/v6/progress"
 	"go.uber.org/multierr"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/uploader"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/prog"
 	"github.com/iyear/tdl/pkg/utils"
 )
 
 type progress struct {
+	ctx      context.Context
 	pw       pw.Writer
 	trackers *sync.Map // map[*iterElem]*pw.Tracker
 }
 
 func newProgress(p pw.Writer) *progress {
+	return newProgressContext(context.Background(), p)
+}
+
+func newProgressContext(ctx context.Context, p pw.Writer) *progress {
 	return &progress{
+		ctx:      ctx,
 		pw:       p,
 		trackers: &sync.Map{},
 	}
@@ -54,18 +65,18 @@ func (p *progress) OnDone(elem uploader.Elem, err error) {
 	e := elem.(*iterElem)
 
 	if err := p.closeFile(e); err != nil {
-		p.fail(t, elem, errors.Wrap(err, "close file"))
+		p.fail(t, elem, diagnostic.Describe(errors.Wrap(err, "close file"), corei18n.Message{ID: "errors.context.close_file", Args: map[string]any{"Reason": err}}))
 		return
 	}
 
 	if err != nil {
-		p.fail(t, elem, errors.Wrap(err, "progress"))
+		p.fail(t, elem, diagnostic.Describe(errors.Wrap(err, "progress"), corei18n.Message{ID: "errors.context.progress", Args: map[string]any{"Reason": err}}))
 		return
 	}
 
 	if e.remove {
 		if err := os.Remove(e.file.File.Name()); err != nil {
-			p.fail(t, elem, errors.Wrap(err, "remove file"))
+			p.fail(t, elem, diagnostic.Describe(errors.Wrap(err, "remove file"), corei18n.Message{ID: "errors.context.remove_file", Args: map[string]any{"Reason": err}}))
 			return
 		}
 	}
@@ -75,12 +86,12 @@ func (p *progress) OnDone(elem uploader.Elem, err error) {
 func (p *progress) closeFile(e *iterElem) error {
 	var result error
 	if err := e.file.Close(); err != nil {
-		result = multierr.Append(result, errors.Wrap(err, "close file"))
+		result = multierr.Append(result, diagnostic.Describe(errors.Wrap(err, "close file"), corei18n.Message{ID: "errors.context.close_file", Args: map[string]any{"Reason": err}}))
 	}
 
 	if e.thumb != nil {
 		if err := e.thumb.Close(); err != nil {
-			result = multierr.Append(result, errors.Wrap(err, "close thumb"))
+			result = multierr.Append(result, diagnostic.Describe(errors.Wrap(err, "close thumb"), corei18n.Message{ID: "errors.context.close_thumb", Args: map[string]any{"Reason": err}}))
 		}
 	}
 
@@ -88,7 +99,8 @@ func (p *progress) closeFile(e *iterElem) error {
 }
 
 func (p *progress) fail(t *pw.Tracker, elem uploader.Elem, err error) {
-	p.pw.Log(color.RedString("%s error: %s", p.elemString(elem), err.Error()))
+	reason := console.FormatError(err, corei18n.FromContext(p.ctx))
+	p.pw.Log(color.RedString("%s", console.Translate(p.ctx, messages.TransferItemError(p.elemString(elem), reason))))
 	t.MarkAsErrored()
 }
 

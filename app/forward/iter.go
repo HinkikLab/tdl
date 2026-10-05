@@ -2,6 +2,7 @@ package forward
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
@@ -14,7 +15,9 @@ import (
 	"github.com/mitchellh/mapstructure"
 
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
 	"github.com/iyear/tdl/core/forwarder"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/util/tutil"
 	"github.com/iyear/tdl/pkg/texpr"
 	"github.com/iyear/tdl/pkg/tmessage"
@@ -43,9 +46,9 @@ type iter struct {
 
 type env struct {
 	From struct {
-		ID          int64  `comment:"ID of dialog"`
-		Username    string `comment:"Username of dialog"`
-		VisibleName string `comment:"Title of channel and group, first and last name of user"`
+		ID          int64  `comment:"ID of dialog" comment_id:"fields.id_of_dialog"`
+		Username    string `comment:"Username of dialog" comment_id:"fields.username_of_dialog"`
+		VisibleName string `comment:"Title of channel and group, first and last name of user" comment_id:"fields.title_of_channel_and_group_first_and_last_name_of_user"`
 	}
 	Message texpr.EnvMessage
 }
@@ -124,20 +127,20 @@ func (i *iter) Next(ctx context.Context) bool {
 
 	from, err := i.opts.manager.FromInputPeer(ctx, p)
 	if err != nil {
-		i.err = errors.Wrap(err, "get from peer")
+		i.err = diagnostic.Describe(errors.Wrap(err, "get from peer"), corei18n.Message{ID: "errors.context.get_from_peer", Args: map[string]any{"Reason": err}})
 		return false
 	}
 
 	msg, err := tutil.GetSingleMessage(ctx, i.opts.pool.Default(ctx), from.InputPeer(), m)
 	if err != nil {
-		i.err = errors.Wrapf(err, "get message: %d", m)
+		i.err = diagnostic.Describe(errors.Wrapf(err, "get message: %d", m), corei18n.Message{ID: "errors.context.get_message_value", Args: map[string]any{"Arg1": m, "Reason": err}})
 		return false
 	}
 
 	// message routing
 	result, err := texpr.Run(i.opts.to, exprEnv(from, msg))
 	if err != nil {
-		i.err = errors.Wrap(err, "message routing")
+		i.err = diagnostic.Describe(errors.Wrap(err, "message routing"), corei18n.Message{ID: "errors.context.message_routing", Args: map[string]any{"Reason": err}})
 		return false
 	}
 
@@ -156,14 +159,14 @@ func (i *iter) Next(ctx context.Context) bool {
 		var d dest
 
 		if err = mapstructure.WeakDecode(r, &d); err != nil {
-			i.err = errors.Wrapf(err, "decode dest: %v", result)
+			i.err = diagnostic.Describe(errors.Wrapf(err, "decode dest: %v", result), corei18n.Message{ID: "errors.context.decode_dest_value", Args: map[string]any{"Arg1": result, "Reason": err}})
 			return false
 		}
 
 		to, err = i.resolvePeer(ctx, d.Peer)
 		thread = d.Thread
 	default:
-		i.err = errors.Errorf("message router must return string or dest: %T", result)
+		i.err = diagnostic.Describe(errors.Errorf("message router must return string or dest: %T", result), corei18n.Message{ID: "errors.message.message_router_must_return_string_or_dest_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", result)}})
 		return false
 	}
 
@@ -172,13 +175,13 @@ func (i *iter) Next(ctx context.Context) bool {
 	if i.opts.edit != nil {
 		result, err = texpr.Run(i.opts.edit, exprEnv(from, msg))
 		if err != nil {
-			i.err = errors.Wrap(err, "edit message")
+			i.err = diagnostic.Describe(errors.Wrap(err, "edit message"), corei18n.Message{ID: "errors.context.edit_message", Args: map[string]any{"Reason": err}})
 			return false
 		}
 
 		r, ok := result.(string)
 		if !ok {
-			i.err = errors.Errorf("edit must return string: %T", result)
+			i.err = diagnostic.Describe(errors.Errorf("edit must return string: %T", result), corei18n.Message{ID: "errors.message.edit_must_return_string_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", result)}})
 			return false
 		}
 
@@ -187,7 +190,7 @@ func (i *iter) Next(ctx context.Context) bool {
 			UserResolver:          nil,
 			DisableTelegramEscape: false,
 		}); err != nil {
-			i.err = errors.Wrap(err, "parse edited message")
+			i.err = diagnostic.Describe(errors.Wrap(err, "parse edited message"), corei18n.Message{ID: "errors.context.parse_edited_message", Args: map[string]any{"Reason": err}})
 			return false
 		}
 
@@ -198,7 +201,7 @@ func (i *iter) Next(ctx context.Context) bool {
 	}
 
 	if err != nil {
-		i.err = errors.Wrapf(err, "resolve dest: %v", result)
+		i.err = diagnostic.Describe(errors.Wrapf(err, "resolve dest: %v", result), corei18n.Message{ID: "errors.context.resolve_dest_value", Args: map[string]any{"Arg1": result, "Reason": err}})
 		return false
 	}
 

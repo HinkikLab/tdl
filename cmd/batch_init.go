@@ -1,9 +1,14 @@
 package cmd
 
 import (
+	"strings"
+
 	"github.com/spf13/cobra"
 
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/pkg/autodl"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 const batchInitAnnotation = "tdl:batch-config-init"
@@ -23,31 +28,47 @@ IDs and tags before running batch. Explanations are YAML comments; the comment
 field selects comment mode. Legacy JSON configs are still accepted. No Telegram
 connection or login is required.
 
-Comment language is detected from LC_ALL, LC_MESSAGES, LANGUAGE or LANG, then
-the Windows UI language, with English as the fallback. Use --lang zh or --lang en
-to select a language explicitly. Every option includes an inline explanation.
+Comment language follows the global --language setting. Use --lang zh or --lang en
+to override the language used for comments in the generated file. Every option
+includes an inline explanation.
 
 Existing configurations are preserved unless --force is specified.`,
 		Example:     "  tdl batch init\n  tdl batch init --lang zh\n  tdl batch init --lang en -c examples/config.yaml\n  tdl batch init -c config.yaml --force",
 		Args:        cobra.NoArgs,
 		Annotations: map[string]string{batchInitAnnotation: "true"},
 		RunE: func(cmd *cobra.Command, args []string) error {
-			selected, err := autodl.ResolveExampleLanguage(language)
-			if err != nil {
-				return err
+			selected := ""
+			if !strings.EqualFold(strings.TrimSpace(language), "auto") && strings.TrimSpace(language) != "" {
+				var err error
+				selected, err = autodl.ResolveExampleLanguage(language)
+				if err != nil {
+					return err
+				}
+			} else if translator := corei18n.FromContext(cmd.Context()); translator != nil {
+				selected = string(translator.Language())
+			} else {
+				var err error
+				selected, err = autodl.ResolveExampleLanguage("auto")
+				if err != nil {
+					return err
+				}
 			}
 			if err := autodl.WriteExampleConfigLanguage(path, force, selected); err != nil {
 				return err
 			}
+			translator := corei18n.FromContext(cmd.Context())
+			languageName := "English"
 			if selected == "zh" {
-				cmd.Printf("已生成 %s（11 个示例任务，中文注释）。\n", path)
-				cmd.Println("保留需要的任务，替换示例链接、消息 ID 和标签，并选择账号命名空间。")
-				cmd.Printf("然后运行：tdl batch -c %q --check-only\n", path)
-			} else {
-				cmd.Printf("Generated %s (11 example jobs, English comments).\n", path)
-				cmd.Println("Keep the jobs you need, replace example URLs/IDs/tags and select your namespace.")
-				cmd.Printf("Then run: tdl batch -c %q --check-only\n", path)
+				languageName = "Chinese"
 			}
+			if translator := corei18n.FromContext(cmd.Context()); translator != nil && translator.Language() == corei18n.Chinese {
+				languageName = "英文"
+				if selected == "zh" {
+					languageName = "中文"
+				}
+			}
+			console.Info(cmd.OutOrStdout(), translator, messages.BatchInitGenerated(path, 11, languageName))
+			console.Info(cmd.OutOrStdout(), translator, messages.BatchInitNext(path))
 			return nil
 		},
 	}

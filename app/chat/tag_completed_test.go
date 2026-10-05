@@ -92,7 +92,7 @@ func TestTagLegacyFileWithoutVerifiedIdentityIsPreserved(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "7_notes.bin")
 	require.NoError(t, os.WriteFile(path, []byte("legacy data"), 0o644))
-	require.NoError(t, preserveArchiveFile(path, &transfer.Reservations{}))
+	require.NoError(t, preserveArchiveFile(context.Background(), path, &transfer.Reservations{}))
 	require.NoFileExists(t, path)
 	got, err := os.ReadFile(path + ".unverified")
 	require.NoError(t, err)

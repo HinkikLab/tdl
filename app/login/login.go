@@ -4,6 +4,9 @@ import (
 	"context"
 
 	"github.com/go-faster/errors"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 //go:generate go-enum --values --names --flag --nocase
@@ -27,6 +30,6 @@ func Run(ctx context.Context, opts Options) error {
 	case TypeQr:
 		return QR(ctx)
 	default:
-		return errors.Errorf("unsupported login type: %s", opts.Type)
+		return diagnostic.Describe(errors.Errorf("unsupported login type: %s", opts.Type), corei18n.Message{ID: "errors.message.unsupported_login_type_value", Args: map[string]any{"Arg1": opts.Type}})
 	}
 }

@@ -12,7 +12,9 @@ import (
 	"go.uber.org/atomic"
 	"go.uber.org/multierr"
 
+	"github.com/iyear/tdl/core/diagnostic"
 	tdownloader "github.com/iyear/tdl/core/downloader"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/tmedia"
 	tuploader "github.com/iyear/tdl/core/uploader"
 	"github.com/iyear/tdl/core/util/tutil"
@@ -39,7 +41,7 @@ func (f *Forwarder) cloneMedia(ctx context.Context, opts cloneOptions, dryRun bo
 
 	temp, err := os.CreateTemp("", "tdl_*")
 	if err != nil {
-		return nil, errors.Wrap(err, "create temp file")
+		return nil, diagnostic.Describe(errors.Wrap(err, "create temp file"), corei18n.Message{ID: "errors.context.create_temp_file", Args: map[string]any{"Reason": err}})
 	}
 	defer func() {
 		multierr.AppendInto(&rerr, temp.Close())
@@ -57,13 +59,13 @@ func (f *Forwarder) cloneMedia(ctx context.Context, opts cloneOptions, dryRun bo
 			opts: opts,
 		})
 	if err != nil {
-		return nil, errors.Wrap(err, "download")
+		return nil, diagnostic.Describe(errors.Wrap(err, "download"), corei18n.Message{ID: "errors.context.download", Args: map[string]any{"Reason": err}})
 	}
 
 	var file tg.InputFileClass
 
 	if _, err = temp.Seek(0, io.SeekStart); err != nil {
-		return nil, errors.Wrap(err, "seek")
+		return nil, diagnostic.Describe(errors.Wrap(err, "seek"), corei18n.Message{ID: "errors.context.seek", Args: map[string]any{"Reason": err}})
 	}
 
 	upload := uploader.NewUpload(opts.media.Name, temp, opts.media.Size)
@@ -76,7 +78,7 @@ func (f *Forwarder) cloneMedia(ctx context.Context, opts cloneOptions, dryRun bo
 		}).
 		Upload(ctx, upload)
 	if err != nil {
-		return nil, errors.Wrap(err, "upload")
+		return nil, diagnostic.Describe(errors.Wrap(err, "upload"), corei18n.Message{ID: "errors.context.upload", Args: map[string]any{"Reason": err}})
 	}
 
 	return file, nil

@@ -1,0 +1,26 @@
+{
+  "errors.transfer.output_path_value_is_already_reserved_by_value_new_item_value": {
+    "other": "输出路径 {{.Arg1}} 已被 {{.Arg2}} 占用（新项目：{{.Arg3}}）"
+  },
+  "errors.transfer.download_file_was_not_opened": {
+    "other": "下载文件尚未打开"
+  },
+  "errors.transfer.stat_partial_file_value": {
+    "other": "读取分片文件信息：{{.Arg1}}"
+  },
+  "errors.transfer.downloaded_file_size_mismatch_got_value_bytes_expected_value": {
+    "other": "下载文件大小不匹配：已获取 {{.Arg1}} 字节，预期 {{.Arg2}} 字节"
+  },
+  "errors.transfer.commit_downloaded_file_value": {
+    "other": "提交下载文件：{{.Arg1}}"
+  },
+  "errors.transfer.remove_part_journal_value": {
+    "other": "移除分片日志：{{.Arg1}}"
+  },
+  "errors.transfer.state_path_value_conflicts_with_value_new_owner_value": {
+    "other": "状态路径 {{.Arg1}} 与 {{.Arg2}} 冲突（新归属：{{.Arg3}}）"
+  },
+  "errors.transfer.cannot_preserve_non_regular_payload_value": {
+    "other": "无法保留非普通文件 {{.Arg1}}"
+  }
+}

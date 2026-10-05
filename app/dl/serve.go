@@ -6,6 +6,7 @@ import (
 	_ "embed"
 	"fmt"
 	"html/template"
+	"net"
 	"net/http"
 	"strconv"
 	"sync"
@@ -22,11 +23,15 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/tutil"
+	"github.com/iyear/tdl/pkg/console"
 	"github.com/iyear/tdl/pkg/consts"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/tmessage"
 )
 
@@ -65,7 +70,7 @@ func serve(ctx context.Context,
 		messageStr := vars["message"]
 		message, err := strconv.Atoi(messageStr)
 		if err != nil {
-			return errors.Wrap(err, "invalid message id")
+			return diagnostic.Describe(errors.Wrap(err, "invalid message id"), corei18n.Message{ID: "errors.context.invalid_message_id", Args: map[string]any{"Reason": err}})
 		}
 		key := mediaKey{peer: peer, message: message}
 
@@ -75,17 +80,17 @@ func serve(ctx context.Context,
 		} else {
 			p, err := tutil.GetInputPeer(requestCtx, manager, peer)
 			if err != nil {
-				return errors.Wrap(err, "resolve peer")
+				return diagnostic.Describe(errors.Wrap(err, "resolve peer"), corei18n.Message{ID: "errors.context.resolve_peer", Args: map[string]any{"Reason": err}})
 			}
 
 			msg, err := tutil.GetSingleMessage(requestCtx, pool.Default(requestCtx), p.InputPeer(), message)
 			if err != nil {
-				return errors.Wrap(err, "resolve message")
+				return diagnostic.Describe(errors.Wrap(err, "resolve message"), corei18n.Message{ID: "errors.context.resolve_message", Args: map[string]any{"Reason": err}})
 			}
 
 			item, err = convItem(msg)
 			if err != nil {
-				return errors.Wrap(err, "convItem")
+				return diagnostic.Describe(errors.Wrap(err, "convItem"), corei18n.Message{ID: "errors.context.convitem", Args: map[string]any{"Reason": err}})
 			}
 
 			cache.Store(key, item)
@@ -122,9 +127,9 @@ func serve(ctx context.Context,
 	}
 
 	list := bytes.NewBuffer(nil)
-	err := template.Must(template.New("serve.go.tmpl").Parse(tmpl)).Execute(list, items)
+	err := template.Must(template.New("serve.go.tmpl").Parse(tmpl)).Execute(list, map[string]any{"Items": items, "Title": console.Translate(ctx, corei18n.Message{ID: "serve.title", Default: "tdl serve(beta)"}), "FilesLabel": console.Translate(ctx, corei18n.Message{ID: "serve.files", Default: "Files"}), "Hint": console.Translate(ctx, corei18n.Message{ID: "serve.hint", Default: "You can use sniffer to download all files"})})
 	if err != nil {
-		return errors.Wrap(err, "execute template")
+		return diagnostic.Describe(errors.Wrap(err, "execute template"), corei18n.Message{ID: "errors.context.execute_template", Args: map[string]any{"Reason": err}})
 	}
 
 	router.Handle("/", handler(func(w http.ResponseWriter, r *http.Request) error {
@@ -135,6 +140,7 @@ func serve(ctx context.Context,
 	s := http.Server{
 		Addr:              fmt.Sprintf(":%d", port),
 		Handler:           router,
+		BaseContext:       func(net.Listener) context.Context { return ctx },
 		ReadHeaderTimeout: 10 * time.Second,
 		IdleTimeout:       time.Minute,
 	}
@@ -151,7 +157,7 @@ func serve(ctx context.Context,
 		}
 	}()
 
-	color.Green("(Beta) Serving on http://localhost:%d", port)
+	color.Green("%s", console.Translate(ctx, messages.ChatServe(port)))
 
 	err = s.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) && ctx.Err() != nil {
@@ -163,7 +169,7 @@ func serve(ctx context.Context,
 func handler(h func(w http.ResponseWriter, r *http.Request) error) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if err := h(w, r); err != nil {
-			http.Error(w, err.Error(), http.StatusBadRequest)
+			http.Error(w, console.FormatError(err, corei18n.FromContext(r.Context())), http.StatusBadRequest)
 		}
 	})
 }
@@ -171,7 +177,7 @@ func handler(h func(w http.ResponseWriter, r *http.Request) error) http.Handler 
 func convItem(msg *tg.Message) (*media, error) {
 	md, ok := tmedia.GetMedia(msg)
 	if !ok {
-		return nil, errors.New("message is not a media")
+		return nil, diagnostic.Describe(errors.New("message is not a media"), corei18n.Message{ID: "errors.message.message_is_not_a_media"})
 	}
 
 	mime := ""
@@ -179,7 +185,7 @@ func convItem(msg *tg.Message) (*media, error) {
 	case *tg.MessageMediaDocument:
 		doc, ok := m.Document.AsNotEmpty()
 		if !ok {
-			return nil, errors.New("document is empty")
+			return nil, diagnostic.Describe(errors.New("document is empty"), corei18n.Message{ID: "errors.message.document_is_empty"})
 		}
 		mime = doc.MimeType
 	case *tg.MessageMediaPhoto:

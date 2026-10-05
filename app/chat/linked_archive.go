@@ -20,10 +20,14 @@ import (
 	"go.uber.org/multierr"
 
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/tutil"
 	"github.com/iyear/tdl/internal/transfer"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 type LinkedOptions struct {
@@ -92,14 +96,14 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 		return err
 	}
 	if opts.Pool == nil {
-		return fmt.Errorf("linked archive requires a download pool")
+		return diagnostic.Describe(fmt.Errorf("linked archive requires a download pool"), corei18n.Message{ID: "errors.message.linked_archive_requires_a_download_pool"})
 	}
 	source, err := parseResourceLink(opts.Chat)
 	if err != nil {
 		return err
 	}
 	if source.Kind == "bot" || source.Comment != 0 {
-		return fmt.Errorf("source must be a main chat or post")
+		return diagnostic.Describe(fmt.Errorf("source must be a main chat or post"), corei18n.Message{ID: "errors.message.source_must_be_a_main_chat_or_post"})
 	}
 	if opts.Window == (ArchiveWindow{}) {
 		opts.Window = ArchiveWindow{StartID: opts.StartID, EndID: opts.EndID}
@@ -108,7 +112,7 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 		return err
 	}
 	if opts.MaxPosts < 0 {
-		return fmt.Errorf("max_posts must not be negative")
+		return diagnostic.Describe(fmt.Errorf("max_posts must not be negative"), corei18n.Message{ID: "errors.message.max_key_posts_must_not_be_negative"})
 	}
 	manager := opts.Manager
 	if manager == nil {
@@ -122,7 +126,7 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 	if err != nil {
 		return err
 	}
-	announceTarget(TargetName(peer, 0, "", source.ID == 0), opts.OnResolved)
+	announceTarget(ctx, TargetNameContext(ctx, peer, 0, "", source.ID == 0), opts.OnResolved)
 	backend := &telegramLinkBackend{api: api, manager: manager, opts: opts.Links, updates: opts.BotUpdates}
 	defer func() { rerr = multierr.Append(rerr, cleanupLinked(ctx, backend)) }()
 	if opts.Unavailable == nil {
@@ -141,7 +145,7 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 		mode = "any"
 	}
 	if mode != "any" && mode != "all" {
-		return fmt.Errorf("tag_match must be any or all")
+		return diagnostic.Describe(fmt.Errorf("tag_match must be any or all"), corei18n.Message{ID: "errors.message.tag_key_match_must_be_any_or_all"})
 	}
 	root := filepath.Join(opts.Dir, strconv.FormatInt(peer.ID(), 10))
 	selected, skipped := 0, 0
@@ -169,7 +173,7 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 			for _, m := range album {
 				comments, err := backend.Comments(ctx, archiveInputPeer(peer), m, opts.Links.CommentLimit)
 				if err != nil {
-					return fmt.Errorf("post %d comments: %w", post.MessageID, err)
+					return diagnostic.Describe(fmt.Errorf("post %d comments: %w", post.MessageID, err), corei18n.Message{ID: "errors.message.post_value_comments_value", Args: map[string]any{"Arg1": post.MessageID, "Arg2": err}})
 				}
 				for _, comment := range comments {
 					links = append(links, messageResourceLinks(comment.Message)...)
@@ -185,7 +189,7 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 		// The resolver skips cached dead targets per branch. A post may also
 		// contain healthy links whose files still need to be archived.
 		selected++
-		fmt.Printf("Post %d: %d resource link(s) -> %s\n", post.MessageID, len(links), post.Directory)
+		fmt.Println(console.Translate(ctx, messages.LinkedPost(post.MessageID, len(links), post.Directory)))
 		if opts.CheckOnly {
 			return nil
 		}
@@ -194,7 +198,7 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 			selected--
 			skipped++
 			opts.counts.PostsUnavailable++
-			fmt.Printf("Post %d skipped: %s\n", post.MessageID, err)
+			fmt.Println(console.Translate(ctx, messages.LinkedPostSkipped(post.MessageID, console.FormatError(err, corei18n.FromContext(ctx)))))
 			err = nil
 		}
 		return multierr.Append(err, cleanupLinked(ctx, backend))
@@ -206,7 +210,7 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 				selected++
 			} // failed candidates also obey max_posts
 			failures = multierr.Append(failures, err)
-			fmt.Printf("Linked post failed: %s\n", err)
+			fmt.Println(console.Translate(ctx, messages.LinkedPostFailed(console.FormatError(err, corei18n.FromContext(ctx)))))
 		}
 		return opts.MaxPosts == 0 || selected < opts.MaxPosts, ctx.Err()
 	}
@@ -229,9 +233,9 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 		failures = multierr.Append(failures, err)
 	}
 	if !complete && err == nil && opts.Window.Until > 0 && !opts.CheckOnly {
-		failures = multierr.Append(failures, fmt.Errorf("max_posts truncated the incremental archive window; keeping last_ts"))
+		failures = multierr.Append(failures, diagnostic.Describe(fmt.Errorf("max_posts truncated the incremental archive window; keeping last_ts"), corei18n.Message{ID: "errors.message.max_key_posts_truncated_the_incremental_archive_window_keeping_last_key_ts"}))
 	}
-	fmt.Printf("Linked archive: %d selected post(s), %d skipped (no links or unavailable targets).\n", selected, skipped)
+	fmt.Println(console.Translate(ctx, messages.LinkedArchiveSummary(selected, skipped)))
 	return failures
 }
 
@@ -241,7 +245,7 @@ func cleanupLinked(ctx context.Context, backend *telegramLinkBackend) error {
 	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 30*time.Second)
 	defer cancel()
 	if err := backend.Cleanup(cleanupCtx); err != nil {
-		return fmt.Errorf("clean up bot messages: %w", err)
+		return diagnostic.Describe(fmt.Errorf("clean up bot messages: %w", err), corei18n.Message{ID: "errors.message.clean_up_bot_messages_value", Args: map[string]any{"Arg1": err}})
 	}
 	return nil
 }
@@ -406,7 +410,7 @@ func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*
 		if err := writeArchiveMetadata(dir, saved, opts.WriteMetadata); err != nil {
 			return err
 		}
-		fmt.Printf("Post %d: archive already complete\n", post.MessageID)
+		fmt.Println(console.Translate(ctx, messages.LinkedArchiveComplete(post.MessageID)))
 		return nil
 	}
 	files, hops, err := resolver.Resolve(ctx, roots)
@@ -416,7 +420,7 @@ func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return err
 	}
-	if err := migrateTagDirectory(root, dir, post); err != nil {
+	if err := migrateTagDirectoryContext(ctx, root, dir, post); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -486,7 +490,7 @@ func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*
 		elems = append(elems, &linkedElem{resource: resource, path: path, session: session, takeout: opts.Takeout})
 	}
 	if len(meta.Resources) == 0 {
-		return fmt.Errorf("all resource files excluded by extension filters")
+		return diagnostic.Describe(fmt.Errorf("all resource files excluded by extension filters"), corei18n.Message{ID: "errors.message.all_resource_files_excluded_by_extension_filters"})
 	}
 	if err := writeArchiveMetadata(dir, meta, opts.WriteMetadata); err != nil {
 		return err

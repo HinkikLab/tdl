@@ -13,6 +13,8 @@ import (
 	"golang.org/x/time/rate"
 
 	"github.com/iyear/tdl/app/chat"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 )
@@ -99,7 +101,7 @@ func NewChatExport() *cobra.Command {
 				}
 
 				if len(opts.Input) != 2 {
-					return fmt.Errorf("input data should be 2 integers when export type is %s", opts.Type)
+					return diagnostic.Describe(fmt.Errorf("input data should be 2 integers when export type is %s", opts.Type), corei18n.Message{ID: "errors.message.input_data_should_be_2_integers_when_export_type_is_value", Args: map[string]any{"Arg1": opts.Type}})
 				}
 
 				// sort helper
@@ -108,10 +110,10 @@ func NewChatExport() *cobra.Command {
 				}
 			case chat.ExportTypeLast:
 				if len(opts.Input) != 1 {
-					return fmt.Errorf("input data should be 1 integer when export type is %s", opts.Type)
+					return diagnostic.Describe(fmt.Errorf("input data should be 1 integer when export type is %s", opts.Type), corei18n.Message{ID: "errors.message.input_data_should_be_1_integer_when_export_type_is_value", Args: map[string]any{"Arg1": opts.Type}})
 				}
 			default:
-				return fmt.Errorf("unknown export type: %s", opts.Type)
+				return diagnostic.Describe(fmt.Errorf("unknown export type: %s", opts.Type), corei18n.Message{ID: "errors.message.unknown_export_type_value", Args: map[string]any{"Arg1": opts.Type}})
 			}
 
 			return tRun(cmd.Context(), func(ctx context.Context, c *telegram.Client, kvd storage.Storage) error {

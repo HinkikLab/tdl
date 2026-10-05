@@ -7,12 +7,17 @@ import (
 
 	"github.com/fatih/color"
 	"github.com/go-faster/errors"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 // confirm asks the user a yes/no question.
 func (r *Runner) confirm(ctx context.Context, question string, def bool) bool {
 	if r.opts.Yes {
-		color.Yellow("%s [auto: yes]", question)
+		color.Yellow("%s", console.Translate(ctx, messages.BatchAutoConfirm(question)))
 		return true
 	}
 
@@ -121,6 +126,13 @@ func (j *Job) ResolveMode(mode string) (string, error) {
 	case ModeComment, ModeDirect:
 		return strings.ToLower(mode), nil
 	default:
-		return "", errors.Errorf("invalid mode %q", mode)
+		return "", diagnostic.Describe(errors.Errorf("invalid mode %q", mode), corei18n.Message{ID: "errors.message.invalid_mode_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", mode)}})
 	}
+}
+
+func formatIDsContext(ctx context.Context, ids []int) string {
+	if len(ids) == 0 {
+		return console.Translate(ctx, corei18n.Message{ID: "batch.empty", Default: "empty"})
+	}
+	return formatIDs(ids)
 }

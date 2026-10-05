@@ -1,0 +1,26 @@
+{
+  "errors.transfer.output_path_value_is_already_reserved_by_value_new_item_value": {
+    "other": "output path {{.Arg1}} is already reserved by {{.Arg2}} (new item: {{.Arg3}})"
+  },
+  "errors.transfer.download_file_was_not_opened": {
+    "other": "download file was not opened"
+  },
+  "errors.transfer.stat_partial_file_value": {
+    "other": "stat partial file: {{.Arg1}}"
+  },
+  "errors.transfer.downloaded_file_size_mismatch_got_value_bytes_expected_value": {
+    "other": "downloaded file size mismatch: got {{.Arg1}} bytes, expected {{.Arg2}}"
+  },
+  "errors.transfer.commit_downloaded_file_value": {
+    "other": "commit downloaded file: {{.Arg1}}"
+  },
+  "errors.transfer.remove_part_journal_value": {
+    "other": "remove part journal: {{.Arg1}}"
+  },
+  "errors.transfer.state_path_value_conflicts_with_value_new_owner_value": {
+    "other": "state path {{.Arg1}} conflicts with {{.Arg2}} (new owner: {{.Arg3}})"
+  },
+  "errors.transfer.cannot_preserve_non_regular_payload_value": {
+    "other": "cannot preserve non-regular payload {{.Arg1}}"
+  }
+}

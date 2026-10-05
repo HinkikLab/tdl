@@ -1,0 +1,338 @@
+{
+  "errors.message.message_id_must_be_positive": {
+    "other": "message ID must be positive"
+  },
+  "errors.context.download": {
+    "other": "download: {{.Reason}}"
+  },
+  "errors.message.download_limit_must_be_positive": {
+    "other": "download limit must be positive"
+  },
+  "errors.message.download_pool_is_required": {
+    "other": "download pool is required"
+  },
+  "errors.message.download_iterator_is_required": {
+    "other": "download iterator is required"
+  },
+  "errors.message.download_progress_is_required": {
+    "other": "download progress is required"
+  },
+  "errors.context.iter": {
+    "other": "iter: {{.Reason}}"
+  },
+  "errors.message.incomplete_download_got_value_bytes_expected_value": {
+    "other": "incomplete download: got {{.Arg1}} bytes, expected {{.Arg2}}"
+  },
+  "errors.message.file_is_required": {
+    "other": "file is required"
+  },
+  "errors.message.unsupported_resumable_file_location_value": {
+    "other": "unsupported resumable file location {{.Arg1}}"
+  },
+  "errors.message.invalid_resumable_file_identity_value": {
+    "other": "invalid resumable file identity: {{.Arg1}}"
+  },
+  "errors.message.partial_path_value_is_not_a_regular_file": {
+    "other": "partial path {{.Arg1}} is not a regular file"
+  },
+  "errors.message.invalid_partial_download_size_or_identity_count": {
+    "other": "invalid partial download size or identity count"
+  },
+  "errors.message.invalid_partial_file_identity": {
+    "other": "invalid partial file identity"
+  },
+  "errors.message.preserve_partial_value_restore_data_value": {
+    "other": "preserve partial: {{.Arg1}}; restore data: {{.Arg2}}"
+  },
+  "errors.message.preserve_partial_value_value": {
+    "other": "preserve partial {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.message.reissued_attachment_changed_during_download": {
+    "other": "reissued attachment changed during download"
+  },
+  "errors.context.refresh_file_reference": {
+    "other": "refresh file reference: {{.Reason}}"
+  },
+  "errors.message.source_message_returned_the_same_file_reference": {
+    "other": "source message returned the same file reference"
+  },
+  "errors.context.get_source_message": {
+    "other": "get source message: {{.Reason}}"
+  },
+  "errors.message.unexpected_source_messages_type_value": {
+    "other": "unexpected source messages type {{.Arg1}}"
+  },
+  "errors.message.source_message_value_belongs_to_a_different_peer_than_value": {
+    "other": "source message {{.Arg1}} belongs to a different peer than {{.Arg2}}"
+  },
+  "errors.message.source_message_value_no_longer_has_media": {
+    "other": "source message {{.Arg1}} no longer has media"
+  },
+  "errors.message.source_message_value_media_changed_during_download": {
+    "other": "source message {{.Arg1}} media changed during download"
+  },
+  "errors.message.source_message_value_is_unavailable_or_deleted": {
+    "other": "source message {{.Arg1}} is unavailable or deleted"
+  },
+  "errors.context.get_next_chunk": {
+    "other": "get next chunk: {{.Reason}}"
+  },
+  "errors.message.unexpected_type_value": {
+    "other": "unexpected type {{.Arg1}}"
+  },
+  "errors.context.part_value_got_value_bytes": {
+    "other": "part {{.Arg1}}: got {{.Arg2}} bytes: {{.Reason}}"
+  },
+  "errors.context.write_output": {
+    "other": "write output: {{.Reason}}"
+  },
+  "errors.context.create_temp_file": {
+    "other": "create temp file: {{.Reason}}"
+  },
+  "errors.context.seek": {
+    "other": "seek: {{.Reason}}"
+  },
+  "errors.context.upload": {
+    "other": "upload: {{.Reason}}"
+  },
+  "errors.message.forward_pool_is_required": {
+    "other": "forward pool is required"
+  },
+  "errors.message.forward_iterator_is_required": {
+    "other": "forward iterator is required"
+  },
+  "errors.message.forward_progress_is_required": {
+    "other": "forward progress is required"
+  },
+  "errors.context.resolve_grouped_messages": {
+    "other": "resolve grouped messages: {{.Reason}}"
+  },
+  "errors.context.media_total_size": {
+    "other": "media total size: {{.Reason}}"
+  },
+  "errors.message.empty_message_content_skip_send_value": {
+    "other": "empty message content, skip send: {{.Arg1}}"
+  },
+  "errors.context.send_message": {
+    "other": "send message: {{.Reason}}"
+  },
+  "errors.message.message_value_is_not_a_media_message": {
+    "other": "message {{.Arg1}} is not a media message"
+  },
+  "errors.message.can_t_convert_message_value_to_input_class_directly": {
+    "other": "can't convert message {{.Arg1}} to input class directly"
+  },
+  "errors.message.unsupported_media_value": {
+    "other": "unsupported media {{.Arg1}}"
+  },
+  "errors.context.clone_media": {
+    "other": "clone media: {{.Reason}}"
+  },
+  "errors.message.empty_document_value": {
+    "other": "empty document {{.Arg1}}"
+  },
+  "errors.context.clone_thumb": {
+    "other": "clone thumb: {{.Reason}}"
+  },
+  "errors.context.upload_media": {
+    "other": "upload media: {{.Reason}}"
+  },
+  "errors.message.can_t_convert_uploaded_media_to_input_class": {
+    "other": "can't convert uploaded media to input class"
+  },
+  "errors.context.directly_forward": {
+    "other": "directly forward: {{.Reason}}"
+  },
+  "errors.context.send_multi_media": {
+    "other": "send multi media: {{.Reason}}"
+  },
+  "errors.context.send_single_media": {
+    "other": "send single media: {{.Reason}}"
+  },
+  "errors.message.unsupported_mode_value": {
+    "other": "unsupported mode {{.Arg1}}"
+  },
+  "errors.message.can_t_get_media_from_message_value": {
+    "other": "can't get media from message {{.Arg1}}"
+  },
+  "errors.context.recover": {
+    "other": "recover: {{.Reason}}"
+  },
+  "errors.context.retry_middleware_skip": {
+    "other": "retry middleware skip: {{.Reason}}"
+  },
+  "errors.message.retry_limit_reached_after_value_attempts": {
+    "other": "retry limit reached after {{.Arg1}} attempts"
+  },
+  "errors.message.bin_decoder_is_not_implemented": {
+    "other": "bin.Decoder is not implemented"
+  },
+  "errors.message.key_not_found": {
+    "other": "key not found"
+  },
+  "errors.context.create_network_clock": {
+    "other": "create network clock: {{.Reason}}"
+  },
+  "errors.context.get_dialer": {
+    "other": "get dialer: {{.Reason}}"
+  },
+  "errors.message.not_authorized_please_login_first": {
+    "other": "not authorized. please login first"
+  },
+  "errors.message.upload_limit_must_be_positive": {
+    "other": "upload limit must be positive"
+  },
+  "errors.message.upload_client_is_required": {
+    "other": "upload client is required"
+  },
+  "errors.message.upload_iterator_is_required": {
+    "other": "upload iterator is required"
+  },
+  "errors.message.upload_progress_is_required": {
+    "other": "upload progress is required"
+  },
+  "errors.context.upload_file": {
+    "other": "upload file: {{.Reason}}"
+  },
+  "errors.context.seek_file": {
+    "other": "seek file: {{.Reason}}"
+  },
+  "errors.context.detect_mime": {
+    "other": "detect mime: {{.Reason}}"
+  },
+  "errors.message.generated_path_is_empty": {
+    "other": "generated path is empty"
+  },
+  "errors.message.generated_path_escapes_the_output_directory_value": {
+    "other": "generated path escapes the output directory: {{.Arg1}}"
+  },
+  "errors.message.no_h264_track_found": {
+    "other": "no h264 track found"
+  },
+  "errors.context.parse_proxy_url": {
+    "other": "parse proxy url: {{.Reason}}"
+  },
+  "errors.context.proxy_from_url": {
+    "other": "proxy from url: {{.Reason}}"
+  },
+  "errors.message.proxy_dialer_is_not_contextdialer": {
+    "other": "proxy dialer is not ContextDialer"
+  },
+  "errors.message.empty_telegram_reference": {
+    "other": "empty Telegram reference"
+  },
+  "errors.message.invalid_chat_name_or_id_value": {
+    "other": "invalid chat name or ID {{.Arg1}}"
+  },
+  "errors.message.invalid_telegram_url_value": {
+    "other": "invalid Telegram URL: {{.Arg1}}"
+  },
+  "errors.message.invalid_telegram_host_or_fragment": {
+    "other": "invalid Telegram host or fragment"
+  },
+  "errors.message.invalid_telegram_url_query_value": {
+    "other": "invalid Telegram URL query: {{.Arg1}}"
+  },
+  "errors.message.telegram_url_must_contain_only_one_value_value": {
+    "other": "Telegram URL must contain only one {{.Arg1}} value"
+  },
+  "errors.message.unsupported_telegram_action": {
+    "other": "unsupported Telegram action"
+  },
+  "errors.message.unsupported_link_host_value_expected_t_me": {
+    "other": "unsupported link host {{.Arg1}} (expected t.me)"
+  },
+  "errors.message.invalid_telegram_chat_message_link": {
+    "other": "invalid Telegram chat/message link"
+  },
+  "errors.message.telegram_link_must_use_http_s": {
+    "other": "Telegram link must use http(s)"
+  },
+  "errors.message.private_chat_id_must_be_a_positive_integer": {
+    "other": "private chat ID must be a positive integer"
+  },
+  "errors.message.thread_id_conflicts_with_the_topic_id_in_chat_key_url": {
+    "other": "thread ID conflicts with the topic ID in chat_url"
+  },
+  "errors.message.comment_link_requires_a_post_id": {
+    "other": "comment link requires a post ID"
+  },
+  "errors.message.invalid_bot_link": {
+    "other": "invalid bot link"
+  },
+  "errors.message.value_must_be_a_positive_integer": {
+    "other": "{{.Arg1}} must be a positive integer"
+  },
+  "errors.message.message_may_be_deleted": {
+    "other": "message may be deleted"
+  },
+  "errors.message.message_link_must_identify_a_post_value": {
+    "other": "message link must identify a post: {{.Arg1}}"
+  },
+  "errors.context.input_peer": {
+    "other": "input peer: {{.Reason}}"
+  },
+  "errors.message.not_channel": {
+    "other": "not channel"
+  },
+  "errors.context.full_raw": {
+    "other": "full raw: {{.Reason}}"
+  },
+  "errors.message.no_linked_chat": {
+    "other": "no linked chat"
+  },
+  "errors.context.input_discussion_peer": {
+    "other": "input discussion peer: {{.Reason}}"
+  },
+  "errors.message.failed_to_get_result_from_value_value": {
+    "other": "failed to get result from {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.context.get_single_message": {
+    "other": "get single message: {{.Reason}}"
+  },
+  "errors.message.invalid_message_value": {
+    "other": "invalid message {{.Arg1}}"
+  },
+  "errors.message.the_message_value_value_value": {
+    "other": "the message {{.Arg1}}/{{.Arg2}}: {{.Arg3}}"
+  },
+  "errors.message.unsupported_message_source_peer_value": {
+    "other": "unsupported message source peer {{.Arg1}}"
+  },
+  "errors.context.get_messages": {
+    "other": "get messages: {{.Reason}}"
+  },
+  "errors.message.unexpected_messages_type_value": {
+    "other": "unexpected messages type {{.Arg1}}"
+  },
+  "errors.message.message_value_belongs_to_a_different_peer_than_value_value": {
+    "other": "message {{.Arg1}} belongs to a different peer than {{.Arg2}}/{{.Arg3}}"
+  },
+  "errors.message.not_grouped_message": {
+    "other": "not grouped message"
+  },
+  "errors.context.get_grouped_messages": {
+    "other": "get grouped messages: {{.Reason}}"
+  },
+  "errors.message.please_launch_extension_with_tdl_extension_key_name": {
+    "other": "please launch extension with `tdl EXTENSION_NAME`"
+  },
+  "errors.context.read_env_file": {
+    "other": "read env file: {{.Reason}}"
+  },
+  "errors.context.unmarshal_extension_environment": {
+    "other": "unmarshal extension environment: {{.Reason}}"
+  },
+  "errors.context.resolve_extension_language": {
+    "other": "resolve extension language: {{.Reason}}"
+  },
+  "errors.context.load_extension_translations": {
+    "other": "load extension translations: {{.Reason}}"
+  },
+  "errors.context.build_client": {
+    "other": "build client: {{.Reason}}"
+  },
+  "errors.context.store_session": {
+    "other": "store session: {{.Reason}}"
+  }
+}

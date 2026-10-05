@@ -1,0 +1,140 @@
+{
+  "chat.target.unnamed": {
+    "other": "Chat"
+  },
+  "chat.target.topic": {
+    "other": "{{.Label}} / topic {{.ID}}"
+  },
+  "chat.target.all_topics": {
+    "other": "{{.Label}} / all topics"
+  },
+  "batch.summary": {
+    "other": "{{.Jobs}} jobs; namespace={{.Namespace}} pool={{.Pool}} threads={{.Threads}} limit={{.Limit}}"
+  },
+  "batch.never": {
+    "other": "never"
+  },
+  "batch.empty": {
+    "other": "empty"
+  },
+  "version.version": {
+    "other": "Version"
+  },
+  "version.commit": {
+    "other": "Commit"
+  },
+  "version.date": {
+    "other": "Date"
+  },
+  "serve.title": {
+    "other": "tdl serve(beta)"
+  },
+  "serve.files": {
+    "other": "Files"
+  },
+  "serve.hint": {
+    "other": "You can use sniffer to download all files"
+  },
+  "bot.timeout.no_actionable": {
+    "other": "no actionable resource received"
+  },
+  "bot.timeout.unsettled": {
+    "other": "resource replies did not settle"
+  },
+  "bot.timeout.no_content": {
+    "other": "\"no reply content\""
+  },
+  "fields.id_of_dialog": {
+    "other": "ID of dialog"
+  },
+  "fields.type_of_dialog_can_be_private_channel_or_group": {
+    "other": "Type of dialog. Can be 'private', 'channel' or 'group'"
+  },
+  "fields.title_of_channel_and_group_first_and_last_name_of_user_if_empty_output": {
+    "other": "Title of channel and group, first and last name of user. If empty, output '-'"
+  },
+  "fields.username_of_dialog_if_empty_output": {
+    "other": "Username of dialog. If empty, output '-'"
+  },
+  "fields.topics_of_dialog_if_not_set_output": {
+    "other": "Topics of dialog. If not set, output '-'"
+  },
+  "fields.id_of_topic": {
+    "other": "ID of topic"
+  },
+  "fields.title_of_topic": {
+    "other": "Title of topic"
+  },
+  "fields.username_of_dialog": {
+    "other": "Username of dialog"
+  },
+  "fields.title_of_channel_and_group_first_and_last_name_of_user": {
+    "other": "Title of channel and group, first and last name of user"
+  },
+  "fields.file_path": {
+    "other": "File path"
+  },
+  "fields.file_name": {
+    "other": "File name"
+  },
+  "fields.file_extension": {
+    "other": "File extension"
+  },
+  "fields.thumbnail_path": {
+    "other": "Thumbnail path"
+  },
+  "fields.file_mime_type": {
+    "other": "File mime type"
+  },
+  "fields.whether_we_were_mentioned_in_this_message": {
+    "other": "Whether we were mentioned in this message"
+  },
+  "fields.whether_this_is_a_silent_message_no_notification_triggered": {
+    "other": "Whether this is a silent message (no notification triggered)"
+  },
+  "fields.whether_this_is_a_scheduled_message": {
+    "other": "Whether this is a scheduled message"
+  },
+  "fields.whether_this_message_is_pinned": {
+    "other": "Whether this message is pinned"
+  },
+  "fields.id_of_the_message": {
+    "other": "ID of the message"
+  },
+  "fields.id_of_the_sender_of_the_message": {
+    "other": "ID of the sender of the message"
+  },
+  "fields.date_of_the_message": {
+    "other": "Date of the message"
+  },
+  "fields.the_message": {
+    "other": "The message"
+  },
+  "fields.media_attachment": {
+    "other": "Media attachment"
+  },
+  "fields.view_count": {
+    "other": "View count"
+  },
+  "fields.forward_count": {
+    "other": "Forward count"
+  },
+  "fields.file_size_unit_byte": {
+    "other": "File size. Unit: Byte"
+  },
+  "fields.dc_id": {
+    "other": "DC ID"
+  },
+  "progress.cpu": {
+    "other": "CPU: {{.Value}}%"
+  },
+  "progress.memory": {
+    "other": "Memory: {{.Value}}"
+  },
+  "progress.goroutines": {
+    "other": "Goroutines: {{.Count}}"
+  },
+  "progress.eta": {
+    "other": "~ETA"
+  }
+}

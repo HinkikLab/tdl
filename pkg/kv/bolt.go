@@ -10,6 +10,8 @@ import (
 	"go.etcd.io/bbolt"
 	"go.uber.org/multierr"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/pkg/validator"
 )
@@ -31,15 +33,15 @@ func newBolt(opts map[string]any) (*bolt, error) {
 
 	var o options
 	if err := mapstructure.WeakDecode(opts, &o); err != nil {
-		return nil, errors.Wrap(err, "decode options")
+		return nil, diagnostic.Describe(errors.Wrap(err, "decode options"), corei18n.Message{ID: "errors.context.decode_options", Args: map[string]any{"Reason": err}})
 	}
 
 	if err := validator.Struct(&o); err != nil {
-		return nil, errors.Wrap(err, "validate options")
+		return nil, diagnostic.Describe(errors.Wrap(err, "validate options"), corei18n.Message{ID: "errors.context.validate_options", Args: map[string]any{"Reason": err}})
 	}
 
 	if err := os.MkdirAll(o.Path, 0o755); err != nil {
-		return nil, errors.Wrap(err, "create dir")
+		return nil, diagnostic.Describe(errors.Wrap(err, "create dir"), corei18n.Message{ID: "errors.context.create_dir", Args: map[string]any{"Reason": err}})
 	}
 
 	return &bolt{
@@ -62,7 +64,7 @@ func (b *bolt) MigrateTo() (Meta, error) {
 
 		db, err := b.open(ns)
 		if err != nil {
-			return errors.Wrap(err, "open")
+			return diagnostic.Describe(errors.Wrap(err, "open"), corei18n.Message{ID: "errors.context.open", Args: map[string]any{"Reason": err}})
 		}
 
 		return db.db.View(func(tx *bbolt.Tx) error {
@@ -72,7 +74,7 @@ func (b *bolt) MigrateTo() (Meta, error) {
 			})
 		})
 	}); err != nil {
-		return nil, errors.Wrap(err, "walk")
+		return nil, diagnostic.Describe(errors.Wrap(err, "walk"), corei18n.Message{ID: "errors.context.walk", Args: map[string]any{"Reason": err}})
 	}
 
 	return meta, nil
@@ -82,22 +84,22 @@ func (b *bolt) MigrateFrom(meta Meta) error {
 	for ns, pairs := range meta {
 		db, err := b.open(ns)
 		if err != nil {
-			return errors.Wrap(err, "open")
+			return diagnostic.Describe(errors.Wrap(err, "open"), corei18n.Message{ID: "errors.context.open", Args: map[string]any{"Reason": err}})
 		}
 
 		if err = db.db.Update(func(tx *bbolt.Tx) error {
 			bk, err := tx.CreateBucketIfNotExists(db.ns)
 			if err != nil {
-				return errors.Wrap(err, "create bucket")
+				return diagnostic.Describe(errors.Wrap(err, "create bucket"), corei18n.Message{ID: "errors.context.create_bucket", Args: map[string]any{"Reason": err}})
 			}
 			for key, value := range pairs {
 				if err = bk.Put([]byte(key), value); err != nil {
-					return errors.Wrap(err, "put")
+					return diagnostic.Describe(errors.Wrap(err, "put"), corei18n.Message{ID: "errors.context.put", Args: map[string]any{"Reason": err}})
 				}
 			}
 			return nil
 		}); err != nil {
-			return errors.Wrap(err, "update")
+			return diagnostic.Describe(errors.Wrap(err, "update"), corei18n.Message{ID: "errors.context.update", Args: map[string]any{"Reason": err}})
 		}
 	}
 
@@ -110,7 +112,7 @@ func (b *bolt) Namespaces() ([]string, error) {
 		namespaces = append(namespaces, filepath.Base(path))
 		return nil
 	}); err != nil {
-		return nil, errors.Wrap(err, "walk")
+		return nil, diagnostic.Describe(errors.Wrap(err, "walk"), corei18n.Message{ID: "errors.context.walk", Args: map[string]any{"Reason": err}})
 	}
 
 	return namespaces, nil
@@ -119,7 +121,7 @@ func (b *bolt) Namespaces() ([]string, error) {
 func (b *bolt) walk(fn func(path string) error) error {
 	return filepath.Walk(b.path, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
-			return errors.Wrap(err, "walk")
+			return diagnostic.Describe(errors.Wrap(err, "walk"), corei18n.Message{ID: "errors.context.walk", Args: map[string]any{"Reason": err}})
 		}
 		if info.IsDir() {
 			return nil
@@ -135,7 +137,7 @@ func (b *bolt) Open(ns string) (storage.Storage, error) {
 
 func (b *bolt) open(ns string) (*legacyKV, error) {
 	if ns == "" {
-		return nil, errors.New("namespace is required")
+		return nil, diagnostic.Describe(errors.New("namespace is required"), corei18n.Message{ID: "errors.message.namespace_is_required"})
 	}
 	b.mu.Lock()
 	defer b.mu.Unlock()
@@ -146,13 +148,13 @@ func (b *bolt) open(ns string) (*legacyKV, error) {
 
 	db, err := bbolt.Open(filepath.Join(b.path, ns), os.ModePerm, boltOptions)
 	if err != nil {
-		return nil, errors.Wrap(err, "open db")
+		return nil, diagnostic.Describe(errors.Wrap(err, "open db"), corei18n.Message{ID: "errors.context.open_db", Args: map[string]any{"Reason": err}})
 	}
 	if err = db.Update(func(tx *bbolt.Tx) error {
 		_, err := tx.CreateBucketIfNotExists([]byte(ns))
 		return err
 	}); err != nil {
-		return nil, errors.Wrap(err, "create bucket")
+		return nil, diagnostic.Describe(errors.Wrap(err, "create bucket"), corei18n.Message{ID: "errors.context.create_bucket", Args: map[string]any{"Reason": err}})
 	}
 
 	b.dbs[ns] = db

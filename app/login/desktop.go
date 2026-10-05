@@ -7,18 +7,22 @@ import (
 	"path/filepath"
 	"strconv"
 
-	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
 	"github.com/go-faster/errors"
 	"github.com/gotd/td/session"
 	tdtdesktop "github.com/gotd/td/session/tdesktop"
 	"github.com/spf13/viper"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/util/fsutil"
+	"github.com/iyear/tdl/pkg/console"
+	localizedprompt "github.com/iyear/tdl/pkg/console/prompt"
 	"github.com/iyear/tdl/pkg/consts"
 	"github.com/iyear/tdl/pkg/key"
 	"github.com/iyear/tdl/pkg/kv"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/tclient"
 	"github.com/iyear/tdl/pkg/tdesktop"
 	"github.com/iyear/tdl/pkg/tpath"
@@ -31,7 +35,7 @@ func Desktop(ctx context.Context, opts Options) error {
 
 	kvd, err := kv.From(ctx).Open(ns)
 	if err != nil {
-		return errors.Wrap(err, "open kv")
+		return diagnostic.Describe(errors.Wrap(err, "open kv"), corei18n.Message{ID: "errors.context.open_kv", Args: map[string]any{"Reason": err}})
 	}
 
 	desktop, err := findDesktop(opts.Desktop)
@@ -39,7 +43,7 @@ func Desktop(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	color.Blue("Importing session from desktop client: %s", desktop)
+	color.Blue("%s", console.Translate(ctx, messages.LoginImportDesktop(desktop)))
 
 	accounts, err := tdtdesktop.Read(appendTData(desktop), []byte(opts.Passcode))
 	if err != nil {
@@ -55,12 +59,12 @@ func Desktop(ctx context.Context, opts Options) error {
 	}
 
 	fmt.Println()
-	sel, acc := &survey.Select{
-		Message: "Choose a user id:",
+	sel, acc := &localizedprompt.Select{
+		Message: console.Translate(ctx, messages.LoginChooseUserID()),
 		Options: infos,
-		Help:    "You can get user id from @userinfobot",
+		Help:    console.Translate(ctx, messages.LoginUserIDHelp()),
 	}, ""
-	if err = survey.AskOne(sel, &acc); err != nil {
+	if err = localizedprompt.AskOne(ctx, sel, &acc); err != nil {
 		return err
 	}
 
@@ -78,16 +82,15 @@ func Desktop(ctx context.Context, opts Options) error {
 		return err
 	}
 
-	color.Green("Import %s successfully to '%s' namespace!", acc, ns)
+	color.Green("%s", console.Translate(ctx, messages.LoginImported(acc, ns)))
 
 	// logout
-	confirm, logout := &survey.Confirm{
-		Message: "Do you want to logout existing desktop session?",
+	confirm, logout := &localizedprompt.Confirm{
+		Message: console.Translate(ctx, messages.LoginLogoutPrompt()),
 		Default: false,
-		Help: "Logout existing desktop session to separate from imported session, which can prevent session conflict." +
-			"\n NB: Ensure that you can re-login to desktop client",
+		Help:    console.Translate(ctx, messages.LoginLogoutHelp()),
 	}, false
-	if err = survey.AskOne(confirm, &logout); err != nil {
+	if err = localizedprompt.AskOne(ctx, confirm, &logout); err != nil {
 		return err
 	}
 
@@ -95,8 +98,7 @@ func Desktop(ctx context.Context, opts Options) error {
 		if err = forceLogout(infoMap[acc].IDx, desktop); err != nil {
 			return err
 		}
-		color.Green("Logout desktop session of %d successfully! Please re-launch Telegram Desktop client",
-			infoMap[acc].Authorization.UserID)
+		color.Green("%s", console.Translate(ctx, messages.LoginLoggedOut(infoMap[acc].Authorization.UserID)))
 	}
 
 	return nil
@@ -105,7 +107,7 @@ func Desktop(ctx context.Context, opts Options) error {
 func findDesktop(desktop string) (string, error) {
 	if desktop == "" { // auto detect
 		if desktop = detectAppData(); desktop == "" {
-			return "", fmt.Errorf("no data found in possible paths, please specify path to Telegram Desktop directory with `-d` flag")
+			return "", diagnostic.Describe(fmt.Errorf("no data found in possible paths, please specify path to Telegram Desktop directory with `-d` flag"), corei18n.Message{ID: "errors.login.desktop_data_missing"})
 		}
 		return desktop, nil
 	}

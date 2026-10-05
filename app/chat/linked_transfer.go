@@ -14,9 +14,13 @@ import (
 	"go.uber.org/multierr"
 
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
 	"github.com/iyear/tdl/core/downloader"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/internal/transfer"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/prog"
 	"github.com/iyear/tdl/pkg/utils"
 )
@@ -64,22 +68,22 @@ func (s *linkedSession) refresh(ctx context.Context, old linkedResource) (*tmedi
 		}
 	}
 	if s.requests >= *s.resolver.opts.ReRequestLimit {
-		return nil, fmt.Errorf("resource rerequest_limit exhausted")
+		return nil, diagnostic.Describe(fmt.Errorf("resource rerequest_limit exhausted"), corei18n.Message{ID: "errors.message.resource_rerequest_key_limit_exhausted"})
 	}
 	s.requests++
-	fmt.Printf("Source message expired; requesting resource links again (%d/%d)\n", s.requests, *s.resolver.opts.ReRequestLimit)
+	fmt.Println(console.Translate(ctx, messages.LinkedRerequest(s.requests, *s.resolver.opts.ReRequestLimit)))
 	files, hops, err := s.resolver.Resolve(ctx, s.roots)
 	if err != nil {
 		return nil, err
 	}
 	if len(s.files) > 0 && !sameLinkedResources(s.files, files) {
-		return nil, fmt.Errorf("resource set changed after reissuing the chain; rerun to archive the new set")
+		return nil, diagnostic.Describe(fmt.Errorf("resource set changed after reissuing the chain; rerun to archive the new set"), corei18n.Message{ID: "errors.message.resource_set_changed_after_reissuing_the_chain_rerun_to_archive_the_new_set"})
 	}
 	s.files, s.hops = files, hops
 	if fresh := find(); fresh != nil {
 		return fresh, nil
 	}
-	return nil, fmt.Errorf("reissued resources do not contain the same file with a fresh reference: %s", key)
+	return nil, diagnostic.Describe(fmt.Errorf("reissued resources do not contain the same file with a fresh reference: %s", key), corei18n.Message{ID: "errors.archive.refreshed_file_missing", Args: map[string]any{"Arg1": key}})
 }
 
 func sameLinkedResources(a, b []linkedResource) bool {
@@ -129,7 +133,7 @@ func (e *linkedElem) RefreshFile(ctx context.Context, current tg.InputFileLocati
 		}
 		media, ok := tmedia.GetMedia(message)
 		if !ok {
-			return nil, fmt.Errorf("source message no longer contains media")
+			return nil, diagnostic.Describe(fmt.Errorf("source message no longer contains media"), corei18n.Message{ID: "errors.message.source_message_no_longer_contains_media"})
 		}
 		return linkedMediaFile{media}, nil
 	}
@@ -179,7 +183,7 @@ func (it *linkedIter) Next(ctx context.Context) bool {
 		return false
 	}
 	for _, path := range e.parts.RecoveryPaths() {
-		fmt.Printf("Preserved unverified partial download: %s\n", path)
+		fmt.Println(console.Translate(ctx, messages.LinkedPartial(path)))
 	}
 	it.current = e
 	return true
@@ -202,6 +206,7 @@ func (p *linkedProgress) OnAdd(elem downloader.Elem) {
 	p.trackers[e] = t
 	p.mu.Unlock()
 }
+
 func (p *linkedProgress) OnDownload(elem downloader.Elem, s downloader.ProgressState) {
 	p.mu.Lock()
 	t := p.trackers[elem.(*linkedElem)]
@@ -210,6 +215,7 @@ func (p *linkedProgress) OnDownload(elem downloader.Elem, s downloader.ProgressS
 		t.SetValue(s.Downloaded)
 	}
 }
+
 func (p *linkedProgress) OnDone(elem downloader.Elem, err error) {
 	e := elem.(*linkedElem)
 	if !e.finalized {
@@ -236,18 +242,20 @@ func runArchiveMedia(ctx context.Context, pool dcpool.Pool, threads, limit int, 
 	if len(elems) == 0 {
 		return ctx.Err()
 	}
-	w := prog.New(utils.Byte.FormatBinaryBytes)
+	w := prog.NewContext(ctx, utils.Byte.FormatBinaryBytes)
 	progress := &linkedProgress{writer: w, trackers: map[*linkedElem]*pw.Tracker{}, counts: counts}
 	it := &linkedIter{elems: elems, delay: delay}
 	stop := prog.Start(w)
 	defer stop()
 	return downloader.New(downloader.Options{Pool: pool, Threads: threads, Iter: it, Progress: progress, SkipParts: true}).Download(ctx, max(1, limit))
 }
+
 func (p *linkedProgress) Resume(elem downloader.Elem) (map[int]struct{}, int64, bool) {
 	e := elem.(*linkedElem)
 	done := e.parts.Done()
 	return done, e.File().Size(), len(done) > 0
 }
+
 func (p *linkedProgress) PartDone(elem downloader.Elem, index int) {
 	elem.(*linkedElem).parts.PartDone(index)
 }

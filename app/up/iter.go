@@ -2,6 +2,7 @@ package up
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"strings"
 	"time"
@@ -14,6 +15,8 @@ import (
 	"github.com/gotd/td/telegram/message/html"
 	"github.com/gotd/td/telegram/peers"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/uploader"
 	"github.com/iyear/tdl/core/util/mediautil"
 	"github.com/iyear/tdl/core/util/tutil"
@@ -104,7 +107,7 @@ func (i *iter) Next(ctx context.Context) bool {
 func (i *iter) next(ctx context.Context, cur *File) (_ *iterElem, rerr error) {
 	file, err := i.resolveFile(cur.File)
 	if err != nil {
-		return nil, errors.Wrap(err, "resolve file")
+		return nil, diagnostic.Describe(errors.Wrap(err, "resolve file"), corei18n.Message{ID: "errors.context.resolve_file", Args: map[string]any{"Reason": err}})
 	}
 	defer func() {
 		if rerr != nil {
@@ -116,17 +119,17 @@ func (i *iter) next(ctx context.Context, cur *File) (_ *iterElem, rerr error) {
 
 	to, thread, err := i.resolveDest(ctx, env)
 	if err != nil {
-		return nil, errors.Wrap(err, "resolve destination")
+		return nil, diagnostic.Describe(errors.Wrap(err, "resolve destination"), corei18n.Message{ID: "errors.context.resolve_destination", Args: map[string]any{"Reason": err}})
 	}
 
 	caption, err := i.resolveCaption(env)
 	if err != nil {
-		return nil, errors.Wrap(err, "resolve caption")
+		return nil, diagnostic.Describe(errors.Wrap(err, "resolve caption"), corei18n.Message{ID: "errors.context.resolve_caption", Args: map[string]any{"Reason": err}})
 	}
 
 	thumb, err := i.resolveThumb(cur.Thumb)
 	if err != nil {
-		return nil, errors.Wrap(err, "resolve thumbnail")
+		return nil, diagnostic.Describe(errors.Wrap(err, "resolve thumbnail"), corei18n.Message{ID: "errors.context.resolve_thumbnail", Args: map[string]any{"Reason": err}})
 	}
 
 	return &iterElem{
@@ -144,13 +147,13 @@ func (i *iter) next(ctx context.Context, cur *File) (_ *iterElem, rerr error) {
 func (i *iter) resolveFile(path string) (*uploaderFile, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, errors.Wrap(err, "open file")
+		return nil, diagnostic.Describe(errors.Wrap(err, "open file"), corei18n.Message{ID: "errors.context.open_file", Args: map[string]any{"Reason": err}})
 	}
 
 	stat, err := f.Stat()
 	if err != nil {
 		_ = f.Close()
-		return nil, errors.Wrap(err, "stat file")
+		return nil, diagnostic.Describe(errors.Wrap(err, "stat file"), corei18n.Message{ID: "errors.context.stat_file", Args: map[string]any{"Reason": err}})
 	}
 
 	return &uploaderFile{
@@ -163,7 +166,7 @@ func (i *iter) resolveDest(ctx context.Context, env Env) (peers.Peer, int, error
 	if i.chat != "" { // compatible with old version
 		to, err := i.resolvePeer(ctx, i.chat)
 		if err != nil {
-			return nil, 0, errors.Wrap(err, "resolve chat")
+			return nil, 0, diagnostic.Describe(errors.Wrap(err, "resolve chat"), corei18n.Message{ID: "errors.context.resolve_chat", Args: map[string]any{"Reason": err}})
 		}
 
 		return to, i.topic, nil
@@ -172,7 +175,7 @@ func (i *iter) resolveDest(ctx context.Context, env Env) (peers.Peer, int, error
 	// message routing
 	result, err := texpr.Run(i.to, env)
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "parse expression")
+		return nil, 0, diagnostic.Describe(errors.Wrap(err, "parse expression"), corei18n.Message{ID: "errors.context.parse_expression", Args: map[string]any{"Reason": err}})
 	}
 
 	var (
@@ -190,17 +193,17 @@ func (i *iter) resolveDest(ctx context.Context, env Env) (peers.Peer, int, error
 		var d dest
 
 		if err = mapstructure.WeakDecode(r, &d); err != nil {
-			return nil, 0, errors.Wrapf(err, "decode dest: %v", result)
+			return nil, 0, diagnostic.Describe(errors.Wrapf(err, "decode dest: %v", result), corei18n.Message{ID: "errors.context.decode_dest_value", Args: map[string]any{"Arg1": result, "Reason": err}})
 		}
 
 		to, err = i.resolvePeer(ctx, d.Peer)
 		thread = d.Thread
 	default:
-		return nil, 0, errors.Errorf("message router must return string or dest: %T", result)
+		return nil, 0, diagnostic.Describe(errors.Errorf("message router must return string or dest: %T", result), corei18n.Message{ID: "errors.message.message_router_must_return_string_or_dest_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", result)}})
 	}
 
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "resolve peer")
+		return nil, 0, diagnostic.Describe(errors.Wrap(err, "resolve peer"), corei18n.Message{ID: "errors.context.resolve_peer", Args: map[string]any{"Reason": err}})
 	}
 
 	return to, thread, nil
@@ -218,12 +221,12 @@ func (i *iter) resolveCaption(env Env) (*entity.Builder, error) {
 	// parse caption
 	captionStr, err := texpr.Run(i.caption, env)
 	if err != nil {
-		return nil, errors.Wrap(err, "parse caption")
+		return nil, diagnostic.Describe(errors.Wrap(err, "parse caption"), corei18n.Message{ID: "errors.context.parse_caption", Args: map[string]any{"Reason": err}})
 	}
 
 	r, ok := captionStr.(string)
 	if !ok {
-		return nil, errors.Errorf("caption must return string, got %T", captionStr)
+		return nil, diagnostic.Describe(errors.Errorf("caption must return string, got %T", captionStr), corei18n.Message{ID: "errors.message.caption_must_return_string_got_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", captionStr)}})
 	}
 
 	caption := &entity.Builder{}
@@ -232,7 +235,7 @@ func (i *iter) resolveCaption(env Env) (*entity.Builder, error) {
 			UserResolver:          nil,
 			DisableTelegramEscape: false,
 		}); err != nil {
-			return nil, errors.Wrap(err, "parse caption HTML")
+			return nil, diagnostic.Describe(errors.Wrap(err, "parse caption HTML"), corei18n.Message{ID: "errors.context.parse_caption_html", Args: map[string]any{"Reason": err}})
 		}
 	}
 
@@ -247,15 +250,15 @@ func (i *iter) resolveThumb(path string) (*uploaderFile, error) {
 	// has thumbnail
 	mime, err := mimetype.DetectFile(path)
 	if err != nil {
-		return nil, errors.Wrapf(err, "detect thumbnail file: %v", path)
+		return nil, diagnostic.Describe(errors.Wrapf(err, "detect thumbnail file: %v", path), corei18n.Message{ID: "errors.context.detect_thumbnail_file_value", Args: map[string]any{"Arg1": path, "Reason": err}})
 	}
 	if !mediautil.IsImage(mime.String()) { // TODO(iyear): jpg only
-		return nil, errors.Errorf("invalid thumbnail file: %v", path)
+		return nil, diagnostic.Describe(errors.Errorf("invalid thumbnail file: %v", path), corei18n.Message{ID: "errors.message.invalid_thumbnail_file_value", Args: map[string]any{"Arg1": path}})
 	}
 
 	thumb, err := os.Open(path)
 	if err != nil {
-		return nil, errors.Wrap(err, "open thumbnail file")
+		return nil, diagnostic.Describe(errors.Wrap(err, "open thumbnail file"), corei18n.Message{ID: "errors.context.open_thumbnail_file", Args: map[string]any{"Reason": err}})
 	}
 
 	return &uploaderFile{

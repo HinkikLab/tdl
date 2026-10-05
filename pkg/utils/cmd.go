@@ -6,6 +6,9 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 type cmd struct{}
@@ -30,7 +33,10 @@ type enumValue struct {
 
 func (e *enumValue) Set(value string) error {
 	if !isIncluded(value, e.options) {
-		return fmt.Errorf("valid values are %s", formatValuesForUsageDocs(e.options))
+		return func() error {
+			messageArg1 := formatValuesForUsageDocs(e.options)
+			return diagnostic.Describe(fmt.Errorf("valid values are %s", messageArg1), corei18n.Message{ID: "errors.message.valid_values_are_value", Args: map[string]any{"Arg1": messageArg1}})
+		}()
 	}
 	*e.string = value
 	return nil

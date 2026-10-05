@@ -11,6 +11,8 @@ import (
 	"github.com/gotd/td/tgerr"
 	"go.uber.org/zap"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 )
 
@@ -39,13 +41,13 @@ func (r retry) Handle(next tg.Invoker) telegram.InvokeFunc {
 					retries++
 					continue
 				}
-				return errors.Wrap(err, "retry middleware skip")
+				return diagnostic.Describe(errors.Wrap(err, "retry middleware skip"), corei18n.Message{ID: "errors.context.retry_middleware_skip", Args: map[string]any{"Reason": err}})
 			}
 
 			return nil
 		}
 
-		return fmt.Errorf("retry limit reached after %d attempts", r.max)
+		return diagnostic.Describe(fmt.Errorf("retry limit reached after %d attempts", r.max), corei18n.Message{ID: "errors.message.retry_limit_reached_after_value_attempts", Args: map[string]any{"Arg1": r.max}})
 	}
 }
 

@@ -20,12 +20,16 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/tclient"
 	"github.com/iyear/tdl/core/uploader"
 	"github.com/iyear/tdl/core/util/tutil"
+	"github.com/iyear/tdl/pkg/console"
 	"github.com/iyear/tdl/pkg/consts"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/prog"
 	"github.com/iyear/tdl/pkg/texpr"
 	"github.com/iyear/tdl/pkg/utils"
@@ -44,11 +48,11 @@ type Options struct {
 }
 
 type Env struct {
-	FilePath  string `comment:"File path"`
-	FileName  string `comment:"File name"`
-	FileExt   string `comment:"File extension"`
-	ThumbPath string `comment:"Thumbnail path"`
-	MIME      string `comment:"File mime type"`
+	FilePath  string `comment:"File path" comment_id:"fields.file_path"`
+	FileName  string `comment:"File name" comment_id:"fields.file_name"`
+	FileExt   string `comment:"File extension" comment_id:"fields.file_extension"`
+	ThumbPath string `comment:"Thumbnail path" comment_id:"fields.thumbnail_path"`
+	MIME      string `comment:"File mime type" comment_id:"fields.file_mime_type"`
 }
 
 func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Options) (rerr error) {
@@ -57,10 +61,10 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 
 		fields, err := fg.Walk(exprEnv(context.Background(), nil))
 		if err != nil {
-			return fmt.Errorf("failed to walk fields: %w", err)
+			return diagnostic.Describe(fmt.Errorf("failed to walk fields: %w", err), corei18n.Message{ID: "errors.message.failed_to_walk_fields_value", Args: map[string]any{"Arg1": err}})
 		}
 
-		fmt.Print(fg.Sprint(fields, true))
+		fmt.Print(fg.SprintContext(ctx, fields, true))
 		return nil
 	}
 
@@ -69,7 +73,7 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 		return err
 	}
 
-	color.Blue("Files count: %d", len(files))
+	color.Blue("%s", console.Translate(ctx, messages.UploadFilesCount(len(files))))
 
 	pool := dcpool.NewPool(c,
 		int64(viper.GetInt(consts.FlagPoolSize)),
@@ -80,15 +84,15 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 
 	to, err := resolveDest(ctx, manager, opts.To)
 	if err != nil {
-		return errors.Wrap(err, "get target peer")
+		return diagnostic.Describe(errors.Wrap(err, "get target peer"), corei18n.Message{ID: "errors.context.get_target_peer", Args: map[string]any{"Reason": err}})
 	}
 
 	caption, err := resolveCaption(ctx, opts.Caption)
 	if err != nil {
-		return errors.Wrap(err, "get caption")
+		return diagnostic.Describe(errors.Wrap(err, "get caption"), corei18n.Message{ID: "errors.context.get_caption", Args: map[string]any{"Reason": err}})
 	}
 
-	upProgress := prog.New(utils.Byte.FormatBinaryBytes)
+	upProgress := prog.NewContext(ctx, utils.Byte.FormatBinaryBytes)
 	upProgress.SetNumTrackersExpected(len(files))
 	if !viper.GetBool(consts.FlagDisableProgressPS) {
 		prog.EnablePS(ctx, upProgress)
@@ -98,7 +102,7 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 		Client:   pool.Default(ctx),
 		Threads:  viper.GetInt(consts.FlagThreads),
 		Iter:     newIter(files, to, caption, opts.Chat, opts.Thread, opts.Photo, opts.Remove, viper.GetDuration(consts.FlagDelay), manager),
-		Progress: newProgress(upProgress),
+		Progress: newProgressContext(ctx, upProgress),
 	}
 
 	up := uploader.New(options)

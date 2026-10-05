@@ -6,6 +6,8 @@ import (
 
 	"github.com/go-faster/errors"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/storage"
 )
 
@@ -39,13 +41,13 @@ func New(driver Driver, opts map[string]any) (Storage, error) {
 		return fn(opts)
 	}
 
-	return nil, errors.Errorf("unsupported driver: %s", driver)
+	return nil, diagnostic.Describe(errors.Errorf("unsupported driver: %s", driver), corei18n.Message{ID: "errors.message.unsupported_driver_value", Args: map[string]any{"Arg1": driver}})
 }
 
 func NewWithMap(o map[string]string) (Storage, error) {
 	driver, err := ParseDriver(o[DriverTypeKey])
 	if err != nil {
-		return nil, errors.Wrap(err, "parse driver")
+		return nil, diagnostic.Describe(errors.Wrap(err, "parse driver"), corei18n.Message{ID: "errors.context.parse_driver", Args: map[string]any{"Reason": err}})
 	}
 
 	opts := make(map[string]any)

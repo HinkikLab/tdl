@@ -8,6 +8,8 @@ import (
 	"github.com/spf13/cobra"
 
 	"github.com/iyear/tdl/app/up"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 )
@@ -23,10 +25,10 @@ func NewUpload() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return tRun(cmd.Context(), func(ctx context.Context, c *telegram.Client, kvd storage.Storage) error {
 				if opts.Thread != 0 && opts.Chat == "" {
-					return errors.New("error flags: --chat should be set when --topic is set")
+					return diagnostic.Describe(errors.New("error flags: --chat should be set when --topic is set"), corei18n.Message{ID: "errors.message.error_flags_chat_should_be_set_when_topic_is_set"})
 				}
 				if opts.Chat != "" && opts.To != "" {
-					return errors.New("conflicting flags: --chat and --to cannot be set at the same time")
+					return diagnostic.Describe(errors.New("conflicting flags: --chat and --to cannot be set at the same time"), corei18n.Message{ID: "errors.message.conflicting_flags_chat_and_to_cannot_be_set_at_the_same_time"})
 				}
 				return up.Run(logctx.Named(ctx, "up"), c, kvd, opts)
 			})

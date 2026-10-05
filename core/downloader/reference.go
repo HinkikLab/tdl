@@ -3,6 +3,7 @@ package downloader
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"sync"
 
 	"github.com/go-faster/errors"
@@ -12,6 +13,8 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/tmedia"
 )
@@ -46,7 +49,7 @@ func (d *Downloader) client(ctx context.Context, elem Elem) *tg.Client {
 				return nil, err
 			}
 			if fresh == nil || !sameFileLocation(file.Location(), fresh.Location()) || file.Size() != fresh.Size() || file.DC() != fresh.DC() {
-				return nil, errors.New("reissued attachment changed during download")
+				return nil, diagnostic.Describe(errors.New("reissued attachment changed during download"), corei18n.Message{ID: "errors.message.reissued_attachment_changed_during_download"})
 			}
 			return fresh.Location(), nil
 		}
@@ -100,7 +103,10 @@ func (r *referenceInvoker) Invoke(ctx context.Context, input bin.Encoder, output
 			return err
 		}
 		if refreshErr := r.refresh(ctx, generation); refreshErr != nil {
-			return errors.Wrap(multierr.Append(err, refreshErr), "refresh file reference")
+			return func() error {
+				messageArg0 := multierr.Append(err, refreshErr)
+				return diagnostic.Describe(errors.Wrap(messageArg0, "refresh file reference"), corei18n.Message{ID: "errors.context.refresh_file_reference", Args: map[string]any{"Reason": messageArg0}})
+			}()
 		}
 	}
 }
@@ -133,7 +139,7 @@ func (r *referenceInvoker) refresh(ctx context.Context, generation uint64) error
 
 		location, err := r.fetch(ctx)
 		if err == nil && bytes.Equal(fileReference(old), fileReference(location)) {
-			err = errors.New("source message returned the same file reference")
+			err = diagnostic.Describe(errors.New("source message returned the same file reference"), corei18n.Message{ID: "errors.message.source_message_returned_the_same_file_reference"})
 		}
 		r.mu.Lock()
 		if err == nil {
@@ -206,28 +212,28 @@ func refreshMessageFile(ctx context.Context, api *tg.Client, peer tg.InputPeerCl
 		res, err = api.MessagesGetMessages(ctx, ids)
 	}
 	if err != nil {
-		return nil, errors.Wrap(err, "get source message")
+		return nil, diagnostic.Describe(errors.Wrap(err, "get source message"), corei18n.Message{ID: "errors.context.get_source_message", Args: map[string]any{"Reason": err}})
 	}
 	modified, ok := res.AsModified()
 	if !ok {
-		return nil, errors.Errorf("unexpected source messages type %T", res)
+		return nil, diagnostic.Describe(errors.Errorf("unexpected source messages type %T", res), corei18n.Message{ID: "errors.message.unexpected_source_messages_type_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", res)}})
 	}
 	for _, msg := range modified.GetMessages() {
 		if msg.GetID() != id {
 			continue
 		}
 		if message, ok := msg.(*tg.Message); ok && message.PeerID != nil && !sourcePeerMatches(peer, message.PeerID) {
-			return nil, errors.Errorf("source message %d belongs to a different peer than %T", id, peer)
+			return nil, diagnostic.Describe(errors.Errorf("source message %d belongs to a different peer than %T", id, peer), corei18n.Message{ID: "errors.message.source_message_value_belongs_to_a_different_peer_than_value", Args: map[string]any{"Arg1": id, "Arg2": fmt.Sprintf("%T", peer)}})
 		}
 		media, ok := tmedia.GetMedia(msg)
 		if !ok {
-			return nil, errors.Errorf("source message %d no longer has media", id)
+			return nil, diagnostic.Describe(errors.Errorf("source message %d no longer has media", id), corei18n.Message{ID: "errors.message.source_message_value_no_longer_has_media", Args: map[string]any{"Arg1": id}})
 		}
 		// Never combine already written bytes with a replacement attachment.
 		if !sameFileLocation(file.Location(), media.InputFileLoc) || file.Size() != media.Size || file.DC() != media.DC {
-			return nil, errors.Errorf("source message %d media changed during download", id)
+			return nil, diagnostic.Describe(errors.Errorf("source message %d media changed during download", id), corei18n.Message{ID: "errors.message.source_message_value_media_changed_during_download", Args: map[string]any{"Arg1": id}})
 		}
 		return media.InputFileLoc, nil
 	}
-	return nil, errors.Errorf("source message %d is unavailable or deleted", id)
+	return nil, diagnostic.Describe(errors.Errorf("source message %d is unavailable or deleted", id), corei18n.Message{ID: "errors.message.source_message_value_is_unavailable_or_deleted", Args: map[string]any{"Arg1": id}})
 }

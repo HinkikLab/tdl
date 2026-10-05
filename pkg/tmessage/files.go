@@ -14,6 +14,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/util/tutil"
@@ -138,7 +140,7 @@ func getChatInfo(ctx context.Context, client *tg.Client, kvd storage.Storage, r 
 	}
 
 	if chatID == 0 {
-		return nil, errors.New("can't get chat type or chat id")
+		return nil, diagnostic.Describe(errors.New("can't get chat type or chat id"), corei18n.Message{ID: "errors.message.can_t_get_chat_type_or_chat_id"})
 	}
 
 	manager := peers.Options{Storage: storage.NewPeers(kvd)}.Build(client)

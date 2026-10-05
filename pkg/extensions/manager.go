@@ -18,12 +18,14 @@ import (
 	"github.com/google/go-github/v62/github"
 	"go.uber.org/multierr"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/extension"
 )
 
 var (
-	ErrAlreadyUpToDate = errors.New("already up to date")
-	ErrOnlyGitHub      = errors.New("only GitHub extension can be upgraded by tdl")
+	ErrAlreadyUpToDate = diagnostic.Describe(errors.New("already up to date"), corei18n.Message{ID: "errors.message.already_up_to_date"})
+	ErrOnlyGitHub      = diagnostic.Describe(errors.New("only GitHub extension can be upgraded by tdl"), corei18n.Message{ID: "errors.message.only_github_extension_can_be_upgraded_by_tdl"})
 )
 
 type Manager struct {
@@ -69,20 +71,20 @@ func (m *Manager) Dispatch(ext Extension, args []string, env *extension.Env, std
 
 	envFile, err := os.CreateTemp("", "*")
 	if err != nil {
-		return errors.Wrap(err, "create temp")
+		return diagnostic.Describe(errors.Wrap(err, "create temp"), corei18n.Message{ID: "errors.context.create_temp", Args: map[string]any{"Reason": err}})
 	}
 	defer func() { multierr.AppendInto(&rerr, os.Remove(envFile.Name())) }()
 
 	envBytes, err := json.Marshal(env)
 	if err != nil {
-		return errors.Wrap(err, "marshal env")
+		return diagnostic.Describe(errors.Wrap(err, "marshal env"), corei18n.Message{ID: "errors.context.marshal_env", Args: map[string]any{"Reason": err}})
 	}
 
 	if _, err = envFile.Write(envBytes); err != nil {
-		return errors.Wrap(err, "write env to temp")
+		return diagnostic.Describe(errors.Wrap(err, "write env to temp"), corei18n.Message{ID: "errors.context.write_env_to_temp", Args: map[string]any{"Reason": err}})
 	}
 	if err = envFile.Close(); err != nil {
-		return errors.Wrap(err, "close env file")
+		return diagnostic.Describe(errors.Wrap(err, "close env file"), corei18n.Message{ID: "errors.context.close_env_file", Args: map[string]any{"Reason": err}})
 	}
 
 	cmd.Env = append(os.Environ(), fmt.Sprintf("%s=%s", extension.EnvKey, envFile.Name()))
@@ -97,7 +99,7 @@ func (m *Manager) Dispatch(ext Extension, args []string, env *extension.Env, std
 func (m *Manager) List(ctx context.Context, includeLatestVersion bool) ([]Extension, error) {
 	entries, err := os.ReadDir(m.dir)
 	if err != nil {
-		return nil, errors.Wrap(err, "read dir entries")
+		return nil, diagnostic.Describe(errors.Wrap(err, "read dir entries"), corei18n.Message{ID: "errors.context.read_dir_entries", Args: map[string]any{"Reason": err}})
 	}
 
 	extensions := make([]Extension, 0, len(entries))
@@ -139,15 +141,21 @@ func (m *Manager) Upgrade(ctx context.Context, ext Extension) error {
 
 		mf, err := e.loadManifest()
 		if err != nil {
-			return errors.Wrapf(err, "load manifest of %q", e.Name())
+			return func() error {
+				messageArg2 := e.Name()
+				return diagnostic.Describe(errors.Wrapf(err, "load manifest of %q", messageArg2), corei18n.Message{ID: "errors.context.load_manifest_of_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", messageArg2), "Reason": err}})
+			}()
 		}
 
 		if !m.dryRun {
 			if err = m.Remove(ext); err != nil {
-				return errors.Wrapf(err, "remove old version extension")
+				return diagnostic.Describe(errors.Wrapf(err, "remove old version extension"), corei18n.Message{ID: "errors.context.remove_old_version_extension", Args: map[string]any{"Reason": err}})
 			}
 			if err = m.installGitHub(ctx, mf.Owner, mf.Repo, false); err != nil {
-				return errors.Wrapf(err, "install GitHub extension %q", e.Name())
+				return func() error {
+					messageArg2 := e.Name()
+					return diagnostic.Describe(errors.Wrapf(err, "install GitHub extension %q", messageArg2), corei18n.Message{ID: "errors.context.install_github_extension_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", messageArg2), "Reason": err}})
+				}()
 			}
 		}
 
@@ -170,7 +178,7 @@ func (m *Manager) Install(ctx context.Context, target string, force bool) error 
 	// github
 	ownerRepo := strings.Split(target, "/")
 	if len(ownerRepo) != 2 {
-		return errors.Errorf("invalid target: %q", target)
+		return diagnostic.Describe(errors.Errorf("invalid target: %q", target), corei18n.Message{ID: "errors.message.invalid_target_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", target)}})
 	}
 
 	return m.installGitHub(ctx, ownerRepo[0], ownerRepo[1], force)
@@ -179,10 +187,10 @@ func (m *Manager) Install(ctx context.Context, target string, force bool) error 
 func (m *Manager) installLocal(path string, force bool) error {
 	src, err := os.Lstat(path)
 	if err != nil {
-		return errors.Wrap(err, "source extension stat")
+		return diagnostic.Describe(errors.Wrap(err, "source extension stat"), corei18n.Message{ID: "errors.context.source_extension_stat", Args: map[string]any{"Reason": err}})
 	}
 	if !src.Mode().IsRegular() {
-		return errors.Errorf("invalid src extension: %q, only regular file is allowed", path)
+		return diagnostic.Describe(errors.Errorf("invalid src extension: %q, only regular file is allowed", path), corei18n.Message{ID: "errors.message.invalid_src_extension_value_only_regular_file_is_allowed", Args: map[string]any{"Arg1": fmt.Sprintf("%q", path)}})
 	}
 
 	name := src.Name()
@@ -198,11 +206,11 @@ func (m *Manager) installLocal(path string, force bool) error {
 
 	if !m.dryRun {
 		if err = os.MkdirAll(targetDir, 0o755); err != nil {
-			return errors.Wrapf(err, "create target dir %q for extension %q", targetDir, name)
+			return diagnostic.Describe(errors.Wrapf(err, "create target dir %q for extension %q", targetDir, name), corei18n.Message{ID: "errors.context.create_target_dir_value_for_extension_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", targetDir), "Arg2": fmt.Sprintf("%q", name), "Reason": err}})
 		}
 
 		if err = copyRegularFile(path, binPath); err != nil {
-			return errors.Wrapf(err, "install local extension: %q", path)
+			return diagnostic.Describe(errors.Wrapf(err, "install local extension: %q", path), corei18n.Message{ID: "errors.context.install_local_extension_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", path), "Reason": err}})
 		}
 	}
 
@@ -211,7 +219,7 @@ func (m *Manager) installLocal(path string, force bool) error {
 
 func (m *Manager) installGitHub(ctx context.Context, owner, repo string, force bool) (rerr error) {
 	if !strings.HasPrefix(repo, Prefix) {
-		return errors.Errorf("invalid repo name: %q, should start with %q", repo, Prefix)
+		return diagnostic.Describe(errors.Errorf("invalid repo name: %q, should start with %q", repo, Prefix), corei18n.Message{ID: "errors.message.invalid_repo_name_value_should_start_with_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", repo), "Arg2": fmt.Sprintf("%q", Prefix)}})
 	}
 
 	platform, ext := platformBinaryName()
@@ -224,7 +232,7 @@ func (m *Manager) installGitHub(ctx context.Context, owner, repo string, force b
 
 	release, _, err := m.github.Repositories.GetLatestRelease(ctx, owner, repo)
 	if err != nil {
-		return errors.Wrapf(err, "get latest release of %s/%s", owner, repo)
+		return diagnostic.Describe(errors.Wrapf(err, "get latest release of %s/%s", owner, repo), corei18n.Message{ID: "errors.context.get_latest_release_of_value_value", Args: map[string]any{"Arg1": owner, "Arg2": repo, "Reason": err}})
 	}
 
 	// match binary name
@@ -237,16 +245,23 @@ func (m *Manager) installGitHub(ctx context.Context, owner, repo string, force b
 	}
 
 	if asset == nil {
-		return errors.Errorf("no matched binary(%s) found in the release(%s)", platform+ext, release.GetHTMLURL())
+		return func() error {
+			messageArg1 := platform + ext
+			messageArg2 := release.GetHTMLURL()
+			return diagnostic.Describe(errors.Errorf("no matched binary(%s) found in the release(%s)", messageArg1, messageArg2), corei18n.Message{ID: "errors.message.no_matched_binary_value_found_in_the_release_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": messageArg2}})
+		}()
 	}
 
 	if !m.dryRun {
 		if err = os.MkdirAll(targetDir, 0o755); err != nil {
-			return errors.Wrapf(err, "create target dir %q for extension %s/%s", targetDir, owner, repo)
+			return diagnostic.Describe(errors.Wrapf(err, "create target dir %q for extension %s/%s", targetDir, owner, repo), corei18n.Message{ID: "errors.context.create_target_dir_value_for_extension_value_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", targetDir), "Arg2": owner, "Arg3": repo, "Reason": err}})
 		}
 
 		if err = m.downloadGitHubAsset(ctx, owner, repo, asset, binPath); err != nil {
-			return errors.Wrapf(err, "download github asset %s", asset.GetBrowserDownloadURL())
+			return func() error {
+				messageArg2 := asset.GetBrowserDownloadURL()
+				return diagnostic.Describe(errors.Wrapf(err, "download github asset %s", messageArg2), corei18n.Message{ID: "errors.context.download_github_asset_value", Args: map[string]any{"Arg1": messageArg2, "Reason": err}})
+			}()
 		}
 	}
 
@@ -258,12 +273,12 @@ func (m *Manager) installGitHub(ctx context.Context, owner, repo string, force b
 
 	mfb, err := json.Marshal(mf)
 	if err != nil {
-		return errors.Wrap(err, "marshal manifest")
+		return diagnostic.Describe(errors.Wrap(err, "marshal manifest"), corei18n.Message{ID: "errors.context.marshal_manifest", Args: map[string]any{"Reason": err}})
 	}
 
 	if !m.dryRun {
 		if err = os.WriteFile(filepath.Join(targetDir, manifestName), mfb, 0o644); err != nil {
-			return errors.Wrapf(err, "write manifest to %s", targetDir)
+			return diagnostic.Describe(errors.Wrapf(err, "write manifest to %s", targetDir), corei18n.Message{ID: "errors.context.write_manifest_to_value", Args: map[string]any{"Arg1": targetDir, "Reason": err}})
 		}
 	}
 
@@ -279,13 +294,13 @@ func (m *Manager) maybeExist(binPath string, force bool) error {
 	}
 
 	if !force {
-		return errors.Errorf("extension already exists, please remove it first")
+		return diagnostic.Describe(errors.Errorf("extension already exists, please remove it first"), corei18n.Message{ID: "errors.message.extension_already_exists_please_remove_it_first"})
 	}
 
 	// force remove
 	if !m.dryRun {
 		if err := os.RemoveAll(targetDir); err != nil {
-			return errors.Wrapf(err, "remove existing extension %q", extName)
+			return diagnostic.Describe(errors.Wrapf(err, "remove existing extension %q", extName), corei18n.Message{ID: "errors.context.remove_existing_extension_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", extName), "Reason": err}})
 		}
 	}
 
@@ -297,7 +312,7 @@ func (m *Manager) Remove(ext Extension) error {
 	target := Prefix + ext.Name()
 	targetDir := filepath.Join(m.dir, target)
 	if _, err := os.Lstat(targetDir); os.IsNotExist(err) {
-		return errors.Errorf("no extension found: %s", targetDir)
+		return diagnostic.Describe(errors.Errorf("no extension found: %s", targetDir), corei18n.Message{ID: "errors.message.no_extension_found_value", Args: map[string]any{"Arg1": targetDir}})
 	}
 
 	if !m.dryRun {
@@ -322,18 +337,21 @@ func (m *Manager) populateLatestVersions(ctx context.Context, exts []Extension) 
 func (m *Manager) downloadGitHubAsset(ctx context.Context, owner, repo string, asset *github.ReleaseAsset, dst string) (rerr error) {
 	readCloser, _, err := m.github.Repositories.DownloadReleaseAsset(ctx, owner, repo, asset.GetID(), m.http)
 	if err != nil {
-		return errors.Wrapf(err, "download release asset %s", asset.GetName())
+		return func() error {
+			messageArg2 := asset.GetName()
+			return diagnostic.Describe(errors.Wrapf(err, "download release asset %s", messageArg2), corei18n.Message{ID: "errors.context.download_release_asset_value", Args: map[string]any{"Arg1": messageArg2, "Reason": err}})
+		}()
 	}
 	defer multierr.AppendInvoke(&rerr, multierr.Close(readCloser))
 
 	file, err := os.OpenFile(dst, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0o755)
 	if err != nil {
-		return errors.Wrapf(err, "open file %s", dst)
+		return diagnostic.Describe(errors.Wrapf(err, "open file %s", dst), corei18n.Message{ID: "errors.context.open_file_value", Args: map[string]any{"Arg1": dst, "Reason": err}})
 	}
 	defer multierr.AppendInvoke(&rerr, multierr.Close(file))
 
 	if _, err = io.Copy(file, readCloser); err != nil {
-		return errors.Wrapf(err, "copy http body to %s", dst)
+		return diagnostic.Describe(errors.Wrapf(err, "copy http body to %s", dst), corei18n.Message{ID: "errors.context.copy_http_body_to_value", Args: map[string]any{"Arg1": dst, "Reason": err}})
 	}
 	return nil
 }
@@ -341,26 +359,26 @@ func (m *Manager) downloadGitHubAsset(ctx context.Context, owner, repo string, a
 func copyRegularFile(src, dst string) (rerr error) {
 	r, err := os.Open(src)
 	if err != nil {
-		return errors.Wrapf(err, "open src %s", src)
+		return diagnostic.Describe(errors.Wrapf(err, "open src %s", src), corei18n.Message{ID: "errors.context.open_src_value", Args: map[string]any{"Arg1": src, "Reason": err}})
 	}
 	defer multierr.AppendInvoke(&rerr, multierr.Close(r))
 
 	info, err := r.Stat()
 	if err != nil {
-		return errors.Wrapf(err, "stat file %s", src)
+		return diagnostic.Describe(errors.Wrapf(err, "stat file %s", src), corei18n.Message{ID: "errors.context.stat_file_value", Args: map[string]any{"Arg1": src, "Reason": err}})
 	}
 	if !info.Mode().IsRegular() {
-		return errors.Errorf("invalid source file: %q, only regular file is allowed", src)
+		return diagnostic.Describe(errors.Errorf("invalid source file: %q, only regular file is allowed", src), corei18n.Message{ID: "errors.message.invalid_source_file_value_only_regular_file_is_allowed", Args: map[string]any{"Arg1": fmt.Sprintf("%q", src)}})
 	}
 
 	w, err := os.OpenFile(dst, os.O_CREATE|os.O_TRUNC|os.O_WRONLY, 0o666|info.Mode()&0o777)
 	if err != nil {
-		return errors.Wrapf(err, "open dst %s", dst)
+		return diagnostic.Describe(errors.Wrapf(err, "open dst %s", dst), corei18n.Message{ID: "errors.context.open_dst_value", Args: map[string]any{"Arg1": dst, "Reason": err}})
 	}
 	defer multierr.AppendInvoke(&rerr, multierr.Close(w))
 
 	if _, err = io.Copy(w, r); err != nil {
-		return errors.Wrapf(err, "copy file %s to %s", src, dst)
+		return diagnostic.Describe(errors.Wrapf(err, "copy file %s to %s", src, dst), corei18n.Message{ID: "errors.context.copy_file_value_to_value", Args: map[string]any{"Arg1": src, "Arg2": dst, "Reason": err}})
 	}
 	return nil
 }

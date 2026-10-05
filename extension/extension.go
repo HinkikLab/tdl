@@ -4,15 +4,19 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io/fs"
 	"os"
 	"os/signal"
 	"path/filepath"
+	"strings"
 
 	"github.com/go-faster/errors"
 	"github.com/gotd/td/session"
 	"github.com/gotd/td/telegram"
 	"go.uber.org/zap"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/tclient"
 	"github.com/iyear/tdl/core/util/logutil"
@@ -31,6 +35,7 @@ type Env struct {
 	Proxy     string `json:"proxy"`
 	Pool      int64  `json:"pool"`
 	Debug     bool   `json:"debug"`
+	Language  string `json:"language,omitempty"`
 }
 
 type Options struct {
@@ -42,13 +47,17 @@ type Options struct {
 	// Logger will be used as extension logger,
 	// and default logger(write to extension data dir) will be used if nil.
 	Logger *zap.Logger
+	// Resources contains optional extension-owned translation resources. Use
+	// the ext.<extension-name>.* message ID namespace for extension messages.
+	Resources []fs.FS
 }
 
 type Extension struct {
-	name   string           // extension name
-	client *telegram.Client // telegram client
-	log    *zap.Logger      // logger
-	config *Config          // extension config
+	name       string           // extension name
+	client     *telegram.Client // telegram client
+	log        *zap.Logger      // logger
+	config     *Config          // extension config
+	translator corei18n.Translator
 }
 
 type Config struct {
@@ -57,6 +66,7 @@ type Config struct {
 	Proxy     string // proxy URL
 	Pool      int64  // pool size
 	Debug     bool   // debug mode enabled
+	Language  string // selected tdl display language
 }
 
 func (e *Extension) Name() string {
@@ -75,6 +85,9 @@ func (e *Extension) Config() *Config {
 	return e.config
 }
 
+// Translator returns the immutable translator selected by the parent tdl run.
+func (e *Extension) Translator() corei18n.Translator { return e.translator }
+
 type Handler func(ctx context.Context, e *Extension) error
 
 func New(o Options) func(h Handler) {
@@ -82,11 +95,12 @@ func New(o Options) func(h Handler) {
 
 	ext, client, err := buildExtension(ctx, o)
 	assert(err)
+	ctx = extensionContext(ctx, ext)
 
 	return func(h Handler) {
 		defer cancel()
 
-		assert(tclient.RunWithAuth(ctx, client, func(ctx context.Context) error {
+		err := tclient.RunWithAuth(ctx, client, func(ctx context.Context) error {
 			if err := h(ctx, ext); err != nil {
 				if errors.Is(err, context.Canceled) {
 					return nil
@@ -95,24 +109,33 @@ func New(o Options) func(h Handler) {
 			}
 
 			return nil
-		}))
+		})
+		if err != nil {
+			fmt.Println(diagnostic.FormatError(err, ext.translator))
+			os.Exit(1)
+		}
 	}
+}
+
+func extensionContext(ctx context.Context, ext *Extension) context.Context {
+	ctx = logctx.With(ctx, ext.log)
+	return corei18n.WithTranslator(ctx, ext.translator)
 }
 
 func buildExtension(ctx context.Context, o Options) (*Extension, *telegram.Client, error) {
 	envFile := os.Getenv(EnvKey)
 	if envFile == "" {
-		return nil, nil, errors.New("please launch extension with `tdl EXTENSION_NAME`")
+		return nil, nil, diagnostic.Describe(errors.New("please launch extension with `tdl EXTENSION_NAME`"), corei18n.Message{ID: "errors.message.please_launch_extension_with_tdl_extension_key_name"})
 	}
 
 	extEnv, err := os.ReadFile(envFile)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "read env file")
+		return nil, nil, diagnostic.Describe(errors.Wrap(err, "read env file"), corei18n.Message{ID: "errors.context.read_env_file", Args: map[string]any{"Reason": err}})
 	}
 
 	env := &Env{}
 	if err = json.Unmarshal(extEnv, env); err != nil {
-		return nil, nil, errors.Wrap(err, "unmarshal extension environment")
+		return nil, nil, diagnostic.Describe(errors.Wrap(err, "unmarshal extension environment"), corei18n.Message{ID: "errors.context.unmarshal_extension_environment", Args: map[string]any{"Reason": err}})
 	}
 
 	if o.Logger == nil {
@@ -123,8 +146,26 @@ func buildExtension(ctx context.Context, o Options) (*Extension, *telegram.Clien
 		o.Logger = logutil.New(level, filepath.Join(env.DataDir, "log", "latest.log"))
 	}
 
+	var lang corei18n.Language
+	if strings.TrimSpace(env.Language) == "" || strings.EqualFold(env.Language, "auto") {
+		lang, err = corei18n.ResolveLanguage("", os.Getenv, corei18n.SystemLocale)
+	} else {
+		lang, err = corei18n.NormalizeLanguage(env.Language)
+	}
+	if err != nil {
+		return nil, nil, diagnostic.Describe(err, corei18n.Message{ID: "errors.cli.invalid_language", Args: map[string]any{"Language": env.Language}})
+	}
+	if err := corei18n.ValidateNamespace("ext."+env.Name+".", o.Resources...); err != nil {
+		return nil, nil, diagnostic.Describe(errors.Wrap(err, "load extension translations"), corei18n.Message{ID: "errors.context.load_extension_translations", Args: map[string]any{"Reason": err}})
+	}
+	translator, err := corei18n.NewTranslator(lang, append([]fs.FS{corei18n.CoreResources()}, o.Resources...)...)
+	if err != nil {
+		return nil, nil, diagnostic.Describe(errors.Wrap(err, "load extension translations"), corei18n.Message{ID: "errors.context.load_extension_translations", Args: map[string]any{"Reason": err}})
+	}
+
 	// save logger to context
 	ctx = logctx.With(ctx, o.Logger)
+	ctx = corei18n.WithTranslator(ctx, translator)
 
 	if o.Middlewares == nil {
 		o.Middlewares = tclient.NewDefaultMiddlewares(ctx, 0)
@@ -132,7 +173,7 @@ func buildExtension(ctx context.Context, o Options) (*Extension, *telegram.Clien
 
 	client, err := buildClient(ctx, env, o)
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "build client")
+		return nil, nil, diagnostic.Describe(errors.Wrap(err, "build client"), corei18n.Message{ID: "errors.context.build_client", Args: map[string]any{"Reason": err}})
 	}
 
 	return &Extension{
@@ -145,14 +186,16 @@ func buildExtension(ctx context.Context, o Options) (*Extension, *telegram.Clien
 			Proxy:     env.Proxy,
 			Pool:      env.Pool,
 			Debug:     env.Debug,
+			Language:  string(lang),
 		},
+		translator: translator,
 	}, client, nil
 }
 
 func buildClient(ctx context.Context, env *Env, o Options) (*telegram.Client, error) {
 	storage := &session.StorageMemory{}
 	if err := storage.StoreSession(ctx, env.Session); err != nil {
-		return nil, errors.Wrap(err, "store session")
+		return nil, diagnostic.Describe(errors.Wrap(err, "store session"), corei18n.Message{ID: "errors.context.store_session", Args: map[string]any{"Reason": err}})
 	}
 
 	return tclient.New(ctx, tclient.Options{
@@ -169,7 +212,20 @@ func buildClient(ctx context.Context, env *Env, o Options) (*telegram.Client, er
 
 func assert(err error) {
 	if err != nil {
-		fmt.Println(err)
+		lang, _ := corei18n.ResolveLanguage("", os.Getenv, corei18n.SystemLocale)
+		if data, readErr := os.ReadFile(os.Getenv(EnvKey)); readErr == nil {
+			var env Env
+			if json.Unmarshal(data, &env) == nil {
+				if selected, parseErr := corei18n.NormalizeLanguage(env.Language); parseErr == nil {
+					lang = selected
+				}
+			}
+		}
+		translator, loadErr := corei18n.NewTranslator(lang)
+		if loadErr != nil {
+			translator = corei18n.EnglishTranslator()
+		}
+		fmt.Fprintln(os.Stderr, diagnostic.FormatError(err, translator))
 		os.Exit(1)
 	}
 }

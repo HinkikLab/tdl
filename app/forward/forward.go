@@ -18,7 +18,9 @@ import (
 
 	"github.com/iyear/tdl/app/internal/tctx"
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
 	"github.com/iyear/tdl/core/forwarder"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/tclient"
 	"github.com/iyear/tdl/core/util/tutil"
@@ -45,10 +47,10 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 
 		fields, err := fg.Walk(exprEnv(nil, nil))
 		if err != nil {
-			return fmt.Errorf("failed to walk fields: %w", err)
+			return diagnostic.Describe(fmt.Errorf("failed to walk fields: %w", err), corei18n.Message{ID: "errors.message.failed_to_walk_fields_value", Args: map[string]any{"Arg1": err}})
 		}
 
-		fmt.Print(fg.Sprint(fields, true))
+		fmt.Print(fg.SprintContext(ctx, fields, true))
 		return nil
 	}
 
@@ -63,25 +65,25 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 
 	dialogs, err := collectDialogs(ctx, opts.From, opts.Desc)
 	if err != nil {
-		return errors.Wrap(err, "collect dialogs")
+		return diagnostic.Describe(errors.Wrap(err, "collect dialogs"), corei18n.Message{ID: "errors.context.collect_dialogs", Args: map[string]any{"Reason": err}})
 	}
 	if totalMessages(dialogs) == 0 {
-		return errors.New("you must specify at least one message")
+		return diagnostic.Describe(errors.New("you must specify at least one message"), corei18n.Message{ID: "errors.message.you_must_specify_at_least_one_message"})
 	}
 
 	manager := peers.Options{Storage: storage.NewPeers(kvd)}.Build(pool.Default(ctx))
 
 	to, err := resolveDest(ctx, manager, opts.To)
 	if err != nil {
-		return errors.Wrap(err, "resolve dest peer")
+		return diagnostic.Describe(errors.Wrap(err, "resolve dest peer"), corei18n.Message{ID: "errors.context.resolve_dest_peer", Args: map[string]any{"Reason": err}})
 	}
 
 	edit, err := resolveEdit(opts.Edit)
 	if err != nil {
-		return errors.Wrap(err, "resolve edit")
+		return diagnostic.Describe(errors.Wrap(err, "resolve edit"), corei18n.Message{ID: "errors.context.resolve_edit", Args: map[string]any{"Reason": err}})
 	}
 
-	fwProgress := prog.New(pw.FormatNumber)
+	fwProgress := prog.NewContext(ctx, pw.FormatNumber)
 	fwProgress.SetNumTrackersExpected(totalMessages(dialogs))
 	if !viper.GetBool(consts.FlagDisableProgressPS) {
 		prog.EnablePS(ctx, fwProgress)
@@ -101,7 +103,7 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 			grouped: !opts.Single,
 			delay:   viper.GetDuration(consts.FlagDelay),
 		}),
-		Progress: newProgress(fwProgress),
+		Progress: newProgressContext(ctx, fwProgress),
 		Threads:  viper.GetInt(consts.FlagThreads),
 	})
 
@@ -124,12 +126,12 @@ func collectDialogs(ctx context.Context, input []string, desc bool) ([]*tmessage
 		case strings.HasPrefix(p, "http"):
 			d, err = tmessage.Parse(tmessage.FromURL(ctx, tctx.Pool(ctx), tctx.KV(ctx), []string{p}))
 			if err != nil {
-				return nil, errors.Wrap(err, "parse from url")
+				return nil, diagnostic.Describe(errors.Wrap(err, "parse from url"), corei18n.Message{ID: "errors.context.parse_from_url", Args: map[string]any{"Reason": err}})
 			}
 		default:
 			d, err = tmessage.Parse(tmessage.FromFile(ctx, tctx.Pool(ctx), tctx.KV(ctx), []string{p}, false))
 			if err != nil {
-				return nil, errors.Wrap(err, "parse from file")
+				return nil, diagnostic.Describe(errors.Wrap(err, "parse from file"), corei18n.Message{ID: "errors.context.parse_from_file", Args: map[string]any{"Reason": err}})
 			}
 		}
 

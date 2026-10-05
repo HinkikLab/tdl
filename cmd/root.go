@@ -19,6 +19,8 @@ import (
 	"go.uber.org/zap"
 	"golang.org/x/net/proxy"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 	tclientcore "github.com/iyear/tdl/core/tclient"
@@ -26,9 +28,12 @@ import (
 	"github.com/iyear/tdl/core/util/logutil"
 	"github.com/iyear/tdl/core/util/netutil"
 	"github.com/iyear/tdl/pkg/autodl"
+	"github.com/iyear/tdl/pkg/console"
 	"github.com/iyear/tdl/pkg/consts"
 	"github.com/iyear/tdl/pkg/extensions"
+	pki18n "github.com/iyear/tdl/pkg/i18n"
 	"github.com/iyear/tdl/pkg/kv"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/tclient"
 )
 
@@ -62,6 +67,16 @@ var (
 )
 
 func New() *cobra.Command {
+	translator, err := pki18n.New(corei18n.English)
+	if err != nil {
+		translator = corei18n.EnglishTranslator()
+	}
+	return NewWithTranslator(translator)
+}
+
+// NewWithTranslator binds all command metadata to an immutable run translator.
+// A nil translator leaves English source text available for bootstrap parsing.
+func NewWithTranslator(translator corei18n.Translator) *cobra.Command {
 	// allow PersistentPreRun to be called for every command
 	cobra.EnableTraverseRunHooks = true
 
@@ -97,7 +112,7 @@ func New() *cobra.Command {
 				_ = cmd.Flags().Set(consts.FlagNamespace, namespace)
 			}
 
-			color.Yellow("Found %s and a logged in account, starting batch download...", path)
+			color.Yellow("%s", console.Translate(cmd.Context(), messages.BatchAutoStarted(path)))
 
 			return NewBatch().RunE(cmd, nil)
 		},
@@ -122,13 +137,13 @@ func New() *cobra.Command {
 			// v0.14.0: default storage changed from legacy to bolt, so we need to auto migrate to keep compatibility
 			if !cmd.Flags().Lookup(consts.FlagStorage).Changed && !fsutil.PathExists(defaultBoltPath) {
 				if err := migrateLegacyToBolt(); err != nil {
-					return errors.Wrap(err, "migrate legacy to bolt")
+					return diagnostic.Describe(errors.Wrap(err, "migrate legacy to bolt"), corei18n.Message{ID: "errors.context.migrate_legacy_to_bolt", Args: map[string]any{"Reason": err}})
 				}
 			}
 
 			stg, err := kv.NewWithMap(viper.GetStringMapString(consts.FlagStorage))
 			if err != nil {
-				return errors.Wrap(err, "create kv storage")
+				return diagnostic.Describe(errors.Wrap(err, "create kv storage"), corei18n.Message{ID: "errors.context.create_kv_storage", Args: map[string]any{"Reason": err}})
 			}
 
 			cmd.SetContext(kv.With(cmd.Context(), stg))
@@ -156,6 +171,9 @@ func New() *cobra.Command {
 			)
 		},
 	}
+	cmd.SetFlagErrorFunc(func(_ *cobra.Command, err error) error {
+		return pki18n.FlagError(err)
+	})
 
 	coloredcobra.Init(&coloredcobra.Config{
 		RootCmd:         cmd,
@@ -172,7 +190,11 @@ func New() *cobra.Command {
 		NoBottomNewline: true,
 	})
 
-	cmd.AddGroup(groupAccount, groupTools, groupExtensions)
+	cmd.AddGroup(
+		&cobra.Group{ID: groupAccount.ID, Title: groupAccount.Title},
+		&cobra.Group{ID: groupTools.ID, Title: groupTools.Title},
+		&cobra.Group{ID: groupExtensions.ID, Title: groupExtensions.Title},
+	)
 
 	cmd.AddCommand(NewVersion(), NewLogin(), NewDownload(), NewForward(),
 		NewChat(), NewUpload(), NewBackup(), NewRecover(), NewMigrate(),
@@ -192,6 +214,7 @@ func New() *cobra.Command {
 	cmd.PersistentFlags().String(consts.FlagProxy, "", "proxy address, format: protocol://username:password@host:port")
 	cmd.PersistentFlags().StringP(consts.FlagNamespace, "n", "default", "namespace for Telegram session")
 	cmd.PersistentFlags().Bool(consts.FlagDebug, false, "enable debug mode")
+	cmd.PersistentFlags().String(consts.FlagLanguage, "auto", "output language: auto, zh or en; Chinese regions and scripts use Simplified Chinese")
 
 	cmd.PersistentFlags().IntP(consts.FlagPartSize, "s", 512*1024, "part size for transfer")
 	_ = cmd.PersistentFlags().MarkDeprecated(consts.FlagPartSize, "part size has been set to maximum by default, this flag will be removed in the future")
@@ -230,6 +253,11 @@ func New() *cobra.Command {
 		cmd.TraverseChildren = true // allow global config to be parsed before extension command is executed
 	}
 
+	if translator != nil {
+		pki18n.BindCommandTree(cmd, translator)
+		cmd.SetContext(corei18n.WithTranslator(context.Background(), translator))
+	}
+
 	return cmd
 }
 
@@ -254,7 +282,7 @@ func tOptions(ctx context.Context) (tclient.Options, error) {
 	// init tclient kv
 	kvd, err := kv.From(ctx).Open(viper.GetString(consts.FlagNamespace))
 	if err != nil {
-		return tclient.Options{}, errors.Wrap(err, "open kv storage")
+		return tclient.Options{}, diagnostic.Describe(errors.Wrap(err, "open kv storage"), corei18n.Message{ID: "errors.context.open_kv_storage", Args: map[string]any{"Reason": err}})
 	}
 	o := tclient.Options{
 		KV:               kvd,
@@ -274,13 +302,13 @@ func tRun(ctx context.Context, f func(ctx context.Context, c *telegram.Client, k
 func tRunWithUpdates(ctx context.Context, updates telegram.UpdateHandler, f func(ctx context.Context, c *telegram.Client, kvd storage.Storage) error, middlewares ...telegram.Middleware) error {
 	o, err := tOptions(ctx)
 	if err != nil {
-		return errors.Wrap(err, "build telegram options")
+		return diagnostic.Describe(errors.Wrap(err, "build telegram options"), corei18n.Message{ID: "errors.context.build_telegram_options", Args: map[string]any{"Reason": err}})
 	}
 	o.UpdateHandler = updates
 
 	client, err := tclient.New(ctx, o, false, middlewares...)
 	if err != nil {
-		return errors.Wrap(err, "create client")
+		return diagnostic.Describe(errors.Wrap(err, "create client"), corei18n.Message{ID: "errors.context.create_client", Args: map[string]any{"Reason": err}})
 	}
 
 	return tclientcore.RunWithAuth(ctx, client, func(ctx context.Context) error {
@@ -291,19 +319,19 @@ func tRunWithUpdates(ctx context.Context, updates telegram.UpdateHandler, f func
 func migrateLegacyToBolt() (rerr error) {
 	legacy, err := kv.NewWithMap(DefaultLegacyStorage)
 	if err != nil {
-		return errors.Wrap(err, "create legacy kv storage")
+		return diagnostic.Describe(errors.Wrap(err, "create legacy kv storage"), corei18n.Message{ID: "errors.context.create_legacy_kv_storage", Args: map[string]any{"Reason": err}})
 	}
 	defer multierr.AppendInvoke(&rerr, multierr.Close(legacy))
 
 	bolt, err := kv.NewWithMap(DefaultBoltStorage)
 	if err != nil {
-		return errors.Wrap(err, "create bolt kv storage")
+		return diagnostic.Describe(errors.Wrap(err, "create bolt kv storage"), corei18n.Message{ID: "errors.context.create_bolt_kv_storage", Args: map[string]any{"Reason": err}})
 	}
 	defer multierr.AppendInvoke(&rerr, multierr.Close(bolt))
 
 	meta, err := legacy.MigrateTo()
 	if err != nil {
-		return errors.Wrap(err, "migrate legacy to bolt")
+		return diagnostic.Describe(errors.Wrap(err, "migrate legacy to bolt"), corei18n.Message{ID: "errors.context.migrate_legacy_to_bolt", Args: map[string]any{"Reason": err}})
 	}
 
 	return bolt.MigrateFrom(meta)

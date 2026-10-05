@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/AlecAivazis/survey/v2"
 	"github.com/fatih/color"
 	"github.com/go-faster/errors"
 	"github.com/gotd/td/telegram"
@@ -16,13 +15,18 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
 	"github.com/iyear/tdl/core/downloader"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/tclient"
 	"github.com/iyear/tdl/internal/transfer"
+	"github.com/iyear/tdl/pkg/console"
+	localizedprompt "github.com/iyear/tdl/pkg/console/prompt"
 	"github.com/iyear/tdl/pkg/consts"
 	"github.com/iyear/tdl/pkg/key"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/prog"
 	"github.com/iyear/tdl/pkg/tmessage"
 	"github.com/iyear/tdl/pkg/utils"
@@ -114,7 +118,7 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 			return err
 		}
 	} else {
-		color.Yellow("Restart download by 'restart' flag")
+		color.Yellow("%s", console.Translate(ctx, messages.DownloadRestart()))
 	}
 
 	defer func() { // save progress
@@ -125,7 +129,7 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 		}
 	}()
 
-	dlProgress := prog.New(utils.Byte.FormatBinaryBytes)
+	dlProgress := prog.NewContext(ctx, utils.Byte.FormatBinaryBytes)
 	dlProgress.SetNumTrackersExpected(it.Total())
 	if !viper.GetBool(consts.FlagDisableProgressPS) {
 		prog.EnablePS(ctx, dlProgress)
@@ -139,7 +143,7 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 		Pool:     pool,
 		Threads:  threads,
 		Iter:     it,
-		Progress: newProgress(dlProgress, it, opts),
+		Progress: newProgressContext(ctx, dlProgress, it, opts),
 	}
 	limit := opts.Limit
 	if limit <= 0 {
@@ -158,7 +162,7 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 		zap.Int("threads", options.Threads),
 		zap.Int("limit", limit))
 
-	color.Green("All files will be downloaded to '%s' dir", opts.Dir)
+	color.Green("%s", console.Translate(ctx, messages.DownloadDestination(opts.Dir)))
 
 	stopRender := prog.Start(dlProgress)
 	defer func() {
@@ -170,11 +174,10 @@ func Run(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Opti
 			deletedIDs := it.DeletedIDs()
 			if len(deletedIDs) <= 5 {
 				// Show all IDs if 5 or fewer
-				color.Yellow("⚠️  %d message(s) were skipped because they were deleted: %v", skipped, deletedIDs)
+				color.Yellow("%s", console.Translate(ctx, messages.DownloadDeletedMessages(skipped, fmt.Sprint(deletedIDs), 0)))
 			} else {
 				// Show first 5 and indicate there are more
-				color.Yellow("⚠️  %d message(s) were skipped because they were deleted: %v... and %d more",
-					skipped, deletedIDs[:5], len(deletedIDs)-5)
+				color.Yellow("%s", console.Translate(ctx, messages.DownloadDeletedMessages(skipped, fmt.Sprint(deletedIDs[:5]), len(deletedIDs)-5)))
 			}
 		}
 	}()
@@ -210,7 +213,7 @@ func resume(ctx context.Context, kvd storage.Storage, iter *iter, ask bool) erro
 				return legacyErr
 			}
 			if len(legacy) > 0 {
-				color.Yellow("Legacy positional download state retained; outputs will be checked and unverified partials preserved before downloading again")
+				color.Yellow("%s", console.Translate(ctx, messages.DownloadLegacyState()))
 			}
 		}
 		return nil
@@ -224,7 +227,7 @@ func resume(ctx context.Context, kvd storage.Storage, iter *iter, ask bool) erro
 		return err
 	}
 	if saved.Version != 2 {
-		return fmt.Errorf("unsupported download resume version; legacy positional state is retained for recovery")
+		return diagnostic.Describe(fmt.Errorf("unsupported download resume version; legacy positional state is retained for recovery"), corei18n.Message{ID: "errors.download.resume_version"})
 	}
 	finished := saved.Completed
 
@@ -234,9 +237,9 @@ func resume(ctx context.Context, kvd storage.Storage, iter *iter, ask bool) erro
 	}
 
 	confirm := false
-	resumeStr := fmt.Sprintf("Found unfinished download, continue from '%d/%d'", len(finished), iter.Total())
+	resumeStr := console.Translate(ctx, messages.DownloadResumePrompt(len(finished), iter.Total()))
 	if ask {
-		if err = survey.AskOne(&survey.Confirm{
+		if err = localizedprompt.AskOne(ctx, &localizedprompt.Confirm{
 			Message: color.YellowString(resumeStr + "?"),
 		}, &confirm); err != nil {
 			return err

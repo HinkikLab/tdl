@@ -1,0 +1,17 @@
+{
+  "extension.table.headers": {"other": "名称\t作者\t版本"},
+  "extension.install.start": {"other": "正在安装扩展 {{.Name}}……"},
+  "extension.install.failed": {"other": "安装扩展 {{.Name}} 失败：{{.Reason}}"},
+  "extension.install.dry_run": {"other": "将安装扩展 {{.Name}}"},
+  "extension.install.done": {"other": "已安装扩展 {{.Name}}"},
+  "extension.not_found": {"other": "未找到扩展 {{.Name}}"},
+  "extension.upgrade.start": {"other": "正在升级 {{.Name}}……"},
+  "extension.upgrade.current": {"other": "扩展 {{.Name}} 已是最新版本"},
+  "extension.upgrade.unsupported": {"other": "tdl 无法自动升级扩展 {{.Name}}"},
+  "extension.upgrade.failed": {"other": "升级扩展 {{.Name}} 失败：{{.Reason}}"},
+  "extension.upgrade.dry_run": {"other": "将升级扩展 {{.Name}}"},
+  "extension.upgrade.done": {"other": "已升级扩展 {{.Name}}"},
+  "extension.remove.failed": {"other": "移除扩展 {{.Name}} 失败：{{.Reason}}"},
+  "extension.remove.dry_run": {"other": "将移除扩展 {{.Name}}"},
+  "extension.remove.done": {"other": "已移除扩展 {{.Name}}"}
+}

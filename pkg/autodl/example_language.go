@@ -4,20 +4,27 @@ import (
 	"fmt"
 	"os"
 	"strings"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 // ResolveExampleLanguage resolves auto from the locale environment, then the
 // Windows UI language. Other languages and unavailable locales use English.
 func ResolveExampleLanguage(language string) (string, error) {
 	language = strings.ToLower(strings.TrimSpace(language))
-	switch language {
-	case "zh", "en":
-		return language, nil
-	case "", "auto":
-		return detectExampleLanguage(os.Getenv, systemExampleLocale), nil
-	default:
-		return "", fmt.Errorf("unsupported config language %q; use auto, zh or en", language)
+	if language == "" || language == "auto" {
+		selected, err := corei18n.ResolveLanguage("", os.Getenv, systemExampleLocale)
+		if err != nil {
+			return "", err
+		}
+		return string(selected), nil
 	}
+	selected, err := corei18n.NormalizeLanguage(language)
+	if err != nil {
+		return "", diagnostic.Describe(fmt.Errorf("unsupported config language %q; use auto, zh or en", language), corei18n.Message{ID: "errors.message.unsupported_config_language_value_use_auto_zh_or_en", Args: map[string]any{"Arg1": fmt.Sprintf("%q", language)}})
+	}
+	return string(selected), nil
 }
 
 func detectExampleLanguage(getenv func(string) string, systemLocale func() string) string {

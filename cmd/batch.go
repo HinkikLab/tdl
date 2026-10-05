@@ -10,10 +10,14 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/pkg/autodl"
+	"github.com/iyear/tdl/pkg/console"
 	"github.com/iyear/tdl/pkg/consts"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 // batchDisableEnv disables the automatic batch start of a bare `tdl`
@@ -172,16 +176,16 @@ Partial downloads keep their parts so only missing parts are fetched again.`,
 				"batch-pool":    f.pool,
 			} {
 				if value < 0 {
-					return fmt.Errorf("--%s must not be negative", name)
+					return diagnostic.Describe(fmt.Errorf("--%s must not be negative", name), corei18n.Message{ID: "errors.message.value_must_not_be_negative", Args: map[string]any{"Arg1": name}})
 				}
 			}
 			for _, name := range []string{consts.FlagThreads, consts.FlagLimit, consts.FlagPoolSize} {
 				if value, set := changedIntValue(cmd, name); set && value < 0 {
-					return fmt.Errorf("--%s must not be negative", name)
+					return diagnostic.Describe(fmt.Errorf("--%s must not be negative", name), corei18n.Message{ID: "errors.message.value_must_not_be_negative", Args: map[string]any{"Arg1": name}})
 				}
 			}
 			if f.overlapSeconds < -1 {
-				return errors.New("--overlap-seconds must not be less than -1")
+				return diagnostic.Describe(errors.New("--overlap-seconds must not be less than -1"), corei18n.Message{ID: "errors.message.overlap_seconds_must_not_be_less_than_1"})
 			}
 
 			cfg := f.config
@@ -204,7 +208,7 @@ Partial downloads keep their parts so only missing parts are fetched again.`,
 				}
 			}
 			if f.validateOnly {
-				fmt.Fprintln(cmd.OutOrStdout(), "Batch configuration valid:", prepared)
+				cmd.Println(console.Translate(cmd.Context(), messages.BatchConfigValid(prepared.Summary(cmd.Context()))))
 				return nil
 			}
 

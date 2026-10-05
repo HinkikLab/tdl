@@ -5,6 +5,9 @@ import (
 	"os"
 	"runtime"
 	"strings"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 // ReserveState protects a state snapshot and its atomic replacement from media
@@ -26,7 +29,7 @@ func (r *Reservations) ReserveState(path, owner string) error {
 	keys := []string{key, key + ".new"}
 	for _, candidate := range keys {
 		if previous, ok := r.paths[candidate]; ok && previous != owner {
-			return fmt.Errorf("state path %q conflicts with %s (new owner: %s)", abs, previous, owner)
+			return diagnostic.Describe(fmt.Errorf("state path %q conflicts with %s (new owner: %s)", abs, previous, owner), corei18n.Message{ID: "errors.transfer.state_path_value_conflicts_with_value_new_owner_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", abs), "Arg2": previous, "Arg3": owner}})
 		}
 	}
 	for _, candidate := range keys {
@@ -43,7 +46,7 @@ func PreserveFile(path string) (string, error) {
 		return "", err
 	}
 	if !stat.Mode().IsRegular() {
-		return "", fmt.Errorf("cannot preserve non-regular payload %q", path)
+		return "", diagnostic.Describe(fmt.Errorf("cannot preserve non-regular payload %q", path), corei18n.Message{ID: "errors.transfer.cannot_preserve_non_regular_payload_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", path)}})
 	}
 	for number := 0; ; number++ {
 		backup := path + ".unverified"

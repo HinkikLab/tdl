@@ -1,0 +1,422 @@
+{
+  "batch.config.examples.comment_range.discussion_scope": {
+    "other": "This selects discussion-group messages by ID; it does not limit comments to one post."
+  },
+  "batch.config.examples.comment_range.summary": {
+    "other": "02. Comment IDs 900 through 909 in the linked discussion group."
+  },
+  "batch.config.examples.direct_range.single_message": {
+    "other": "To download only ID 100, set end_comment to 101."
+  },
+  "batch.config.examples.direct_range.summary": {
+    "other": "01. Direct channel/group messages in [100, 110), including IDs 100 through 109."
+  },
+  "batch.config.examples.incremental_chat.lookback": {
+    "other": "Later runs look back 3,600 seconds. export_filter accepts an expr expression."
+  },
+  "batch.config.examples.incremental_chat.summary": {
+    "other": "03. Incrementally scan the whole chat; the first run scans up to 100,000 messages."
+  },
+  "batch.config.examples.incremental_comments.reply_id": {
+    "other": "reply_post_id=900 is the forwarded root message ID in that group, not channel post 100."
+  },
+  "batch.config.examples.incremental_comments.same_group": {
+    "other": "The chat and download source must refer to the same discussion group."
+  },
+  "batch.config.examples.incremental_comments.summary": {
+    "other": "05. Incrementally scan replies to one post in the linked discussion group."
+  },
+  "batch.config.examples.incremental_topic.explicit_topic": {
+    "other": "A topic ID in the URL does not enable topic filtering; set topic_id explicitly."
+  },
+  "batch.config.examples.incremental_topic.summary": {
+    "other": "04. Incrementally scan forum topic 200, whose ID is the topic's root message ID."
+  },
+  "batch.config.examples.linked_comments.post_limit": {
+    "other": "max_posts=0 processes the full window; confirmed dead bots/groups are skipped per run."
+  },
+  "batch.config.examples.linked_comments.summary": {
+    "other": "10. Incrementally archive linked resources from preview posts; search comments for links."
+  },
+  "batch.config.examples.linked_filtered.bot_interval": {
+    "other": "The same bot is requested 30 seconds after its last reply; download time counts toward this."
+  },
+  "batch.config.examples.linked_filtered.bot_timing": {
+    "other": "Increase idle and timeout for slower bot batches; idle must remain below timeout."
+  },
+  "batch.config.examples.linked_filtered.summary": {
+    "other": "11. Archive linked resources from main posts in [100, 110) matching either caption tag."
+  },
+  "batch.config.examples.linked_single.link_options.defaults": {
+    "other": "Defaults keep previews, scan comments, clean up this run's bot messages and replies,"
+  },
+  "batch.config.examples.linked_single.link_options.disable_retries": {
+    "other": "Setting rerequest_limit or flood_retries to 0 disables that retry type."
+  },
+  "batch.config.examples.linked_single.link_options.request_interval": {
+    "other": "bot_request_interval_seconds is measured from the bot's last reply; 0 disables it."
+  },
+  "batch.config.examples.linked_single.link_options.retry_limits": {
+    "other": "retry expired files up to 3 times and retry text flood waits up to 5 times."
+  },
+  "batch.config.examples.linked_single.multi_hop": {
+    "other": "Links may redirect through multiple hops; the output directory uses the main post caption."
+  },
+  "batch.config.examples.linked_single.source_url": {
+    "other": "Set chat_url to the main post URL, not a bot start link."
+  },
+  "batch.config.examples.linked_single.summary": {
+    "other": "09. Archive resources linked from one main post, including hidden links and URL buttons."
+  },
+  "batch.config.examples.tag_single.album_match": {
+    "other": "A match on any album member keeps the whole album; max_posts=1 previews one group."
+  },
+  "batch.config.examples.tag_single.history_limit": {
+    "other": "Set max_posts=0 to scan the full history."
+  },
+  "batch.config.examples.tag_single.summary": {
+    "other": "06. Archive photo/video posts whose captions contain the complete hashtag #教程."
+  },
+  "batch.config.examples.tags_all.summary": {
+    "other": "08. Incremental archive requiring both hashtags in one post or album caption."
+  },
+  "batch.config.examples.tags_all.timestamp_window": {
+    "other": "The complete window advances last_ts; keep max_posts=0 to avoid truncating the window."
+  },
+  "batch.config.examples.tags_any.metadata": {
+    "other": "write_metadata=false hides visible metadata while retaining internal resume records."
+  },
+  "batch.config.examples.tags_any.summary": {
+    "other": "07. Archive albums in [100, 110) whose captions contain either listed hashtag."
+  },
+  "batch.config.global.download_base": {
+    "other": "Download root; relative to the command working directory"
+  },
+  "batch.config.global.incremental": {
+    "other": "Timestamp-based scan; job setting overrides the global default"
+  },
+  "batch.config.global.jobs": {
+    "other": "Tasks execute in order; keep only the examples you need"
+  },
+  "batch.config.global.limit": {
+    "other": "Concurrent file downloads; positive; CLI flags take precedence"
+  },
+  "batch.config.global.namespace": {
+    "other": "Account namespace; explicit -n/--ns overrides it"
+  },
+  "batch.config.global.overlap_seconds": {
+    "other": "Incremental lookback in seconds; 0 disables overlap"
+  },
+  "batch.config.global.pool": {
+    "other": "Connection pool size; 0 is unlimited; CLI flags take precedence"
+  },
+  "batch.config.global.threads": {
+    "other": "Download threads per file; positive; CLI flags take precedence"
+  },
+  "batch.config.global.write_metadata": {
+    "other": "Write archive meta.json; job setting overrides the global default"
+  },
+  "batch.config.jobs.comment_range.chat_url": {
+    "other": "Source chat/post URL; linked archives require the main-post source"
+  },
+  "batch.config.jobs.comment_range.comment": {
+    "other": "true selects discussion-group comments; false selects chat messages"
+  },
+  "batch.config.jobs.comment_range.end_comment": {
+    "other": "Exclusive message ID; use start + 1 for a single message"
+  },
+  "batch.config.jobs.comment_range.start_comment": {
+    "other": "Inclusive message ID; use discussion-group IDs in comment mode"
+  },
+  "batch.config.jobs.comment_range.subdir": {
+    "other": "Relative subdirectory; use a distinct path for each job and its resume state"
+  },
+  "batch.config.jobs.direct_range.chat_url": {
+    "other": "Source chat/post URL; linked archives require the main-post source"
+  },
+  "batch.config.jobs.direct_range.comment": {
+    "other": "true selects discussion-group comments; false selects chat messages"
+  },
+  "batch.config.jobs.direct_range.end_comment": {
+    "other": "Exclusive message ID; use start + 1 for a single message"
+  },
+  "batch.config.jobs.direct_range.start_comment": {
+    "other": "Inclusive message ID; use discussion-group IDs in comment mode"
+  },
+  "batch.config.jobs.direct_range.subdir": {
+    "other": "Relative subdirectory; use a distinct path for each job and its resume state"
+  },
+  "batch.config.jobs.incremental_chat.chat_url": {
+    "other": "Source chat/post URL; linked archives require the main-post source"
+  },
+  "batch.config.jobs.incremental_chat.comment": {
+    "other": "true selects discussion-group comments; false selects chat messages"
+  },
+  "batch.config.jobs.incremental_chat.export_all": {
+    "other": "Include non-media messages in incremental exports; false exports media only"
+  },
+  "batch.config.jobs.incremental_chat.export_filter": {
+    "other": "Incremental expr filter; empty accepts all selected messages"
+  },
+  "batch.config.jobs.incremental_chat.incremental": {
+    "other": "Timestamp-based scan; job setting overrides the global default"
+  },
+  "batch.config.jobs.incremental_chat.overlap_seconds": {
+    "other": "Incremental lookback in seconds; 0 disables overlap"
+  },
+  "batch.config.jobs.incremental_chat.subdir": {
+    "other": "Relative subdirectory; use a distinct path for each job and its resume state"
+  },
+  "batch.config.jobs.incremental_chat.with_content": {
+    "other": "Include dates and text in the incremental export JSON"
+  },
+  "batch.config.jobs.incremental_comments.chat": {
+    "other": "Explicit export source; must match the resolved chat/discussion group"
+  },
+  "batch.config.jobs.incremental_comments.chat_url": {
+    "other": "Source chat/post URL; linked archives require the main-post source"
+  },
+  "batch.config.jobs.incremental_comments.comment": {
+    "other": "true selects discussion-group comments; false selects chat messages"
+  },
+  "batch.config.jobs.incremental_comments.incremental": {
+    "other": "Timestamp-based scan; job setting overrides the global default"
+  },
+  "batch.config.jobs.incremental_comments.reply_post_id": {
+    "other": "Forwarded root message ID in the discussion group, not the channel post ID"
+  },
+  "batch.config.jobs.incremental_comments.subdir": {
+    "other": "Relative subdirectory; use a distinct path for each job and its resume state"
+  },
+  "batch.config.jobs.incremental_comments.with_content": {
+    "other": "Include dates and text in the incremental export JSON"
+  },
+  "batch.config.jobs.incremental_topic.chat_url": {
+    "other": "Source chat/post URL; linked archives require the main-post source"
+  },
+  "batch.config.jobs.incremental_topic.comment": {
+    "other": "true selects discussion-group comments; false selects chat messages"
+  },
+  "batch.config.jobs.incremental_topic.incremental": {
+    "other": "Timestamp-based scan; job setting overrides the global default"
+  },
+  "batch.config.jobs.incremental_topic.subdir": {
+    "other": "Relative subdirectory; use a distinct path for each job and its resume state"
+  },
+  "batch.config.jobs.incremental_topic.topic_id": {
+    "other": "Forum topic root message ID; restricts incremental scans to that topic"
+  },
+  "batch.config.jobs.incremental_topic.with_content": {
+    "other": "Include dates and text in the incremental export JSON"
+  },
+  "batch.config.jobs.linked_comments.chat_url": {
+    "other": "Source chat/post URL; linked archives require the main-post source"
+  },
+  "batch.config.jobs.linked_comments.follow_links": {
+    "other": "Resolve resources through main-post/comment links, bots and groups"
+  },
+  "batch.config.jobs.linked_comments.incremental": {
+    "other": "Timestamp-based scan; job setting overrides the global default"
+  },
+  "batch.config.jobs.linked_comments.link_options": {
+    "other": "Linked-resource resolution settings; used only with follow_links"
+  },
+  "batch.config.jobs.linked_comments.link_options.cleanup_bot_messages": {
+    "other": "Delete this run's bot requests and collected replies after processing; default true"
+  },
+  "batch.config.jobs.linked_comments.link_options.scan_comments": {
+    "other": "Search linked discussion comments for resource links; default true"
+  },
+  "batch.config.jobs.linked_comments.max_posts": {
+    "other": "Maximum archive groups; 0 processes the full window; use 0 for incremental jobs"
+  },
+  "batch.config.jobs.linked_comments.subdir": {
+    "other": "Relative subdirectory; use a distinct path for each job and its resume state"
+  },
+  "batch.config.jobs.linked_filtered.chat_url": {
+    "other": "Source chat/post URL; linked archives require the main-post source"
+  },
+  "batch.config.jobs.linked_filtered.end_comment": {
+    "other": "Exclusive message ID; use start + 1 for a single message"
+  },
+  "batch.config.jobs.linked_filtered.follow_links": {
+    "other": "Resolve resources through main-post/comment links, bots and groups"
+  },
+  "batch.config.jobs.linked_filtered.incremental": {
+    "other": "Timestamp-based scan; job setting overrides the global default"
+  },
+  "batch.config.jobs.linked_filtered.link_options": {
+    "other": "Linked-resource resolution settings; used only with follow_links"
+  },
+  "batch.config.jobs.linked_filtered.link_options.bot_idle_seconds": {
+    "other": "Stop collecting after this many idle seconds following a reply"
+  },
+  "batch.config.jobs.linked_filtered.link_options.bot_request_interval_seconds": {
+    "other": "Seconds since the same bot's last reply before next request; 0 disables"
+  },
+  "batch.config.jobs.linked_filtered.link_options.bot_timeout_seconds": {
+    "other": "Maximum wait per bot request in seconds; must exceed idle time"
+  },
+  "batch.config.jobs.linked_filtered.link_options.cleanup_bot_messages": {
+    "other": "Delete this run's bot requests and collected replies after processing; default true"
+  },
+  "batch.config.jobs.linked_filtered.link_options.flood_retries": {
+    "other": "Retries for bot text flood limits; default 5; 0 disables"
+  },
+  "batch.config.jobs.linked_filtered.link_options.max_depth": {
+    "other": "Maximum link traversal depth; default 8, maximum 32"
+  },
+  "batch.config.jobs.linked_filtered.link_options.rerequest_limit": {
+    "other": "Retries for expired/deleted resource files; default 3; 0 disables"
+  },
+  "batch.config.jobs.linked_filtered.max_posts": {
+    "other": "Maximum archive groups; 0 processes the full window; use 0 for incremental jobs"
+  },
+  "batch.config.jobs.linked_filtered.start_comment": {
+    "other": "Inclusive message ID; use discussion-group IDs in comment mode"
+  },
+  "batch.config.jobs.linked_filtered.subdir": {
+    "other": "Relative subdirectory; use a distinct path for each job and its resume state"
+  },
+  "batch.config.jobs.linked_filtered.tag_match": {
+    "other": "any matches one tag; all requires every tag in the post/album"
+  },
+  "batch.config.jobs.linked_filtered.tags": {
+    "other": "Caption hashtags; linked jobs filter main posts; keep quoted # values"
+  },
+  "batch.config.jobs.linked_single.chat_url": {
+    "other": "Source chat/post URL; linked archives require the main-post source"
+  },
+  "batch.config.jobs.linked_single.follow_links": {
+    "other": "Resolve resources through main-post/comment links, bots and groups"
+  },
+  "batch.config.jobs.linked_single.incremental": {
+    "other": "Timestamp-based scan; job setting overrides the global default"
+  },
+  "batch.config.jobs.linked_single.link_options": {
+    "other": "Linked-resource resolution settings; used only with follow_links"
+  },
+  "batch.config.jobs.linked_single.link_options.bot_idle_seconds": {
+    "other": "Stop collecting after this many idle seconds following a reply"
+  },
+  "batch.config.jobs.linked_single.link_options.bot_request_interval_seconds": {
+    "other": "Seconds since the same bot's last reply before next request; 0 disables"
+  },
+  "batch.config.jobs.linked_single.link_options.bot_timeout_seconds": {
+    "other": "Maximum wait per bot request in seconds; must exceed idle time"
+  },
+  "batch.config.jobs.linked_single.link_options.cleanup_bot_messages": {
+    "other": "Delete this run's bot requests and collected replies after processing; default true"
+  },
+  "batch.config.jobs.linked_single.link_options.comment_limit": {
+    "other": "Maximum comments scanned per main post; default 100"
+  },
+  "batch.config.jobs.linked_single.link_options.flood_retries": {
+    "other": "Retries for bot text flood limits; default 5; 0 disables"
+  },
+  "batch.config.jobs.linked_single.link_options.flood_wait_seconds": {
+    "other": "Fallback wait when no flood duration is supplied, in seconds; default 30"
+  },
+  "batch.config.jobs.linked_single.link_options.include_previews": {
+    "other": "Also download main-post preview media; default true"
+  },
+  "batch.config.jobs.linked_single.link_options.max_bot_messages": {
+    "other": "Maximum replies collected per bot request; default 500"
+  },
+  "batch.config.jobs.linked_single.link_options.max_depth": {
+    "other": "Maximum link traversal depth; default 8, maximum 32"
+  },
+  "batch.config.jobs.linked_single.link_options.max_flood_wait_seconds": {
+    "other": "Maximum accepted bot text flood wait in seconds; default 3600"
+  },
+  "batch.config.jobs.linked_single.link_options.max_links": {
+    "other": "Maximum links resolved per main post; default 100, maximum 1000"
+  },
+  "batch.config.jobs.linked_single.link_options.max_topic_messages": {
+    "other": "Maximum messages scanned per linked topic; default 1000"
+  },
+  "batch.config.jobs.linked_single.link_options.poll_interval_ms": {
+    "other": "Bot reply polling interval in milliseconds; default 500"
+  },
+  "batch.config.jobs.linked_single.link_options.rerequest_limit": {
+    "other": "Retries for expired/deleted resource files; default 3; 0 disables"
+  },
+  "batch.config.jobs.linked_single.link_options.scan_comments": {
+    "other": "Search linked discussion comments for resource links; default true"
+  },
+  "batch.config.jobs.linked_single.subdir": {
+    "other": "Relative subdirectory; use a distinct path for each job and its resume state"
+  },
+  "batch.config.jobs.tag_single.chat_url": {
+    "other": "Source chat/post URL; linked archives require the main-post source"
+  },
+  "batch.config.jobs.tag_single.max_posts": {
+    "other": "Maximum archive groups; 0 processes the full window; use 0 for incremental jobs"
+  },
+  "batch.config.jobs.tag_single.subdir": {
+    "other": "Relative subdirectory; use a distinct path for each job and its resume state"
+  },
+  "batch.config.jobs.tag_single.tag": {
+    "other": "Complete caption hashtag; quote values beginning with #"
+  },
+  "batch.config.jobs.tags_all.chat_url": {
+    "other": "Source chat/post URL; linked archives require the main-post source"
+  },
+  "batch.config.jobs.tags_all.incremental": {
+    "other": "Timestamp-based scan; job setting overrides the global default"
+  },
+  "batch.config.jobs.tags_all.max_posts": {
+    "other": "Maximum archive groups; 0 processes the full window; use 0 for incremental jobs"
+  },
+  "batch.config.jobs.tags_all.subdir": {
+    "other": "Relative subdirectory; use a distinct path for each job and its resume state"
+  },
+  "batch.config.jobs.tags_all.tag_match": {
+    "other": "any matches one tag; all requires every tag in the post/album"
+  },
+  "batch.config.jobs.tags_all.tags": {
+    "other": "Caption hashtags; linked jobs filter main posts; keep quoted # values"
+  },
+  "batch.config.jobs.tags_any.chat_url": {
+    "other": "Source chat/post URL; linked archives require the main-post source"
+  },
+  "batch.config.jobs.tags_any.end_comment": {
+    "other": "Exclusive message ID; use start + 1 for a single message"
+  },
+  "batch.config.jobs.tags_any.max_posts": {
+    "other": "Maximum archive groups; 0 processes the full window; use 0 for incremental jobs"
+  },
+  "batch.config.jobs.tags_any.start_comment": {
+    "other": "Inclusive message ID; use discussion-group IDs in comment mode"
+  },
+  "batch.config.jobs.tags_any.subdir": {
+    "other": "Relative subdirectory; use a distinct path for each job and its resume state"
+  },
+  "batch.config.jobs.tags_any.tag_match": {
+    "other": "any matches one tag; all requires every tag in the post/album"
+  },
+  "batch.config.jobs.tags_any.tags": {
+    "other": "Caption hashtags; linked jobs filter main posts; keep quoted # values"
+  },
+  "batch.config.jobs.tags_any.write_metadata": {
+    "other": "Write archive meta.json; job setting overrides the global default"
+  },
+  "batch.config.overview.check_only": {
+    "other": "Run `tdl batch -c config.yaml --check-only` before downloading."
+  },
+  "batch.config.overview.defaults": {
+    "other": "Defaults: pool=16, threads=8, limit=4, overlap_seconds=3600."
+  },
+  "batch.config.overview.forum_home": {
+    "other": "A private forum home URL without a topic selector scans all topics."
+  },
+  "batch.config.overview.metadata": {
+    "other": "Archive metadata defaults to meta.json; write_metadata=false disables visible metadata."
+  },
+  "batch.config.overview.overview": {
+    "other": "Batch examples: keep the jobs you need and replace the example chats, IDs and tags."
+  },
+  "batch.config.overview.paths": {
+    "other": "Paths are relative to the command's working directory. Give each job its own subdir."
+  }
+}

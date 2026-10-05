@@ -1,0 +1,515 @@
+{
+  "cli.root.short": {
+    "other": "Telegram Downloader, but more than a downloader"
+  },
+  "cli.group.account": {
+    "other": "Account related"
+  },
+  "cli.group.tools": {
+    "other": "Tools"
+  },
+  "cli.group.extensions": {
+    "other": "Extensions"
+  },
+  "cli.command.batch.short": {
+    "other": "Batch download messages, comments, caption tags or linked resources"
+  },
+  "cli.command.batch.long": {
+    "other": "Batch download Telegram messages, comments, caption-tag archives or\nlinked resources described by config.yaml. Run \"tdl batch init\" to generate\nannotated examples of all modes, compatible with the native batch parser.\n\nWithout --config, config.yaml is preferred in the working directory, followed\nby config.yml and the legacy config.json. Running bare tdl (without any argument)\nstarts this command automatically when such a config exists and the account is logged in.\n\nAll job types support ID ranges or incremental time windows. Message jobs\nrecord finished IDs; incremental archives record last_ts and validate saved files.\nPartial downloads keep their parts so only missing parts are fetched again."
+  },
+  "cli.command.batch.init.short": {
+    "other": "Generate an annotated config.yaml with examples of every batch mode"
+  },
+  "cli.command.batch.init.long": {
+    "other": "Generate a valid YAML configuration containing direct message ranges,\ncomment ranges, incremental chat/topic/reply jobs, caption tag archives and\nlinked-resource archives. Keep the jobs you need and replace the example URLs,\nIDs and tags before running batch. Explanations are YAML comments; the comment\nfield selects comment mode. Legacy JSON configs are still accepted. No Telegram\nconnection or login is required.\n\nComment language follows the global --language setting unless --lang is set.\nUse --lang zh or --lang en to select the language of generated comments.\n\nExisting configurations are preserved unless --force is specified."
+  },
+  "cli.command.batch.init.example": {
+    "other": "  tdl batch init\n  tdl batch init --lang zh\n  tdl batch init --lang en -c examples/config.yaml\n  tdl batch init -c config.yaml --force"
+  },
+  "cli.command.login.short": {
+    "other": "Login to Telegram"
+  },
+  "cli.command.download.short": {
+    "other": "Download anything from Telegram (protected) chat"
+  },
+  "cli.command.forward.short": {
+    "other": "Forward messages with automatic fallback and message routing"
+  },
+  "cli.command.upload.short": {
+    "other": "Upload anything to Telegram"
+  },
+  "cli.command.chat.short": {
+    "other": "A set of chat tools"
+  },
+  "cli.command.chat.download_tag.short": {
+    "other": "Download photo/video posts matching a caption hashtag"
+  },
+  "cli.command.chat.ls.short": {
+    "other": "List your chats"
+  },
+  "cli.command.chat.export.short": {
+    "other": "export messages from (protected) chat for download"
+  },
+  "cli.command.chat.users.short": {
+    "other": "export users from (protected) channels"
+  },
+  "cli.command.backup.short": {
+    "other": "Backup your data"
+  },
+  "cli.command.recover.short": {
+    "other": "Recover your data"
+  },
+  "cli.command.migrate.short": {
+    "other": "Migrate your current data to another storage"
+  },
+  "cli.command.gen.short": {
+    "other": "A set of gen tools"
+  },
+  "cli.command.gen.doc.short": {
+    "other": "Generate doc"
+  },
+  "cli.command.update.short": {
+    "other": "Update tdl to the latest version"
+  },
+  "cli.command.update.long": {
+    "other": "Update tdl in place by downloading a release from GitHub,\nverifying its checksum and replacing the current binary.\n\nExamples:\n  tdl update                     # install latest verified release\n  tdl update --dry-run           # report availability only\n  tdl update --version v0.20.4   # install an exact release\n  tdl update --force             # reinstall / allow downgrade"
+  },
+  "cli.command.version.short": {
+    "other": "Check the version info"
+  },
+  "cli.command.extension.short": {
+    "other": "Manage tdl extensions"
+  },
+  "cli.command.extension.list.short": {
+    "other": "List installed extension commands"
+  },
+  "cli.command.extension.install.short": {
+    "other": "Install a tdl extension"
+  },
+  "cli.command.extension.upgrade.short": {
+    "other": "Upgrade a tdl extension"
+  },
+  "cli.command.extension.remove.short": {
+    "other": "Remove a tdl extension"
+  },
+  "cli.help.usage": {
+    "other": "Usage:"
+  },
+  "cli.help.aliases": {
+    "other": "Aliases:"
+  },
+  "cli.help.examples": {
+    "other": "Examples:"
+  },
+  "cli.help.available_commands": {
+    "other": "Available Commands:"
+  },
+  "cli.help.additional_commands": {
+    "other": "Additional Commands:"
+  },
+  "cli.help.flags": {
+    "other": "Flags:"
+  },
+  "cli.help.global_flags": {
+    "other": "Global Flags:"
+  },
+  "cli.help.additional_help_topics": {
+    "other": "Additional help topics:"
+  },
+  "cli.help.more_information": {
+    "other": "Use \"{{.CommandPath}} [command] --help\" for more information about a command."
+  },
+  "cli.help.use_command": {
+    "other": "Use"
+  },
+  "cli.help.more_information_tail": {
+    "other": "for more information about a command."
+  },
+  "cli.flags.help.description": {
+    "other": "help for {{.Command}}"
+  },
+  "cli.flags.root.storage.description": {
+    "other": "storage options, format: type=driver,key1=value1,key2=value2. Available drivers: [bolt,legacy]"
+  },
+  "cli.flags.root.proxy.description": {
+    "other": "proxy address, format: protocol://username:password@host:port"
+  },
+  "cli.flags.root.ns.description": {
+    "other": "namespace for Telegram session"
+  },
+  "cli.flags.root.debug.description": {
+    "other": "enable debug mode"
+  },
+  "cli.flags.root.size.description": {
+    "other": "part size for transfer"
+  },
+  "cli.flags.root.threads.description": {
+    "other": "max threads for transfer one item"
+  },
+  "cli.flags.root.limit.description": {
+    "other": "max number of concurrent tasks"
+  },
+  "cli.flags.root.pool.description": {
+    "other": "specify the size of the DC pool, zero means infinity"
+  },
+  "cli.flags.root.delay.description": {
+    "other": "delay between each task, zero means no delay"
+  },
+  "cli.flags.root.ntp.description": {
+    "other": "ntp server host, if not set, use system time"
+  },
+  "cli.flags.root.reconnect_timeout.description": {
+    "other": "Telegram client reconnection backoff timeout, infinite if set to 0"
+  },
+  "cli.flags.root.disable_progress_ps.description": {
+    "other": "disable progress ps, which may cause display issues in some terminals"
+  },
+  "cli.flags.root.language.description": {
+    "other": "output language: auto, zh or en; Chinese regions and scripts use Simplified Chinese"
+  },
+  "cli.flags.batch.config.description": {
+    "other": "config file path (default: config.yaml; legacy JSON is accepted)"
+  },
+  "cli.flags.batch.check_only.description": {
+    "other": "only check and report what would be downloaded"
+  },
+  "cli.flags.batch.validate_only.description": {
+    "other": "validate the configuration and options offline without opening account storage"
+  },
+  "cli.flags.batch.yes.description": {
+    "other": "answer yes to every confirmation"
+  },
+  "cli.flags.batch.mode.description": {
+    "other": "download mode: [auto, comment, direct] (overrides the \"comment\" setting of a job)"
+  },
+  "cli.flags.batch.incremental.description": {
+    "other": "force incremental mode for every job"
+  },
+  "cli.flags.batch.state_file.description": {
+    "other": "state file path (default: <download dir>/tdl_state.json)"
+  },
+  "cli.flags.batch.overlap_seconds.description": {
+    "other": "incremental lookback window in seconds"
+  },
+  "cli.flags.batch.retry_skipped.description": {
+    "other": "retry messages that were previously recorded as unavailable"
+  },
+  "cli.flags.batch.dir.description": {
+    "other": "override the download directory of every job"
+  },
+  "cli.flags.batch.template.description": {
+    "other": "download file name template"
+  },
+  "cli.flags.batch.include.description": {
+    "other": "include the specified file extensions"
+  },
+  "cli.flags.batch.exclude.description": {
+    "other": "exclude the specified file extensions"
+  },
+  "cli.flags.batch.takeout.description": {
+    "other": "use takeout sessions, which have lower flood wait limits"
+  },
+  "cli.flags.batch.batch_threads.description": {
+    "other": "max threads for one file (overrides the config and -t)"
+  },
+  "cli.flags.batch.batch_limit.description": {
+    "other": "max concurrent files (overrides the config and -l)"
+  },
+  "cli.flags.batch.batch_pool.description": {
+    "other": "connection pool size (overrides the config and --pool)"
+  },
+  "cli.flags.batch.init.config.description": {
+    "other": "path for the generated YAML config"
+  },
+  "cli.flags.batch.init.force.description": {
+    "other": "replace an existing config file"
+  },
+  "cli.flags.batch.init.lang.description": {
+    "other": "comment language: auto, zh or en"
+  },
+  "cli.flags.login.type.description": {
+    "other": "login mode: [code, desktop]"
+  },
+  "cli.flags.login.desktop.description": {
+    "other": "official desktop client path, and automatically find possible paths if empty"
+  },
+  "cli.flags.login.passcode.description": {
+    "other": "passcode for desktop client, keep empty if no passcode"
+  },
+  "cli.flags.login.code.description": {
+    "other": "login with code, instead of importing session from desktop client"
+  },
+  "cli.flags.download.url.description": {
+    "other": "telegram message links"
+  },
+  "cli.flags.download.file.description": {
+    "other": "official client exported files"
+  },
+  "cli.flags.download.template.description": {
+    "other": "download file name template"
+  },
+  "cli.flags.download.include.description": {
+    "other": "include the specified file extensions, and only judge by file name, not file MIME. Example: -i mp4,mp3"
+  },
+  "cli.flags.download.exclude.description": {
+    "other": "exclude the specified file extensions, and only judge by file name, not file MIME. Example: -e png,jpg"
+  },
+  "cli.flags.download.dir.description": {
+    "other": "specify the download directory. If the directory does not exist, it will be created automatically"
+  },
+  "cli.flags.download.rewrite_ext.description": {
+    "other": "rewrite file extension according to file header MIME"
+  },
+  "cli.flags.download.skip_same.description": {
+    "other": "skip files with the same name(without extension) and size"
+  },
+  "cli.flags.download.desc.description": {
+    "other": "download files from the newest to the oldest ones (may affect resume download)"
+  },
+  "cli.flags.download.takeout.description": {
+    "other": "takeout sessions let you export data from your account with lower flood wait limits."
+  },
+  "cli.flags.download.group.description": {
+    "other": "auto detect grouped message and download all of them"
+  },
+  "cli.flags.download.continue.description": {
+    "other": "continue the last download directly"
+  },
+  "cli.flags.download.restart.description": {
+    "other": "restart the last download directly"
+  },
+  "cli.flags.download.serve.description": {
+    "other": "serve the media files as a http server instead of downloading them with built-in downloader"
+  },
+  "cli.flags.download.port.description": {
+    "other": "http server port"
+  },
+  "cli.flags.forward.from.description": {
+    "other": "messages to be forwarded, can be links or exported JSON files"
+  },
+  "cli.flags.forward.to.description": {
+    "other": "destination peer, can be a CHAT or router based on expression engine"
+  },
+  "cli.flags.forward.edit.description": {
+    "other": "edit message or caption with expression engine. Empty means no edit"
+  },
+  "cli.flags.forward.mode.description": {
+    "other": "forward mode: [{{.Modes}}]"
+  },
+  "cli.flags.forward.silent.description": {
+    "other": "send messages silently"
+  },
+  "cli.flags.forward.dry_run.description": {
+    "other": "do not actually send messages, just show how they would be sent"
+  },
+  "cli.flags.forward.single.description": {
+    "other": "do not automatically detect and forward grouped messages"
+  },
+  "cli.flags.forward.desc.description": {
+    "other": "forward messages in reverse order for each input peer"
+  },
+  "cli.flags.upload.chat.description": {
+    "other": "chat id or domain, and empty means 'Saved Messages'. Can be used together with --topic flag. Conflicts with --to flag."
+  },
+  "cli.flags.upload.topic.description": {
+    "other": "specify topic id. Must be used together with --chat flag. Conflicts with --to flag."
+  },
+  "cli.flags.upload.to.description": {
+    "other": "destination peer, can be a CHAT or router based on expression engine. Conflicts with --chat and --topic flag."
+  },
+  "cli.flags.upload.path.description": {
+    "other": "dirs or files"
+  },
+  "cli.flags.upload.include.description": {
+    "other": "include the specified file extensions"
+  },
+  "cli.flags.upload.exclude.description": {
+    "other": "exclude the specified file extensions"
+  },
+  "cli.flags.upload.rm.description": {
+    "other": "remove the uploaded files after uploading"
+  },
+  "cli.flags.upload.photo.description": {
+    "other": "upload the image as a photo instead of a file"
+  },
+  "cli.flags.upload.caption.description": {
+    "other": "caption for the uploaded media"
+  },
+  "cli.flags.chat.download_tag.chat.description": {
+    "other": "Telegram chat/topic URL, username or numeric chat ID"
+  },
+  "cli.flags.chat.download_tag.topic.description": {
+    "other": "scan only this forum topic ID"
+  },
+  "cli.flags.chat.download_tag.tag.description": {
+    "other": "hashtag in the media caption, with or without #"
+  },
+  "cli.flags.chat.download_tag.tags.description": {
+    "other": "multiple hashtags; a comma-separated list is accepted"
+  },
+  "cli.flags.chat.download_tag.tag_match.description": {
+    "other": "match mode for multiple tags: any or all"
+  },
+  "cli.flags.chat.download_tag.dir.description": {
+    "other": "archive directory"
+  },
+  "cli.flags.chat.download_tag.check_only.description": {
+    "other": "list matching posts without writing files"
+  },
+  "cli.flags.chat.download_tag.write_metadata.description": {
+    "other": "write per-post meta.json metadata"
+  },
+  "cli.flags.chat.download_tag.takeout.description": {
+    "other": "use a Telegram takeout session for downloads"
+  },
+  "cli.flags.chat.download_tag.max_posts.description": {
+    "other": "stop after this many matching posts (0 scans all history)"
+  },
+  "cli.flags.chat.ls.output.description": {
+    "other": "output format: [table, json]"
+  },
+  "cli.flags.chat.ls.filter.description": {
+    "other": "filter chats by expression"
+  },
+  "cli.flags.chat.export.type.description": {
+    "other": "export type: [time, id, last]"
+  },
+  "cli.flags.chat.export.chat.description": {
+    "other": "chat id or domain. If not specified, 'Saved Messages' will be used"
+  },
+  "cli.flags.chat.export.topic.description": {
+    "other": "specify topic id"
+  },
+  "cli.flags.chat.export.reply.description": {
+    "other": "specify channel post id"
+  },
+  "cli.flags.chat.export.input.description": {
+    "other": "input data, depends on export type"
+  },
+  "cli.flags.chat.export.filter.description": {
+    "other": "filter messages by expression, defaults to match all messages. Specify '-' to see available fields"
+  },
+  "cli.flags.chat.export.output.description": {
+    "other": "output JSON file path"
+  },
+  "cli.flags.chat.export.with_content.description": {
+    "other": "export with message content"
+  },
+  "cli.flags.chat.export.raw.description": {
+    "other": "export raw message struct of Telegram MTProto API, useful for debugging"
+  },
+  "cli.flags.chat.export.all.description": {
+    "other": "export all messages including non-media messages, but still affected by filter and type flag"
+  },
+  "cli.flags.chat.users.output.description": {
+    "other": "output JSON file path"
+  },
+  "cli.flags.chat.users.chat.description": {
+    "other": "domain id (channels, supergroups, etc.)"
+  },
+  "cli.flags.chat.users.raw.description": {
+    "other": "export raw message struct of Telegram MTProto API, useful for debugging"
+  },
+  "cli.flags.backup.dst.description": {
+    "other": "destination file path. Default: <date>.backup.tdl"
+  },
+  "cli.flags.recover.file.description": {
+    "other": "backup file path"
+  },
+  "cli.flags.migrate.to.description": {
+    "other": "destination storage options, format: type=driver,key1=value1,key2=value2. Available drivers: [bolt,legacy]"
+  },
+  "cli.flags.gen.doc.dir.description": {
+    "other": "dir to generate doc"
+  },
+  "cli.flags.update.yes.description": {
+    "other": "update without confirmation prompt"
+  },
+  "cli.flags.update.dry_run.description": {
+    "other": "report whether an update is available without downloading"
+  },
+  "cli.flags.update.version.description": {
+    "other": "install a specific release tag instead of the latest (e.g. v0.20.4)"
+  },
+  "cli.flags.update.force.description": {
+    "other": "reinstall even when up to date; also allows downgrades"
+  },
+  "cli.flags.extension.dry_run.description": {
+    "other": "only print what would be done without actually doing it"
+  },
+  "cli.flags.extension.install.force.description": {
+    "other": "force install even if extension already exists"
+  },
+  "cli.command.extension_child.short": {
+    "other": "Extension {{.Name}}"
+  },
+  "cli.help.default_value": {
+    "other": "default {{.Value}}"
+  },
+  "cli.deprecated.flag_warning": {
+    "other": "Flag --{{.Name}} has been deprecated, {{.Reason}}"
+  },
+  "cli.deprecated.shorthand_warning": {
+    "other": "Flag shorthand -{{.Name}} has been deprecated, {{.Reason}}"
+  },
+  "cli.deprecated.command_warning": {
+    "other": "Command {{.Name}} is deprecated, {{.Reason}}"
+  },
+  "cli.flags.root.size.deprecated": {
+    "other": "part size has been set to maximum by default, this flag will be removed in the future"
+  },
+  "cli.flags.login.code.deprecated": {
+    "other": "use `-T code` instead"
+  },
+  "cli.command.completion.bash.long": {
+    "other": "Generate the autocompletion script for the bash shell.\n\nThis script depends on the 'bash-completion' package.\nIf it is not installed already, you can install it via your OS's package manager.\n\nTo load completions in your current shell session:\n\n\tsource <(tdl completion bash)\n\nTo load completions for every new session, execute once:\n\n#### Linux:\n\n\ttdl completion bash > /etc/bash_completion.d/tdl\n\n#### macOS:\n\n\ttdl completion bash > $(brew --prefix)/etc/bash_completion.d/tdl\n\nYou will need to start a new shell for this setup to take effect.\n"
+  },
+  "cli.command.completion.bash.short": {
+    "other": "Generate the autocompletion script for bash"
+  },
+  "cli.command.completion.fish.long": {
+    "other": "Generate the autocompletion script for the fish shell.\n\nTo load completions in your current shell session:\n\n\ttdl completion fish | source\n\nTo load completions for every new session, execute once:\n\n\ttdl completion fish > ~/.config/fish/completions/tdl.fish\n\nYou will need to start a new shell for this setup to take effect.\n"
+  },
+  "cli.command.completion.fish.short": {
+    "other": "Generate the autocompletion script for fish"
+  },
+  "cli.command.completion.long": {
+    "other": "Generate the autocompletion script for tdl for the specified shell.\nSee each sub-command's help for details on how to use the generated script.\n"
+  },
+  "cli.command.completion.powershell.long": {
+    "other": "Generate the autocompletion script for powershell.\n\nTo load completions in your current shell session:\n\n\ttdl completion powershell | Out-String | Invoke-Expression\n\nTo load completions for every new session, add the output of the above command\nto your powershell profile.\n"
+  },
+  "cli.command.completion.powershell.short": {
+    "other": "Generate the autocompletion script for powershell"
+  },
+  "cli.command.completion.short": {
+    "other": "Generate the autocompletion script for the specified shell"
+  },
+  "cli.command.completion.zsh.long": {
+    "other": "Generate the autocompletion script for the zsh shell.\n\nIf shell completion is not already enabled in your environment you will need\nto enable it.  You can execute the following once:\n\n\techo \"autoload -U compinit; compinit\" >> ~/.zshrc\n\nTo load completions in your current shell session:\n\n\tsource <(tdl completion zsh)\n\nTo load completions for every new session, execute once:\n\n#### Linux:\n\n\ttdl completion zsh > \"${fpath[1]}/_tdl\"\n\n#### macOS:\n\n\ttdl completion zsh > $(brew --prefix)/share/zsh/site-functions/_tdl\n\nYou will need to start a new shell for this setup to take effect.\n"
+  },
+  "cli.command.completion.zsh.short": {
+    "other": "Generate the autocompletion script for zsh"
+  },
+  "cli.command.help.long": {
+    "other": "Help provides help for any command in the application.\nSimply type tdl help [path to command] for full details."
+  },
+  "cli.command.help.short": {
+    "other": "Help about any command"
+  },
+  "cli.flags.completion.bash.no_descriptions.description": {
+    "other": "Disable completion descriptions"
+  },
+  "cli.flags.completion.fish.no_descriptions.description": {
+    "other": "Disable completion descriptions"
+  },
+  "cli.flags.completion.powershell.no_descriptions.description": {
+    "other": "Disable completion descriptions"
+  },
+  "cli.flags.completion.zsh.no_descriptions.description": {
+    "other": "Disable completion descriptions"
+  },
+  "cli.help.unknown_topic": {
+    "other": "Unknown help topic {{.Topics}}"
+  }
+}

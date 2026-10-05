@@ -1,0 +1,140 @@
+{
+  "chat.target.unnamed": {
+    "other": "聊天"
+  },
+  "chat.target.topic": {
+    "other": "{{.Label}} / 话题 {{.ID}}"
+  },
+  "chat.target.all_topics": {
+    "other": "{{.Label}} / 全部话题"
+  },
+  "batch.summary": {
+    "other": "{{.Jobs}} 个任务；账号命名空间={{.Namespace}} 连接池={{.Pool}} 下载线程={{.Threads}} 并发任务={{.Limit}}"
+  },
+  "batch.never": {
+    "other": "从未扫描"
+  },
+  "batch.empty": {
+    "other": "空"
+  },
+  "version.version": {
+    "other": "版本"
+  },
+  "version.commit": {
+    "other": "提交"
+  },
+  "version.date": {
+    "other": "日期"
+  },
+  "serve.title": {
+    "other": "tdl 文件服务（测试版）"
+  },
+  "serve.files": {
+    "other": "文件"
+  },
+  "serve.hint": {
+    "other": "可以使用嗅探工具下载全部文件"
+  },
+  "bot.timeout.no_actionable": {
+    "other": "未收到可处理的资源"
+  },
+  "bot.timeout.unsettled": {
+    "other": "资源回复尚未稳定"
+  },
+  "bot.timeout.no_content": {
+    "other": "\"没有回复内容\""
+  },
+  "fields.id_of_dialog": {
+    "other": "聊天 ID"
+  },
+  "fields.type_of_dialog_can_be_private_channel_or_group": {
+    "other": "聊天类型，可为 'private'、'channel' 或 'group'"
+  },
+  "fields.title_of_channel_and_group_first_and_last_name_of_user_if_empty_output": {
+    "other": "频道和群组标题，用户姓名；为空时输出 '-'"
+  },
+  "fields.username_of_dialog_if_empty_output": {
+    "other": "聊天用户名；为空时输出 '-'"
+  },
+  "fields.topics_of_dialog_if_not_set_output": {
+    "other": "聊天话题；未设置时输出 '-'"
+  },
+  "fields.id_of_topic": {
+    "other": "话题 ID"
+  },
+  "fields.title_of_topic": {
+    "other": "话题标题"
+  },
+  "fields.username_of_dialog": {
+    "other": "聊天用户名"
+  },
+  "fields.title_of_channel_and_group_first_and_last_name_of_user": {
+    "other": "频道和群组标题，用户姓名"
+  },
+  "fields.file_path": {
+    "other": "文件路径"
+  },
+  "fields.file_name": {
+    "other": "文件名"
+  },
+  "fields.file_extension": {
+    "other": "文件扩展名"
+  },
+  "fields.thumbnail_path": {
+    "other": "缩略图路径"
+  },
+  "fields.file_mime_type": {
+    "other": "文件 MIME 类型"
+  },
+  "fields.whether_we_were_mentioned_in_this_message": {
+    "other": "消息是否提及当前用户"
+  },
+  "fields.whether_this_is_a_silent_message_no_notification_triggered": {
+    "other": "是否为静默消息（不触发通知）"
+  },
+  "fields.whether_this_is_a_scheduled_message": {
+    "other": "是否为定时消息"
+  },
+  "fields.whether_this_message_is_pinned": {
+    "other": "消息是否已置顶"
+  },
+  "fields.id_of_the_message": {
+    "other": "消息 ID"
+  },
+  "fields.id_of_the_sender_of_the_message": {
+    "other": "消息发送者 ID"
+  },
+  "fields.date_of_the_message": {
+    "other": "消息日期"
+  },
+  "fields.the_message": {
+    "other": "消息文本"
+  },
+  "fields.media_attachment": {
+    "other": "媒体附件"
+  },
+  "fields.view_count": {
+    "other": "查看次数"
+  },
+  "fields.forward_count": {
+    "other": "转发次数"
+  },
+  "fields.file_size_unit_byte": {
+    "other": "文件大小，单位：字节"
+  },
+  "fields.dc_id": {
+    "other": "数据中心 ID"
+  },
+  "progress.cpu": {
+    "other": "CPU：{{.Value}}%"
+  },
+  "progress.memory": {
+    "other": "内存：{{.Value}}"
+  },
+  "progress.goroutines": {
+    "other": "协程：{{.Count}}"
+  },
+  "progress.eta": {
+    "other": "预计剩余"
+  }
+}

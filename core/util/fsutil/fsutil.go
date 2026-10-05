@@ -5,6 +5,9 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 func GetNameWithoutExt(path string) string {
@@ -28,11 +31,11 @@ func AddPrefixDot(ext string) string {
 // would escape the configured output directory.
 func JoinWithin(dir, name string) (string, error) {
 	if strings.TrimSpace(name) == "" {
-		return "", fmt.Errorf("generated path is empty")
+		return "", diagnostic.Describe(fmt.Errorf("generated path is empty"), corei18n.Message{ID: "errors.message.generated_path_is_empty"})
 	}
 	clean := filepath.Clean(name)
 	if filepath.IsAbs(clean) || filepath.VolumeName(clean) != "" || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-		return "", fmt.Errorf("generated path escapes the output directory: %q", name)
+		return "", diagnostic.Describe(fmt.Errorf("generated path escapes the output directory: %q", name), corei18n.Message{ID: "errors.message.generated_path_escapes_the_output_directory_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", name)}})
 	}
 	return filepath.Join(dir, clean), nil
 }

@@ -11,11 +11,13 @@ import (
 	"github.com/gotd/td/telegram/query"
 	"github.com/gotd/td/tg"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/util/tgref"
 )
 
 // ErrMessageDeleted is returned when a message is detected as deleted.
-var ErrMessageDeleted = errors.New("message may be deleted")
+var ErrMessageDeleted = diagnostic.Describe(errors.New("message may be deleted"), corei18n.Message{ID: "errors.message.message_may_be_deleted"})
 
 // ParseMessageLink return dialog id, msg id, error
 func ParseMessageLink(ctx context.Context, manager *peers.Manager, s string) (peers.Peer, int, error) {
@@ -24,28 +26,28 @@ func ParseMessageLink(ctx context.Context, manager *peers.Manager, s string) (pe
 		return nil, 0, err
 	}
 	if ref.Bot || ref.MessageID == 0 {
-		return nil, 0, fmt.Errorf("message link must identify a post: %s", s)
+		return nil, 0, diagnostic.Describe(fmt.Errorf("message link must identify a post: %s", s), corei18n.Message{ID: "errors.message.message_link_must_identify_a_post_value", Args: map[string]any{"Arg1": s}})
 	}
 	peer, err := GetInputPeer(ctx, manager, ref.Chat)
 	if err != nil {
-		return nil, 0, errors.Wrap(err, "input peer")
+		return nil, 0, diagnostic.Describe(errors.Wrap(err, "input peer"), corei18n.Message{ID: "errors.context.input_peer", Args: map[string]any{"Reason": err}})
 	}
 	if ref.CommentID > 0 {
 		ch, ok := peer.(peers.Channel)
 		if !ok || !ch.IsBroadcast() {
-			return nil, 0, errors.New("not channel")
+			return nil, 0, diagnostic.Describe(errors.New("not channel"), corei18n.Message{ID: "errors.message.not_channel"})
 		}
 		raw, err := ch.FullRaw(ctx)
 		if err != nil {
-			return nil, 0, errors.Wrap(err, "full raw")
+			return nil, 0, diagnostic.Describe(errors.Wrap(err, "full raw"), corei18n.Message{ID: "errors.context.full_raw", Args: map[string]any{"Reason": err}})
 		}
 		linked, ok := raw.GetLinkedChatID()
 		if !ok {
-			return nil, 0, errors.New("no linked chat")
+			return nil, 0, diagnostic.Describe(errors.New("no linked chat"), corei18n.Message{ID: "errors.message.no_linked_chat"})
 		}
 		peer, err = GetInputPeer(ctx, manager, strconv.FormatInt(linked, 10))
 		if err != nil {
-			return nil, 0, errors.Wrap(err, "input discussion peer")
+			return nil, 0, diagnostic.Describe(errors.Wrap(err, "input discussion peer"), corei18n.Message{ID: "errors.context.input_discussion_peer", Args: map[string]any{"Reason": err}})
 		}
 		return peer, ref.CommentID, nil
 	}
@@ -75,7 +77,7 @@ func GetInputPeer(ctx context.Context, manager *peers.Manager, from string) (pee
 		return p, nil
 	}
 
-	return nil, fmt.Errorf("failed to get result from %d：%v", id, err)
+	return nil, diagnostic.Describe(fmt.Errorf("failed to get result from %d：%v", id, err), corei18n.Message{ID: "errors.message.failed_to_get_result_from_value_value", Args: map[string]any{"Arg1": id, "Arg2": err}})
 }
 
 func GetPeerID(peer tg.PeerClass) int64 {
@@ -141,17 +143,23 @@ func GetSingleMessage(ctx context.Context, c *tg.Client, peer tg.InputPeerClass,
 		BatchSize(1).Iter()
 
 	if !it.Next(ctx) {
-		return nil, errors.Wrap(it.Err(), "get single message")
+		return nil, func() error {
+			messageArg0 := it.Err()
+			return diagnostic.Describe(errors.Wrap(messageArg0, "get single message"), corei18n.Message{ID: "errors.context.get_single_message", Args: map[string]any{"Reason": messageArg0}})
+		}()
 	}
 
 	m, ok := it.Value().Msg.(*tg.Message)
 	if !ok {
-		return nil, errors.Errorf("invalid message %d", msg)
+		return nil, diagnostic.Describe(errors.Errorf("invalid message %d", msg), corei18n.Message{ID: "errors.message.invalid_message_value", Args: map[string]any{"Arg1": msg}})
 	}
 
 	// check if message is deleted
 	if m.GetID() != msg {
-		return nil, fmt.Errorf("the message %d/%d: %w", GetInputPeerID(peer), msg, ErrMessageDeleted)
+		return nil, func() error {
+			messageArg1 := GetInputPeerID(peer)
+			return diagnostic.Describe(fmt.Errorf("the message %d/%d: %w", messageArg1, msg, ErrMessageDeleted), corei18n.Message{ID: "errors.message.the_message_value_value_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": msg, "Arg3": ErrMessageDeleted}})
+		}()
 	}
 
 	return m, nil
@@ -175,7 +183,7 @@ func GetMessages(ctx context.Context, c *tg.Client, peer tg.InputPeerClass, msgs
 	requested := make(map[int]struct{}, len(msgs))
 	for _, id := range msgs {
 		if id <= 0 {
-			return nil, nil, errors.New("message ID must be positive")
+			return nil, nil, diagnostic.Describe(errors.New("message ID must be positive"), corei18n.Message{ID: "errors.message.message_id_must_be_positive"})
 		}
 		if _, exists := requested[id]; exists {
 			continue
@@ -198,11 +206,11 @@ func GetMessages(ctx context.Context, c *tg.Client, peer tg.InputPeerClass, msgs
 		case *tg.InputPeerChat, *tg.InputPeerUser, *tg.InputPeerSelf:
 			res, err = c.MessagesGetMessages(ctx, ids)
 		default:
-			return nil, nil, errors.Errorf("unsupported message source peer %T", peer)
+			return nil, nil, diagnostic.Describe(errors.Errorf("unsupported message source peer %T", peer), corei18n.Message{ID: "errors.message.unsupported_message_source_peer_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", peer)}})
 		}
 	}
 	if err != nil {
-		return nil, nil, errors.Wrap(err, "get messages")
+		return nil, nil, diagnostic.Describe(errors.Wrap(err, "get messages"), corei18n.Message{ID: "errors.context.get_messages", Args: map[string]any{"Reason": err}})
 	}
 
 	found := make(map[int]*tg.Message, len(msgs))
@@ -217,7 +225,7 @@ func GetMessages(ctx context.Context, c *tg.Client, peer tg.InputPeerClass, msgs
 	case *tg.MessagesMessagesSlice:
 		messages = out.Messages
 	default:
-		return nil, nil, errors.Errorf("unexpected messages type %T", res)
+		return nil, nil, diagnostic.Describe(errors.Errorf("unexpected messages type %T", res), corei18n.Message{ID: "errors.message.unexpected_messages_type_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", res)}})
 	}
 
 	for _, m := range messages {
@@ -229,7 +237,10 @@ func GetMessages(ctx context.Context, c *tg.Client, peer tg.InputPeerClass, msgs
 			continue
 		}
 		if msg.PeerID != nil && !messagePeerMatches(peer, msg.PeerID) {
-			return nil, nil, errors.Errorf("message %d belongs to a different peer than %T/%d", msg.ID, peer, GetInputPeerID(peer))
+			return nil, nil, func() error {
+				messageArg3 := GetInputPeerID(peer)
+				return diagnostic.Describe(errors.Errorf("message %d belongs to a different peer than %T/%d", msg.ID, peer, messageArg3), corei18n.Message{ID: "errors.message.message_value_belongs_to_a_different_peer_than_value_value", Args: map[string]any{"Arg1": msg.ID, "Arg2": fmt.Sprintf("%T", peer), "Arg3": messageArg3}})
+			}()
 		}
 		found[msg.ID] = msg
 	}
@@ -300,7 +311,7 @@ func (m Messages) Swap(i, j int) {
 func GetGroupedMessages(ctx context.Context, c *tg.Client, peer tg.InputPeerClass, msg *tg.Message) ([]*tg.Message, error) {
 	group, ok := msg.GetGroupedID()
 	if !ok {
-		return nil, errors.New("not grouped message")
+		return nil, diagnostic.Describe(errors.New("not grouped message"), corei18n.Message{ID: "errors.message.not_grouped_message"})
 	}
 	// https://telegram.org/blog/albums-saved-messages
 	// Each album can include up to 10 photos or videos
@@ -335,7 +346,7 @@ func GetGroupedMessages(ctx context.Context, c *tg.Client, peer tg.InputPeerClas
 
 	if err := it.Err(); err != nil {
 		// A partial selection cannot authorize committing a complete album.
-		return nil, errors.Wrap(err, "get grouped messages")
+		return nil, diagnostic.Describe(errors.Wrap(err, "get grouped messages"), corei18n.Message{ID: "errors.context.get_grouped_messages", Args: map[string]any{"Reason": err}})
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err

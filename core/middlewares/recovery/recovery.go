@@ -12,6 +12,8 @@ import (
 	"github.com/gotd/td/tgerr"
 	"go.uber.org/zap"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 )
 
@@ -34,7 +36,7 @@ func (r *recovery) Handle(next tg.Invoker) telegram.InvokeFunc {
 		return backoff.RetryNotify(func() error {
 			if err := next.Invoke(ctx, input, output); err != nil {
 				if r.shouldRecover(ctx, err) {
-					return errors.Wrap(err, "recover")
+					return diagnostic.Describe(errors.Wrap(err, "recover"), corei18n.Message{ID: "errors.context.recover", Args: map[string]any{"Reason": err}})
 				}
 
 				return backoff.Permanent(err)

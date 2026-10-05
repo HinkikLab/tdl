@@ -1,0 +1,116 @@
+{
+  "errors.config.invalid": {
+    "other": "批量配置无效"
+  },
+  "errors.config.invalid_path": {
+    "other": "配置 \"{{.Path}}\" 无效"
+  },
+  "errors.config.job": {
+    "other": "任务：{{.Job}}"
+  },
+  "errors.config.chat": {
+    "other": "聊天：{{.Chat}}"
+  },
+  "errors.config.reason": {
+    "other": "原因"
+  },
+  "errors.config.invalid_range": {
+    "other": "消息范围无效：起始 ID {{.Start}} 必须小于结束 ID {{.End}}。"
+  },
+  "errors.batch.jobs_failed": {
+    "other": "{{.Count}} 个批量任务失败。"
+  },
+  "errors.batch.messages_missing": {
+    "other": "仍有 {{.Count}} 条消息缺失。"
+  },
+  "errors.batch.invalid_timestamp_window": {
+    "other": "归档时间窗口无效：开始时间 {{.Start}} 不能晚于结束时间 {{.End}}。"
+  },
+  "errors.cli.invalid_language": {
+    "other": "不支持语言 {{.Language}}；请使用 auto、zh 或 en。"
+  },
+  "errors.storage.in_use": {
+    "other": "数据库正被另一个进程使用，请先关闭该进程。"
+  },
+  "errors.interrupted": {
+    "other": "操作已中断。"
+  },
+  "errors.os.not_found": {
+    "other": "找不到文件或路径：{{.Reason}}"
+  },
+  "errors.os.permission": {
+    "other": "没有访问权限：{{.Reason}}"
+  },
+  "errors.os.exists": {
+    "other": "文件或路径已存在：{{.Reason}}"
+  },
+  "errors.telegram.flood_wait": {
+    "other": "Telegram 请求受到速率限制，请等待 {{.Seconds}} 秒后重试。"
+  },
+  "errors.telegram.private_channel": {
+    "other": "此 Telegram 频道或群组为私有，或当前账号无权访问。"
+  },
+  "errors.telegram.admin_required": {
+    "other": "此 Telegram 操作需要额外的聊天权限。"
+  },
+  "errors.telegram.username_invalid": {
+    "other": "Telegram 用户名或机器人无效或不可用。"
+  },
+  "errors.telegram.session_expired": {
+    "other": "Telegram 会话已失效，请重新登录。"
+  },
+  "errors.cli.language_required": {
+    "other": "--language 缺少参数值。"
+  },
+  "errors.cli.invalid_flags": {
+    "other": "命令行参数无效：{{.Reason}}"
+  },
+  "errors.cli.invalid_flags_generic": {
+    "other": "命令行参数无效。"
+  },
+  "errors.cli.invalid_arguments": {
+    "other": "命令参数无效：{{.Reason}}"
+  },
+  "errors.cli.invalid_arguments_generic": {
+    "other": "命令参数无效。"
+  },
+  "console.error.prefix": {
+    "other": "错误："
+  },
+  "console.error.debug_details": {
+    "other": "调试详情："
+  },
+  "errors.cli.unknown_flag": {
+    "other": "未知参数：{{.Flag}}"
+  },
+  "errors.cli.value_required": {
+    "other": "参数 {{.Flag}} 需要一个值。"
+  },
+  "errors.cli.invalid_value": {
+    "other": "参数 {{.Flag}} 的值 \"{{.Value}}\" 无效（要求 {{.Type}}）。"
+  },
+  "errors.cli.invalid_syntax": {
+    "other": "参数语法无效：{{.Flag}}"
+  },
+  "errors.cli.no_arguments": {
+    "other": "命令 {{.Command}} 不接受位置参数（收到：{{.Arguments}}）。"
+  },
+  "errors.cli.required_flags": {
+    "other": "缺少必需参数：{{.Flags}}。"
+  },
+  "errors.cli.exclusive_flags": {
+    "other": "不能同时使用这些参数：{{.Flags}}。"
+  },
+  "errors.cli.minimum_arguments": {
+    "other": "命令 {{.Command}} 至少需要 {{.Minimum}} 个参数，实际收到 {{.Actual}} 个。"
+  },
+  "errors.context.canceled": {
+    "other": "操作已取消"
+  },
+  "errors.context.deadline": {
+    "other": "操作超时"
+  },
+  "errors.cli.unknown_command": {
+    "other": "命令 \"{{.Command}}\" 中没有子命令 \"{{.Argument}}\"。{{if .Suggestions}} 你可能想使用：{{.Suggestions}}。{{end}}"
+  }
+}

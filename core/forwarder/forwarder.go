@@ -2,6 +2,7 @@ package forwarder
 
 import (
 	"context"
+	"fmt"
 	"math/rand"
 	"time"
 
@@ -14,6 +15,8 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/tutil"
@@ -53,13 +56,13 @@ func New(opts Options) *Forwarder {
 
 func (f *Forwarder) Forward(ctx context.Context) error {
 	if f.opts.Pool == nil {
-		return errors.New("forward pool is required")
+		return diagnostic.Describe(errors.New("forward pool is required"), corei18n.Message{ID: "errors.message.forward_pool_is_required"})
 	}
 	if f.opts.Iter == nil {
-		return errors.New("forward iterator is required")
+		return diagnostic.Describe(errors.New("forward iterator is required"), corei18n.Message{ID: "errors.message.forward_iterator_is_required"})
 	}
 	if f.opts.Progress == nil {
-		return errors.New("forward progress is required")
+		return diagnostic.Describe(errors.New("forward progress is required"), corei18n.Message{ID: "errors.message.forward_progress_is_required"})
 	}
 
 	var failures error
@@ -77,7 +80,7 @@ func (f *Forwarder) Forward(ctx context.Context) error {
 					return err
 				}
 				logctx.From(ctx).Warn("Resolve grouped messages", zap.Error(err))
-				failures = multierr.Append(failures, errors.Wrap(err, "resolve grouped messages"))
+				failures = multierr.Append(failures, diagnostic.Describe(errors.Wrap(err, "resolve grouped messages"), corei18n.Message{ID: "errors.context.resolve_grouped_messages", Args: map[string]any{"Reason": err}}))
 				continue
 			}
 
@@ -127,13 +130,13 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 	// used for clone progress
 	totalSize, err := mediaSizeSum(elem.Msg(), grouped...)
 	if err != nil {
-		return errors.Wrap(err, "media total size")
+		return diagnostic.Describe(errors.Wrap(err, "media total size"), corei18n.Message{ID: "errors.context.media_total_size", Args: map[string]any{"Reason": err}})
 	}
 	done := atomic.NewInt64(0)
 
 	forwardTextOnly := func(msg *tg.Message) error {
 		if msg.Message == "" {
-			return errors.Errorf("empty message content, skip send: %d", msg.ID)
+			return diagnostic.Describe(errors.Errorf("empty message content, skip send: %d", msg.ID), corei18n.Message{ID: "errors.message.empty_message_content_skip_send_value", Args: map[string]any{"Arg1": msg.ID}})
 		}
 		req := &tg.MessagesSendMessageRequest{
 			NoWebpage:              false,
@@ -154,7 +157,7 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 		req.SetFlags()
 
 		if _, err := f.forwardClient(ctx, elem).MessagesSendMessage(ctx, req); err != nil {
-			return errors.Wrap(err, "send message")
+			return diagnostic.Describe(errors.Wrap(err, "send message"), corei18n.Message{ID: "errors.context.send_message", Args: map[string]any{"Reason": err}})
 		}
 		return nil
 	}
@@ -163,7 +166,7 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 		if _, hasMedia := msg.GetMedia(); !hasMedia {
 			// media can't be forwarded via simple copy(it depends on the server ids)
 			// if it's not a media message, just break and send text copy
-			return nil, errors.Errorf("message %d is not a media message", msg.ID)
+			return nil, diagnostic.Describe(errors.Errorf("message %d is not a media message", msg.ID), corei18n.Message{ID: "errors.message.message_value_is_not_a_media_message", Args: map[string]any{"Arg1": msg.ID}})
 		}
 
 		// if it's a media message, but it's not protected, convert it to InputMediaClass
@@ -174,7 +177,7 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 		if (!protectedDialog(elem.From()) && !protectedMessage(msg)) || !photoOrDocument(msg.Media) {
 			media, ok := tmedia.ConvInputMedia(msg.Media)
 			if !ok {
-				return nil, errors.Errorf("can't convert message %d to input class directly", msg.ID)
+				return nil, diagnostic.Describe(errors.Errorf("can't convert message %d to input class directly", msg.ID), corei18n.Message{ID: "errors.message.can_t_convert_message_value_to_input_class_directly", Args: map[string]any{"Arg1": msg.ID}})
 			}
 			return media, nil
 		}
@@ -186,7 +189,7 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 				zap.Int("message", msg.ID))
 
 			// unsupported re-upload media
-			return nil, errors.Errorf("unsupported media %T", msg.Media)
+			return nil, diagnostic.Describe(errors.Errorf("unsupported media %T", msg.Media), corei18n.Message{ID: "errors.message.unsupported_media_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", msg.Media)}})
 		}
 
 		mediaFile, err := f.cloneMedia(ctx, cloneOptions{
@@ -200,7 +203,7 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 			},
 		}, elem.AsDryRun())
 		if err != nil {
-			return nil, errors.Wrap(err, "clone media")
+			return nil, diagnostic.Describe(errors.Wrap(err, "clone media"), corei18n.Message{ID: "errors.context.clone_media", Args: map[string]any{"Reason": err}})
 		}
 
 		var inputMedia tg.InputMediaClass
@@ -218,7 +221,7 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 		case *tg.MessageMediaDocument:
 			doc, ok := m.Document.AsNotEmpty()
 			if !ok {
-				return nil, errors.Errorf("empty document %d", msg.ID)
+				return nil, diagnostic.Describe(errors.Errorf("empty document %d", msg.ID), corei18n.Message{ID: "errors.message.empty_document_value", Args: map[string]any{"Arg1": msg.ID}})
 			}
 
 			document := &tg.InputMediaUploadedDocument{
@@ -239,7 +242,7 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 					progress: nopProgress{},
 				}, elem.AsDryRun())
 				if err != nil {
-					return nil, errors.Wrap(err, "clone thumb")
+					return nil, diagnostic.Describe(errors.Wrap(err, "clone thumb"), corei18n.Message{ID: "errors.context.clone_thumb", Args: map[string]any{"Reason": err}})
 				}
 
 				document.Thumb = thumbFile
@@ -249,7 +252,7 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 
 			inputMedia = document
 		default:
-			return nil, errors.Errorf("unsupported media %T", msg.Media)
+			return nil, diagnostic.Describe(errors.Errorf("unsupported media %T", msg.Media), corei18n.Message{ID: "errors.message.unsupported_media_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", msg.Media)}})
 		}
 
 		// note that they must be separately uploaded using messages uploadMedia first,
@@ -259,12 +262,12 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 			Media: inputMedia,
 		})
 		if err != nil {
-			return nil, errors.Wrap(err, "upload media")
+			return nil, diagnostic.Describe(errors.Wrap(err, "upload media"), corei18n.Message{ID: "errors.context.upload_media", Args: map[string]any{"Reason": err}})
 		}
 
 		inputMedia, ok = tmedia.ConvInputMedia(messageMedia)
 		if !ok && !elem.AsDryRun() {
-			return nil, errors.Errorf("can't convert uploaded media to input class")
+			return nil, diagnostic.Describe(errors.Errorf("can't convert uploaded media to input class"), corei18n.Message{ID: "errors.message.can_t_convert_uploaded_media_to_input_class"})
 		}
 
 		return inputMedia, nil
@@ -297,7 +300,7 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 				}
 				req.SetFlags()
 				if _, err := f.forwardClient(ctx, elem).MessagesForwardMessages(ctx, req); err != nil {
-					return errors.Wrap(err, "directly forward")
+					return diagnostic.Describe(errors.Wrap(err, "directly forward"), corei18n.Message{ID: "errors.context.directly_forward", Args: map[string]any{"Reason": err}})
 				}
 				return nil
 			}
@@ -358,7 +361,7 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 				}
 				req.SetFlags()
 				if _, err := f.forwardClient(ctx, elem).MessagesSendMultiMedia(ctx, req); err != nil {
-					return errors.Wrap(err, "send multi media")
+					return diagnostic.Describe(errors.Wrap(err, "send multi media"), corei18n.Message{ID: "errors.context.send_multi_media", Args: map[string]any{"Reason": err}})
 				}
 				return nil
 			}
@@ -391,12 +394,15 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 		req.SetFlags()
 
 		if _, err := f.forwardClient(ctx, elem).MessagesSendMedia(ctx, req); err != nil {
-			return errors.Wrap(err, "send single media")
+			return diagnostic.Describe(errors.Wrap(err, "send single media"), corei18n.Message{ID: "errors.context.send_single_media", Args: map[string]any{"Reason": err}})
 		}
 		return nil
 	}
 
-	return errors.Errorf("unsupported mode %v", elem.Mode())
+	return func() error {
+		messageArg1 := elem.Mode()
+		return diagnostic.Describe(errors.Errorf("unsupported mode %v", messageArg1), corei18n.Message{ID: "errors.message.unsupported_mode_value", Args: map[string]any{"Arg1": messageArg1}})
+	}()
 }
 
 func (f *Forwarder) tuple(peer peers.Peer, msg *tg.Message) tuple {
@@ -468,7 +474,7 @@ func mediaSizeSum(msg *tg.Message, grouped ...*tg.Message) (int64, error) {
 		for _, gm := range grouped {
 			m, ok := tmedia.GetMedia(gm)
 			if !ok {
-				return 0, errors.Errorf("can't get media from message %d", gm.ID)
+				return 0, diagnostic.Describe(errors.Errorf("can't get media from message %d", gm.ID), corei18n.Message{ID: "errors.message.can_t_get_media_from_message_value", Args: map[string]any{"Arg1": gm.ID}})
 			}
 			total += m.Size
 		}

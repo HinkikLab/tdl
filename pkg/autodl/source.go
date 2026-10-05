@@ -10,6 +10,8 @@ import (
 	"github.com/gotd/td/tg"
 	"go.uber.org/zap"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/util/tutil"
 )
@@ -40,7 +42,7 @@ func (r *Runner) resolveDialog(ctx context.Context, job *Job, link Link) (peers.
 func (r *Runner) resolveDialogUncached(ctx context.Context, job *Job, link Link) (peers.Peer, error) {
 	peer, err := tutil.GetInputPeer(ctx, r.manager, link.Chat)
 	if err != nil {
-		return nil, errors.Wrapf(err, "resolve chat %q", link.Chat)
+		return nil, diagnostic.Describe(errors.Wrapf(err, "resolve chat %q", link.Chat), corei18n.Message{ID: "errors.context.resolve_chat_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", link.Chat), "Reason": err}})
 	}
 
 	if !commentDialog(job, link) {
@@ -49,22 +51,22 @@ func (r *Runner) resolveDialogUncached(ctx context.Context, job *Job, link Link)
 
 	ch, ok := peer.(peers.Channel)
 	if !ok {
-		return nil, errors.Errorf("chat %q has no comment section", link.Chat)
+		return nil, diagnostic.Describe(errors.Errorf("chat %q has no comment section", link.Chat), corei18n.Message{ID: "errors.message.chat_value_has_no_comment_section", Args: map[string]any{"Arg1": fmt.Sprintf("%q", link.Chat)}})
 	}
 
 	raw, err := ch.FullRaw(ctx)
 	if err != nil {
-		return nil, errors.Wrap(err, "get channel full")
+		return nil, diagnostic.Describe(errors.Wrap(err, "get channel full"), corei18n.Message{ID: "errors.context.get_channel_full", Args: map[string]any{"Reason": err}})
 	}
 
 	linked, ok := raw.GetLinkedChatID()
 	if !ok {
-		return nil, errors.Errorf("chat %q has no linked discussion group", link.Chat)
+		return nil, diagnostic.Describe(errors.Errorf("chat %q has no linked discussion group", link.Chat), corei18n.Message{ID: "errors.message.chat_value_has_no_linked_discussion_group", Args: map[string]any{"Arg1": fmt.Sprintf("%q", link.Chat)}})
 	}
 
 	group, err := r.manager.ResolveChannelID(ctx, linked)
 	if err != nil {
-		return nil, errors.Wrap(err, "resolve discussion group")
+		return nil, diagnostic.Describe(errors.Wrap(err, "resolve discussion group"), corei18n.Message{ID: "errors.context.resolve_discussion_group", Args: map[string]any{"Reason": err}})
 	}
 
 	logctx.From(ctx).Debug("Resolve comment dialog",
@@ -109,10 +111,14 @@ func (r *Runner) scanPeer(ctx context.Context, job *Job, link Link) (peers.Peer,
 
 	explicit, err := tutil.GetInputPeer(ctx, r.manager, ref)
 	if err != nil {
-		return nil, errors.Wrapf(err, "resolve chat override %q", job.Chat)
+		return nil, diagnostic.Describe(errors.Wrapf(err, "resolve chat override %q", job.Chat), corei18n.Message{ID: "errors.context.resolve_chat_override_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", job.Chat), "Reason": err}})
 	}
 	if peerKey(explicit) != peerKey(expected) {
-		return nil, errors.Errorf("chat override %q resolves to %s, but chat_url/comment mode selects %s; scan and download sources must match", job.Chat, peerKey(explicit), peerKey(expected))
+		return nil, func() error {
+			messageArg2 := peerKey(explicit)
+			messageArg3 := peerKey(expected)
+			return diagnostic.Describe(errors.Errorf("chat override %q resolves to %s, but chat_url/comment mode selects %s; scan and download sources must match", job.Chat, messageArg2, messageArg3), corei18n.Message{ID: "errors.batch.source_mismatch", Args: map[string]any{"Arg1": fmt.Sprintf("%q", job.Chat), "Arg2": messageArg2, "Arg3": messageArg3}})
+		}()
 	}
 	return expected, nil
 }

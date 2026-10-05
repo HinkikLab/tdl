@@ -2,6 +2,7 @@ package autodl
 
 import (
 	"context"
+	"fmt"
 	"sort"
 	"strings"
 	"time"
@@ -12,13 +13,17 @@ import (
 	"github.com/go-faster/errors"
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/telegram/query"
-	"github.com/gotd/td/telegram/query/messages"
+	querymessages "github.com/gotd/td/telegram/query/messages"
 	"github.com/gotd/td/tg"
 	"go.uber.org/zap"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/tutil"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/texpr"
 )
 
@@ -75,11 +80,9 @@ func (r *Runner) planIncremental(ctx context.Context, job *Job, link Link, dir s
 		zap.Int64("last_ts", state.GetLastTS()),
 		zap.Int("overlap", overlap))
 
-	color.Cyan("Incremental window: %s ~ %s (last=%s, overlap=%ds)",
-		time.Unix(start, 0).Format(time.RFC3339),
-		time.Unix(now, 0).Format(time.RFC3339),
-		formatLastTS(state.GetLastTS()),
-		overlap)
+	color.Cyan("%s", console.Translate(ctx, messages.BatchIncrementalWindow(
+		time.Unix(start, 0).Format(time.RFC3339), time.Unix(now, 0).Format(time.RFC3339),
+		formatLastTSContext(ctx, state.GetLastTS()), overlap, false)))
 
 	ids, err := r.collectIDs(ctx, job, dialog, start, now, dir)
 	if err != nil {
@@ -89,7 +92,7 @@ func (r *Runner) planIncremental(ctx context.Context, job *Job, link Link, dir s
 	log.Info("Incremental window collected", zap.Int("messages", len(ids)))
 
 	if len(ids) == 0 {
-		color.Yellow("The incremental window holds no media messages")
+		color.Yellow("%s", console.Translate(ctx, messages.BatchIncrementalNoMedia()))
 	}
 
 	return ids, now, nil
@@ -106,7 +109,7 @@ func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, st
 	if f := strings.TrimSpace(job.ExportFilter); f != "" {
 		compiled, err := expr.Compile(f, expr.AsBool())
 		if err != nil {
-			return nil, errors.Wrapf(err, "compile export_filter %q", f)
+			return nil, diagnostic.Describe(errors.Wrapf(err, "compile export_filter %q", f), corei18n.Message{ID: "errors.context.compile_export_key_filter_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", f), "Reason": err}})
 		}
 		filter = compiled
 	}
@@ -114,7 +117,7 @@ func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, st
 	// a reply_post_id means the ids live in the comment section of one post,
 	// which is exactly what messages.getReplies returns
 	q := query.NewQuery(api).Messages()
-	var q2 messages.Query
+	var q2 querymessages.Query
 	if job.ReplyPostID != nil && *job.ReplyPostID > 0 {
 		q2 = q.GetReplies(dialog.InputPeer()).MsgID(*job.ReplyPostID)
 	} else if num(job.TopicID) > 0 {
@@ -123,7 +126,7 @@ func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, st
 		q2 = q.GetHistory(dialog.InputPeer())
 	}
 
-	it := messages.NewIterator(q2, 100)
+	it := querymessages.NewIterator(q2, 100)
 
 	// #89: OffsetDate is inclusive of the boundary message
 	it = it.OffsetDate(int(end) + 1)
@@ -149,7 +152,7 @@ func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, st
 			return nil
 		}
 		if scanned++; scanned > maxIncrementalScan {
-			return errors.Errorf("incremental scan exceeded %d messages; keeping last_ts to avoid losing older messages", maxIncrementalScan)
+			return diagnostic.Describe(errors.Errorf("incremental scan exceeded %d messages; keeping last_ts to avoid losing older messages", maxIncrementalScan), corei18n.Message{ID: "errors.batch.incremental_scan_limit", Args: map[string]any{"Arg1": maxIncrementalScan}})
 		}
 
 		if job.TopicID != nil && *job.TopicID > 0 {
@@ -183,7 +186,7 @@ func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, st
 		if filter != nil {
 			res, err := texpr.Run(filter, texpr.ConvertEnvMessage(m))
 			if err != nil {
-				return errors.Wrap(err, "run export_filter")
+				return diagnostic.Describe(errors.Wrap(err, "run export_filter"), corei18n.Message{ID: "errors.context.run_export_key_filter", Args: map[string]any{"Reason": err}})
 			}
 			keep, _ := res.(bool)
 			if !keep {
@@ -228,7 +231,7 @@ func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, st
 	if num(job.TopicID) > 0 && job.ReplyPostID == nil {
 		found, _, err := tutil.GetMessages(ctx, api, dialog.InputPeer(), []int{*job.TopicID})
 		if err != nil {
-			return nil, errors.Wrap(err, "resolve topic root")
+			return nil, diagnostic.Describe(errors.Wrap(err, "resolve topic root"), corei18n.Message{ID: "errors.context.resolve_topic_root", Args: map[string]any{"Reason": err}})
 		}
 		if root := found[*job.TopicID]; root != nil {
 			if err := accept(root); err != nil {
@@ -250,7 +253,7 @@ func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, st
 	}
 
 	if err := it.Err(); err != nil {
-		return nil, errors.Wrap(err, "iterate history")
+		return nil, diagnostic.Describe(errors.Wrap(err, "iterate history"), corei18n.Message{ID: "errors.context.iterate_history", Args: map[string]any{"Reason": err}})
 	}
 
 	sort.Ints(out)
@@ -287,7 +290,10 @@ func (r *Runner) advanceIncremental(ctx context.Context, job *Job, store *stateS
 		log.Warn("Incremental window still incomplete, keeping last_ts",
 			zap.Int("missing", len(missing)))
 
-		return errors.Errorf("%d message(s) still missing; keeping last_ts", len(missing))
+		return func() error {
+			messageArg1 := len(missing)
+			return diagnostic.Describe(errors.Errorf("%d message(s) still missing; keeping last_ts", messageArg1), corei18n.Message{ID: "errors.message.value_message_s_still_missing_keeping_last_key_ts", Args: map[string]any{"Arg1": messageArg1}})
+		}()
 	}
 
 	if endTS <= state.GetLastTS() {
@@ -301,11 +307,11 @@ func (r *Runner) advanceIncremental(ctx context.Context, job *Job, store *stateS
 	state.SetLastTS(endTS)
 	if err := store.Save(); err != nil {
 		state.SetLastTS(previous)
-		return errors.Wrap(err, "save state")
+		return diagnostic.Describe(errors.Wrap(err, "save state"), corei18n.Message{ID: "errors.context.save_state", Args: map[string]any{"Reason": err}})
 	}
 
 	log.Info("Incremental timestamp advanced", zap.Int64("last_ts", endTS))
-	color.Green("last_ts advanced to %s", time.Unix(endTS, 0).Format(time.RFC3339))
+	color.Green("%s", console.Translate(ctx, messages.BatchLastTimestampAdvanced(time.Unix(endTS, 0).Format(time.RFC3339))))
 
 	return nil
 }
@@ -316,4 +322,11 @@ func formatLastTS(ts int64) string {
 	}
 
 	return time.Unix(ts, 0).Format(time.RFC3339)
+}
+
+func formatLastTSContext(ctx context.Context, ts int64) string {
+	if ts <= 0 {
+		return console.Translate(ctx, corei18n.Message{ID: "batch.never", Default: "never"})
+	}
+	return formatLastTS(ts)
 }

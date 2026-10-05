@@ -15,6 +15,8 @@ import (
 	"github.com/gotd/td/telegram/dcs"
 	"golang.org/x/net/proxy"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/middlewares/layer"
 	"github.com/iyear/tdl/core/middlewares/recovery"
@@ -50,7 +52,7 @@ func New(ctx context.Context, o Options) (*telegram.Client, error) {
 		var err error
 		tclock, err = clock.NewNTP(ntp)
 		if err != nil {
-			return nil, errors.Wrap(err, "create network clock")
+			return nil, diagnostic.Describe(errors.Wrap(err, "create network clock"), corei18n.Message{ID: "errors.context.create_network_clock", Args: map[string]any{"Reason": err}})
 		}
 	}
 
@@ -59,7 +61,7 @@ func New(ctx context.Context, o Options) (*telegram.Client, error) {
 	if p := o.Proxy; p != "" {
 		d, err := netutil.NewProxy(p)
 		if err != nil {
-			return nil, errors.Wrap(err, "get dialer")
+			return nil, diagnostic.Describe(errors.Wrap(err, "get dialer"), corei18n.Message{ID: "errors.context.get_dialer", Args: map[string]any{"Reason": err}})
 		}
 		dialer = d.DialContext
 	}
@@ -118,7 +120,7 @@ func RunWithAuth(ctx context.Context, client *telegram.Client, f func(ctx contex
 			return err
 		}
 		if !status.Authorized {
-			return fmt.Errorf("not authorized. please login first")
+			return diagnostic.Describe(fmt.Errorf("not authorized. please login first"), corei18n.Message{ID: "errors.message.not_authorized_please_login_first"})
 		}
 
 		return f(ctx)

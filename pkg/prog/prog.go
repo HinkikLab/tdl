@@ -8,9 +8,17 @@ import (
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"github.com/jedib0t/go-pretty/v6/text"
 	tsize "github.com/kopoli/go-terminal-size"
+
+	corei18n "github.com/iyear/tdl/core/i18n"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 func New(formatter progress.UnitsFormatter) progress.Writer {
+	return NewContext(context.Background(), formatter)
+}
+
+func NewContext(ctx context.Context, formatter progress.UnitsFormatter) progress.Writer {
 	pw := progress.NewWriter()
 	pw.SetAutoStop(false)
 
@@ -20,7 +28,7 @@ func New(formatter progress.UnitsFormatter) progress.Writer {
 	}
 	width = max(20, width-50) // reserve the tail without producing negative widths
 	pw.SetTrackerLength(max(1, width/5))
-	pw.SetMessageWidth(max(1, width*3/5))
+	pw.SetMessageLength(max(1, width*3/5))
 	pw.SetStyle(progress.StyleDefault)
 	pw.SetTrackerPosition(progress.PositionRight)
 	pw.SetUpdateFrequency(time.Millisecond * 100)
@@ -35,8 +43,9 @@ func New(formatter progress.UnitsFormatter) progress.Writer {
 	pw.Style().Visibility.Pinned = true
 	pw.Style().Options.TimeInProgressPrecision = time.Millisecond
 	pw.Style().Options.SpeedOverallFormatter = formatter
-	pw.Style().Options.ErrorString = color.RedString("failed!")
-	pw.Style().Options.DoneString = color.GreenString("done!")
+	pw.Style().Options.ErrorString = color.RedString("%s", console.Translate(ctx, messages.ProgressFailed()))
+	pw.Style().Options.DoneString = color.GreenString("%s", console.Translate(ctx, messages.ProgressDone()))
+	pw.Style().Options.ETAString = console.Translate(ctx, corei18n.Message{ID: "progress.eta", Default: "~ETA"})
 
 	return pw
 }

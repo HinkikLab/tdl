@@ -18,8 +18,12 @@ import (
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"go.uber.org/multierr"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/util/tutil"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/prog"
 )
 
@@ -40,20 +44,20 @@ type User struct {
 func Users(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts UsersOptions) (rerr error) {
 	manager := peers.Options{Storage: storage.NewPeers(kvd)}.Build(c.API())
 	if opts.Chat == "" {
-		return fmt.Errorf("missing domain id")
+		return diagnostic.Describe(fmt.Errorf("missing domain id"), corei18n.Message{ID: "errors.message.missing_domain_id"})
 	}
 
 	peer, err := tutil.GetInputPeer(ctx, manager, opts.Chat)
 	if err != nil {
-		return fmt.Errorf("failed to get peer: %w", err)
+		return diagnostic.Describe(fmt.Errorf("failed to get peer: %w", err), corei18n.Message{ID: "errors.message.failed_to_get_peer_value", Args: map[string]any{"Arg1": err}})
 	}
 
 	ch, ok := peer.(peers.Channel)
 	if !ok {
-		return fmt.Errorf("invalid type of chat. channels/groups are supported only")
+		return diagnostic.Describe(fmt.Errorf("invalid type of chat. channels/groups are supported only"), corei18n.Message{ID: "errors.message.invalid_type_of_chat_channels_groups_are_supported_only"})
 	}
 
-	color.Cyan("Occasional suspensions are due to Telegram rate limitations, please wait a moment.")
+	color.Cyan("%s", console.Translate(ctx, messages.ChatRateLimitNote()))
 	fmt.Println()
 
 	f, err := os.Create(opts.Output)
@@ -69,7 +73,7 @@ func Users(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Us
 	defer enc.ObjEnd()
 	enc.Field("id", func(e *jx.Encoder) { e.Int64(peer.ID()) })
 
-	pw := prog.New(progress.FormatNumber)
+	pw := prog.NewContext(ctx, progress.FormatNumber)
 	pw.SetUpdateFrequency(200 * time.Millisecond)
 	pw.Style().Visibility.TrackerOverall = false
 	pw.Style().Visibility.ETA = true
@@ -99,7 +103,7 @@ func Users(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts Us
 			if tgerr.Is(err, tg.ErrChatAdminRequired) {
 				continue
 			}
-			return fmt.Errorf("failed to output %s: %w", field, err)
+			return diagnostic.Describe(fmt.Errorf("failed to output %s: %w", field, err), corei18n.Message{ID: "errors.message.failed_to_output_value_value", Args: map[string]any{"Arg1": field, "Arg2": err}})
 		}
 	}
 
@@ -116,7 +120,7 @@ func outputUsers(ctx context.Context,
 ) error {
 	total, err := iter.Total(ctx)
 	if err != nil {
-		return errors.Wrap(err, "get total count")
+		return diagnostic.Describe(errors.Wrap(err, "get total count"), corei18n.Message{ID: "errors.context.get_total_count", Args: map[string]any{"Reason": err}})
 	}
 
 	tracker := prog.AppendTracker(pw,
@@ -142,7 +146,7 @@ func outputUsers(ctx context.Context,
 
 		buf, err := json.Marshal(output)
 		if err != nil {
-			return errors.Wrap(err, "marshal user")
+			return diagnostic.Describe(errors.Wrap(err, "marshal user"), corei18n.Message{ID: "errors.context.marshal_user", Args: map[string]any{"Reason": err}})
 		}
 
 		enc.Raw(buf)

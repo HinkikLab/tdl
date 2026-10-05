@@ -1,0 +1,17 @@
+{
+  "extension.table.headers": {"other": "NAME\tAUTHOR\tVERSION"},
+  "extension.install.start": {"other": "installing extension {{.Name}}..."},
+  "extension.install.failed": {"other": "install extension {{.Name}} failed: {{.Reason}}"},
+  "extension.install.dry_run": {"other": "extension {{.Name}} will be installed"},
+  "extension.install.done": {"other": "extension {{.Name}} installed"},
+  "extension.not_found": {"other": "extension {{.Name}} not found"},
+  "extension.upgrade.start": {"other": "upgrading {{.Name}}..."},
+  "extension.upgrade.current": {"other": "extension {{.Name}} already up-to-date"},
+  "extension.upgrade.unsupported": {"other": "extension {{.Name}} can't be automatically upgraded by tdl"},
+  "extension.upgrade.failed": {"other": "upgrade extension {{.Name}} failed: {{.Reason}}"},
+  "extension.upgrade.dry_run": {"other": "extension {{.Name}} will be upgraded"},
+  "extension.upgrade.done": {"other": "extension {{.Name}} upgraded"},
+  "extension.remove.failed": {"other": "remove extension {{.Name}} failed: {{.Reason}}"},
+  "extension.remove.dry_run": {"other": "extension {{.Name}} will be removed"},
+  "extension.remove.done": {"other": "extension {{.Name}} removed"}
+}

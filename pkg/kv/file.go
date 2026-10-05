@@ -10,6 +10,8 @@ import (
 	"github.com/go-faster/errors"
 	"github.com/mitchellh/mapstructure"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/pkg/validator"
 )
@@ -30,11 +32,11 @@ func newFile(opts map[string]any) (Storage, error) {
 
 	var o options
 	if err := mapstructure.WeakDecode(opts, &o); err != nil {
-		return nil, errors.Wrap(err, "decode options")
+		return nil, diagnostic.Describe(errors.Wrap(err, "decode options"), corei18n.Message{ID: "errors.context.decode_options", Args: map[string]any{"Reason": err}})
 	}
 
 	if err := validator.Struct(&o); err != nil {
-		return nil, errors.Wrap(err, "validate options")
+		return nil, diagnostic.Describe(errors.Wrap(err, "validate options"), corei18n.Message{ID: "errors.context.validate_options", Args: map[string]any{"Reason": err}})
 	}
 
 	_, err := os.Stat(o.Path)
@@ -43,14 +45,14 @@ func newFile(opts map[string]any) (Storage, error) {
 	}
 
 	if !os.IsNotExist(err) {
-		return nil, errors.Wrap(err, "stat file")
+		return nil, diagnostic.Describe(errors.Wrap(err, "stat file"), corei18n.Message{ID: "errors.context.stat_file", Args: map[string]any{"Reason": err}})
 	}
 
 	if err = os.MkdirAll(filepath.Dir(o.Path), 0o755); err != nil {
-		return nil, errors.Wrap(err, "create file directory")
+		return nil, diagnostic.Describe(errors.Wrap(err, "create file directory"), corei18n.Message{ID: "errors.context.create_file_directory", Args: map[string]any{"Reason": err}})
 	}
 	if err = os.WriteFile(o.Path, []byte("{}"), 0o644); err != nil {
-		return nil, errors.Wrap(err, "create file")
+		return nil, diagnostic.Describe(errors.Wrap(err, "create file"), corei18n.Message{ID: "errors.context.create_file", Args: map[string]any{"Reason": err}})
 	}
 
 	return &file{path: o.Path}, nil
@@ -63,7 +65,7 @@ func (f *file) Name() string {
 func (f *file) MigrateTo() (Meta, error) {
 	meta, err := f.read()
 	if err != nil {
-		return nil, errors.Wrap(err, "read")
+		return nil, diagnostic.Describe(errors.Wrap(err, "read"), corei18n.Message{ID: "errors.context.read", Args: map[string]any{"Reason": err}})
 	}
 	return meta, nil
 }
@@ -75,7 +77,7 @@ func (f *file) MigrateFrom(meta Meta) error {
 func (f *file) Namespaces() ([]string, error) {
 	pairs, err := f.read()
 	if err != nil {
-		return nil, errors.Wrap(err, "read")
+		return nil, diagnostic.Describe(errors.Wrap(err, "read"), corei18n.Message{ID: "errors.context.read", Args: map[string]any{"Reason": err}})
 	}
 
 	namespaces := make([]string, 0, len(pairs))
@@ -88,7 +90,7 @@ func (f *file) Namespaces() ([]string, error) {
 
 func (f *file) Open(ns string) (storage.Storage, error) {
 	if ns == "" {
-		return nil, errors.New("namespace is required")
+		return nil, diagnostic.Describe(errors.New("namespace is required"), corei18n.Message{ID: "errors.message.namespace_is_required"})
 	}
 
 	if err := f.update(func(data map[string]map[string][]byte) bool {
@@ -98,7 +100,7 @@ func (f *file) Open(ns string) (storage.Storage, error) {
 		}
 		return false
 	}); err != nil {
-		return nil, errors.Wrap(err, "open namespace")
+		return nil, diagnostic.Describe(errors.Wrap(err, "open namespace"), corei18n.Message{ID: "errors.context.open_namespace", Args: map[string]any{"Reason": err}})
 	}
 
 	return &fileKV{f: f, ns: ns}, nil
@@ -165,7 +167,7 @@ type fileKV struct {
 func (f *fileKV) Get(_ context.Context, key string) ([]byte, error) {
 	m, err := f.f.read()
 	if err != nil {
-		return nil, errors.Wrap(err, "read")
+		return nil, diagnostic.Describe(errors.Wrap(err, "read"), corei18n.Message{ID: "errors.context.read", Args: map[string]any{"Reason": err}})
 	}
 
 	if v, ok := m[f.ns][key]; ok {

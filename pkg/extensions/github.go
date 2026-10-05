@@ -10,6 +10,9 @@ import (
 
 	"github.com/go-faster/errors"
 	"github.com/google/go-github/v62/github"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 const (
@@ -95,12 +98,12 @@ func (e *githubExtension) loadManifest() (*manifest, error) {
 	var mfb []byte
 	mfb, err := os.ReadFile(manifestPath)
 	if err != nil {
-		return nil, errors.Wrapf(err, "read manifest file %s", manifestPath)
+		return nil, diagnostic.Describe(errors.Wrapf(err, "read manifest file %s", manifestPath), corei18n.Message{ID: "errors.context.read_manifest_file_value", Args: map[string]any{"Arg1": manifestPath, "Reason": err}})
 	}
 
 	mf := manifest{}
 	if err = json.Unmarshal(mfb, &mf); err != nil {
-		return nil, errors.Wrapf(err, "unmarshal manifest file %s", manifestPath)
+		return nil, diagnostic.Describe(errors.Wrapf(err, "unmarshal manifest file %s", manifestPath), corei18n.Message{ID: "errors.context.unmarshal_manifest_file_value", Args: map[string]any{"Arg1": manifestPath, "Reason": err}})
 	}
 
 	e.mu.Lock()

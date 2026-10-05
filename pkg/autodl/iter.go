@@ -20,7 +20,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
 	"github.com/iyear/tdl/core/downloader"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/fsutil"
@@ -40,7 +42,7 @@ func newNameTemplate(tpl string) (*nameTemplate, error) {
 		Funcs(tplFuncMap()).
 		Parse(tpl)
 	if err != nil {
-		return nil, errors.Wrap(err, "parse template")
+		return nil, diagnostic.Describe(errors.Wrap(err, "parse template"), corei18n.Message{ID: "errors.context.parse_template", Args: map[string]any{"Reason": err}})
 	}
 
 	return &nameTemplate{tpl: parsed}, nil
@@ -229,7 +231,7 @@ func (i *iter) process(ctx context.Context) bool {
 
 		found, gone, err := tutil.GetMessages(ctx, i.pool.Default(ctx), i.dialog.InputPeer(), batch)
 		if err != nil {
-			i.err = errors.Wrap(err, "resolve messages")
+			i.err = diagnostic.Describe(errors.Wrap(err, "resolve messages"), corei18n.Message{ID: "errors.context.resolve_messages", Args: map[string]any{"Reason": err}})
 			return false
 		}
 
@@ -298,7 +300,7 @@ func (i *iter) push(ctx context.Context, from peers.Peer, msg *tg.Message) bool 
 		DownloadDate: time.Now().Unix(),
 	})
 	if err != nil {
-		i.err = errors.Wrap(err, "execute template")
+		i.err = diagnostic.Describe(errors.Wrap(err, "execute template"), corei18n.Message{ID: "errors.context.execute_template", Args: map[string]any{"Reason": err}})
 		return false
 	}
 
@@ -356,7 +358,7 @@ func (i *iter) push(ctx context.Context, from peers.Peer, msg *tg.Message) bool 
 		return false
 	}
 	if err = e.start(i.opts.takeout); err != nil {
-		i.err = errors.Wrap(err, "create file")
+		i.err = diagnostic.Describe(errors.Wrap(err, "create file"), corei18n.Message{ID: "errors.context.create_file", Args: map[string]any{"Reason": err}})
 		return false
 	}
 	if paths := e.store.RecoveryPaths(); len(paths) > 0 {

@@ -7,6 +7,9 @@ import (
 	"time"
 
 	"github.com/gotd/td/tg"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 // BotUpdates retains only messages from bots currently requested by the batch.
@@ -115,7 +118,7 @@ func (u *BotUpdates) Snapshot(botID int64, after int) ([]*tg.Message, error) {
 		}
 	}
 	if watch.overflow {
-		return result, fmt.Errorf("bot live updates exceed max_bot_messages")
+		return result, diagnostic.Describe(fmt.Errorf("bot live updates exceed max_bot_messages"), corei18n.Message{ID: "errors.message.bot_live_updates_exceed_max_key_bot_key_messages"})
 	}
 	return result, nil
 }

@@ -6,6 +6,9 @@ import (
 	"strings"
 
 	"github.com/yapingcat/gomedia/go-mp4"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 func split(mime string) (primary string, sub string, ok bool) {
@@ -52,5 +55,5 @@ func GetMP4Info(r io.ReadSeeker) (int, int, int, error) {
 		}
 	}
 
-	return 0, 0, 0, fmt.Errorf("no h264 track found")
+	return 0, 0, 0, diagnostic.Describe(fmt.Errorf("no h264 track found"), corei18n.Message{ID: "errors.message.no_h264_track_found"})
 }

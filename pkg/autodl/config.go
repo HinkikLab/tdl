@@ -8,6 +8,7 @@ package autodl
 
 import (
 	"bytes"
+	"fmt"
 	"io"
 	"math"
 	"os"
@@ -19,6 +20,8 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/iyear/tdl/app/chat"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/util/tgref"
 )
 
@@ -153,20 +156,20 @@ func LoadConfigForRun(path string, forceIncremental bool) (*Config, error) {
 func loadConfig(path string, forceIncremental bool) (*Config, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
-		return nil, &ConfigError{Path: path, Err: errors.Wrap(err, "read config")}
+		return nil, &ConfigError{Path: path, Err: diagnostic.Describe(errors.Wrap(err, "read config"), corei18n.Message{ID: "errors.context.read_config", Args: map[string]any{"Reason": err}})}
 	}
 
 	var c Config
 	dec := yaml.NewDecoder(bytes.NewReader(b))
 	if err = dec.Decode(&c); err != nil {
-		return nil, &ConfigError{Path: path, Err: errors.Wrap(err, "parse config")}
+		return nil, &ConfigError{Path: path, Err: diagnostic.Describe(errors.Wrap(err, "parse config"), corei18n.Message{ID: "errors.context.parse_config", Args: map[string]any{"Reason": err}})}
 	}
 	var extra any
 	if err = dec.Decode(&extra); err != io.EOF {
 		if err == nil {
-			err = errors.New("multiple YAML documents are not supported")
+			err = diagnostic.Describe(errors.New("multiple YAML documents are not supported"), corei18n.Message{ID: "errors.message.multiple_yaml_documents_are_not_supported"})
 		}
-		return nil, &ConfigError{Path: path, Err: errors.Wrap(err, "parse config")}
+		return nil, &ConfigError{Path: path, Err: diagnostic.Describe(errors.Wrap(err, "parse config"), corei18n.Message{ID: "errors.context.parse_config", Args: map[string]any{"Reason": err}})}
 	}
 	if forceIncremental {
 		for i := range c.Jobs {
@@ -190,7 +193,7 @@ func loadConfig(path string, forceIncremental bool) (*Config, error) {
 // Normalize validates the config and resolves the derived fields.
 func (c *Config) Normalize() error {
 	if len(c.Jobs) == 0 {
-		return errors.New("config has no jobs")
+		return diagnostic.Describe(errors.New("config has no jobs"), corei18n.Message{ID: "errors.message.config_has_no_jobs"})
 	}
 
 	if c.DownloadBase == "" {
@@ -203,14 +206,14 @@ func (c *Config) Normalize() error {
 		"threads": c.Threads, "limit": c.Limit,
 	} {
 		if value != nil && *value <= 0 {
-			return errors.Errorf("%s must be positive", name)
+			return diagnostic.Describe(errors.Errorf("%s must be positive", name), corei18n.Message{ID: "errors.message.value_must_be_positive", Args: map[string]any{"Arg1": name}})
 		}
 	}
 	if c.Pool != nil && *c.Pool < 0 {
-		return errors.New("pool must not be negative")
+		return diagnostic.Describe(errors.New("pool must not be negative"), corei18n.Message{ID: "errors.message.pool_must_not_be_negative"})
 	}
 	if c.OverlapSeconds != nil && *c.OverlapSeconds < 0 {
-		return errors.New("overlap_seconds must not be negative")
+		return diagnostic.Describe(errors.New("overlap_seconds must not be negative"), corei18n.Message{ID: "errors.message.overlap_key_seconds_must_not_be_negative"})
 	}
 
 	for i := range c.Jobs {
@@ -224,25 +227,25 @@ func (c *Config) Normalize() error {
 
 func (j *Job) normalize(base string, globalIncremental bool) error {
 	if strings.TrimSpace(j.ChatURL) == "" {
-		return errors.New("chat_url is required")
+		return diagnostic.Describe(errors.New("chat_url is required"), corei18n.Message{ID: "errors.message.chat_key_url_is_required"})
 	}
 	if j.Comment != nil {
 		if _, ok := j.Comment.(bool); !ok {
 			if _, text := j.Comment.(string); text {
-				return errors.New("comment must be a boolean or integer")
+				return diagnostic.Describe(errors.New("comment must be a boolean or integer"), corei18n.Message{ID: "errors.message.comment_must_be_a_boolean_or_integer"})
 			}
 			if value, ok := IntValue(j.Comment); !ok || value <= 0 {
-				return errors.New("comment must be a boolean or positive integer")
+				return diagnostic.Describe(errors.New("comment must be a boolean or positive integer"), corei18n.Message{ID: "errors.message.comment_must_be_a_boolean_or_positive_integer"})
 			}
 		}
 	}
 	for field, value := range map[string]*int{"topic_id": j.TopicID, "reply_post_id": j.ReplyPostID} {
 		if value != nil && *value <= 0 {
-			return errors.Errorf("%s must be positive", field)
+			return diagnostic.Describe(errors.Errorf("%s must be positive", field), corei18n.Message{ID: "errors.message.value_must_be_positive", Args: map[string]any{"Arg1": field}})
 		}
 	}
 	if j.TopicID != nil && j.ReplyPostID != nil {
-		return errors.New("topic_id and reply_post_id cannot be combined")
+		return diagnostic.Describe(errors.New("topic_id and reply_post_id cannot be combined"), corei18n.Message{ID: "errors.message.topic_key_id_and_reply_key_post_key_id_cannot_be_combined"})
 	}
 
 	if !j.IsTagJob() || j.FollowLinks {
@@ -254,7 +257,7 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 	if j.Subdir != "" {
 		clean := filepath.Clean(j.Subdir)
 		if filepath.IsAbs(clean) || filepath.VolumeName(clean) != "" || clean == ".." || strings.HasPrefix(clean, ".."+string(filepath.Separator)) {
-			return errors.Errorf("subdir %q must stay inside download_base", j.Subdir)
+			return diagnostic.Describe(errors.Errorf("subdir %q must stay inside download_base", j.Subdir), corei18n.Message{ID: "errors.message.subdir_value_must_stay_inside_download_key_base", Args: map[string]any{"Arg1": fmt.Sprintf("%q", j.Subdir)}})
 		}
 		j.dir = filepath.Join(base, j.Subdir)
 	} else {
@@ -267,38 +270,38 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 		}
 	}
 	if j.StartComment != nil && *j.StartComment <= 0 {
-		return errors.New("start_comment must be positive")
+		return diagnostic.Describe(errors.New("start_comment must be positive"), corei18n.Message{ID: "errors.message.start_key_comment_must_be_positive"})
 	}
 	if j.EndComment != nil && *j.EndComment <= 0 {
-		return errors.New("end_comment must be positive")
+		return diagnostic.Describe(errors.New("end_comment must be positive"), corei18n.Message{ID: "errors.message.end_key_comment_must_be_positive"})
 	}
 	if j.Overlap != nil && *j.Overlap < 0 {
-		return errors.New("overlap_seconds must not be negative")
+		return diagnostic.Describe(errors.New("overlap_seconds must not be negative"), corei18n.Message{ID: "errors.message.overlap_key_seconds_must_not_be_negative"})
 	}
 
 	if j.FollowLinks {
 		link, _ := ParseLink(j.ChatURL)
 		if link.Comment != 0 || j.CommentMode() || j.TopicID != nil || j.ReplyPostID != nil {
-			return errors.New("follow_links source must be a main chat/post; comment/topic selectors are not supported")
+			return diagnostic.Describe(errors.New("follow_links source must be a main chat/post; comment/topic selectors are not supported"), corei18n.Message{ID: "errors.batch.link_source_selector"})
 		}
 		if err := j.validateArchiveRange(globalIncremental); err != nil {
 			return err
 		}
 		if !j.UsesIncremental(globalIncremental) && link.MessageID > 0 && j.StartComment != nil {
-			return errors.New("follow_links cannot combine a post URL and a range")
+			return diagnostic.Describe(errors.New("follow_links cannot combine a post URL and a range"), corei18n.Message{ID: "errors.message.follow_key_links_cannot_combine_a_post_url_and_a_range"})
 		}
 		if j.MaxPosts < 0 {
-			return errors.New("max_posts must not be negative")
+			return diagnostic.Describe(errors.New("max_posts must not be negative"), corei18n.Message{ID: "errors.message.max_key_posts_must_not_be_negative"})
 		}
 		if j.TagMatch != "" && j.TagMatch != "any" && j.TagMatch != "all" {
-			return errors.New("tag_match must be any or all")
+			return diagnostic.Describe(errors.New("tag_match must be any or all"), corei18n.Message{ID: "errors.message.tag_key_match_must_be_any_or_all"})
 		}
 		if j.Tag != "" && strings.TrimSpace(j.Tag) == "" {
-			return errors.New("tag must not be blank")
+			return diagnostic.Describe(errors.New("tag must not be blank"), corei18n.Message{ID: "errors.message.tag_must_not_be_blank"})
 		}
 		for _, tag := range j.Tags {
 			if strings.TrimSpace(tag) == "" {
-				return errors.New("tags must not contain blanks")
+				return diagnostic.Describe(errors.New("tags must not contain blanks"), corei18n.Message{ID: "errors.message.tags_must_not_contain_blanks"})
 			}
 		}
 		return j.LinkOptions.Normalize()
@@ -306,32 +309,32 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 
 	if j.IsTagJob() {
 		if j.Tag != "" && strings.TrimSpace(j.Tag) == "" {
-			return errors.New("tag must not be blank")
+			return diagnostic.Describe(errors.New("tag must not be blank"), corei18n.Message{ID: "errors.message.tag_must_not_be_blank"})
 		}
 		if j.TopicID != nil && *j.TopicID <= 0 {
-			return errors.New("topic_id must be positive")
+			return diagnostic.Describe(errors.New("topic_id must be positive"), corei18n.Message{ID: "errors.message.topic_key_id_must_be_positive"})
 		}
 		if _, err := chat.ParseTagTarget(j.ChatURL, num(j.TopicID)); err != nil {
 			return err
 		}
 		if j.CommentMode() || j.ReplyPostID != nil {
-			return errors.New("tag job cannot select comment mode or reply_post_id")
+			return diagnostic.Describe(errors.New("tag job cannot select comment mode or reply_post_id"), corei18n.Message{ID: "errors.message.tag_job_cannot_select_comment_mode_or_reply_key_post_key_id"})
 		}
 		if err := j.validateArchiveRange(globalIncremental); err != nil {
 			return err
 		}
 		if j.MaxPosts < 0 {
-			return errors.New("max_posts must not be negative")
+			return diagnostic.Describe(errors.New("max_posts must not be negative"), corei18n.Message{ID: "errors.message.max_key_posts_must_not_be_negative"})
 		}
 		if j.TagMatch != "" && j.TagMatch != "any" && j.TagMatch != "all" {
-			return errors.New("tag_match must be any or all")
+			return diagnostic.Describe(errors.New("tag_match must be any or all"), corei18n.Message{ID: "errors.message.tag_key_match_must_be_any_or_all"})
 		}
 		if j.Tag == "" && len(j.Tags) == 0 {
-			return errors.New("tag or tags is required")
+			return diagnostic.Describe(errors.New("tag or tags is required"), corei18n.Message{ID: "errors.message.tag_or_tags_is_required"})
 		}
 		for _, tag := range j.Tags {
 			if strings.TrimSpace(tag) == "" {
-				return errors.New("tags must not contain blanks")
+				return diagnostic.Describe(errors.New("tags must not contain blanks"), corei18n.Message{ID: "errors.message.tags_must_not_contain_blanks"})
 			}
 		}
 		return nil
@@ -339,19 +342,19 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 
 	if !j.UsesIncremental(globalIncremental) {
 		if j.TopicID != nil || j.ReplyPostID != nil {
-			return errors.New("topic_id and reply_post_id require incremental mode for message jobs")
+			return diagnostic.Describe(errors.New("topic_id and reply_post_id require incremental mode for message jobs"), corei18n.Message{ID: "errors.batch.selector_requires_incremental"})
 		}
 		if j.StartComment == nil || j.EndComment == nil {
 			// a range job needs both ends; incremental jobs get ids from the
 			// export instead
-			return errors.New("start_comment and end_comment are required unless incremental mode is enabled")
+			return diagnostic.Describe(errors.New("start_comment and end_comment are required unless incremental mode is enabled"), corei18n.Message{ID: "errors.batch.range_required"})
 		}
 
 		if *j.EndComment <= *j.StartComment {
-			return errors.Errorf("end_comment(%d) must be greater than start_comment(%d)", *j.EndComment, *j.StartComment)
+			return diagnostic.InvalidRange(*j.StartComment, *j.EndComment)
 		}
 		if int64(*j.EndComment)-int64(*j.StartComment) > MaxRangeMessages {
-			return errors.Errorf("message range exceeds the safety limit of %d", MaxRangeMessages)
+			return diagnostic.Describe(errors.Errorf("message range exceeds the safety limit of %d", MaxRangeMessages), corei18n.Message{ID: "errors.message.message_range_exceeds_the_safety_limit_of_value", Args: map[string]any{"Arg1": MaxRangeMessages}})
 		}
 	}
 
@@ -363,10 +366,15 @@ func (j *Job) validateArchiveRange(globalIncremental bool) error {
 		return nil // incremental mode takes precedence over ID ranges
 	}
 	if (j.StartComment == nil) != (j.EndComment == nil) {
-		return errors.New("archive ranges require both start_comment and end_comment")
+		return diagnostic.Describe(errors.New("archive ranges require both start_comment and end_comment"), corei18n.Message{ID: "errors.message.archive_ranges_require_both_start_key_comment_and_end_key_comment"})
 	}
-	if j.StartComment != nil && (*j.EndComment <= *j.StartComment || int64(*j.EndComment)-int64(*j.StartComment) > MaxRangeMessages) {
-		return errors.New("invalid archive message range")
+	if j.StartComment != nil {
+		if *j.EndComment <= *j.StartComment {
+			return diagnostic.InvalidRange(*j.StartComment, *j.EndComment)
+		}
+		if int64(*j.EndComment)-int64(*j.StartComment) > MaxRangeMessages {
+			return diagnostic.Describe(errors.Errorf("message range exceeds the safety limit of %d", MaxRangeMessages), corei18n.Message{ID: "errors.message.message_range_exceeds_the_safety_limit_of_value", Args: map[string]any{"Arg1": MaxRangeMessages}})
+		}
 	}
 	return nil
 }
@@ -481,7 +489,7 @@ func ParseLink(raw string) (Link, error) {
 		return Link{}, err
 	}
 	if ref.Bot {
-		return Link{}, errors.New("bot start links are not a batch message source")
+		return Link{}, diagnostic.Describe(errors.New("bot start links are not a batch message source"), corei18n.Message{ID: "errors.message.bot_start_links_are_not_a_batch_message_source"})
 	}
 	return Link{Chat: ref.Chat, MessageID: ref.MessageID, Comment: ref.CommentID}, nil
 }

@@ -14,4 +14,5 @@ const (
 	FlagReconnectTimeout  = "reconnect-timeout"
 	FlagDisableProgressPS = "disable-progress-ps"
 	FlagDlTemplate        = "template"
+	FlagLanguage          = "language"
 )

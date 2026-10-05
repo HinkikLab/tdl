@@ -9,6 +9,8 @@ import (
 
 	"github.com/iyear/tdl/app/login"
 	"github.com/iyear/tdl/core/logctx"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 func NewLogin() *cobra.Command {
@@ -22,7 +24,7 @@ func NewLogin() *cobra.Command {
 		Short:   "Login to Telegram",
 		GroupID: groupAccount.ID,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			color.Yellow("WARN: If data exists in the namespace, data will be overwritten")
+			color.Yellow("%s", console.Translate(cmd.Context(), messages.LoginOverwriteWarning()))
 
 			// Legacy flag
 			if code {

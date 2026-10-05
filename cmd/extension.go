@@ -12,10 +12,13 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/iyear/tdl/app/extension"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/storage"
 	extbase "github.com/iyear/tdl/extension"
 	"github.com/iyear/tdl/pkg/consts"
 	"github.com/iyear/tdl/pkg/extensions"
+	pki18n "github.com/iyear/tdl/pkg/i18n"
 	"github.com/iyear/tdl/pkg/tclient"
 )
 
@@ -59,7 +62,7 @@ func NewExtensionInstall(em *extensions.Manager) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "install",
 		Short: "Install a tdl extension",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  pki18n.MinimumArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return extension.Install(cmd.Context(), em, args, force)
 		},
@@ -86,7 +89,7 @@ func NewExtensionRemove(em *extensions.Manager) *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "remove",
 		Short: "Remove an installed extension",
-		Args:  cobra.MinimumNArgs(1),
+		Args:  pki18n.MinimumArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return extension.Remove(cmd.Context(), em, args)
 		},
@@ -104,23 +107,27 @@ func NewExtensionCmd(em *extensions.Manager, ext extensions.Extension, stdin io.
 
 			opts, err := tOptions(ctx)
 			if err != nil {
-				return errors.Wrap(err, "build telegram options")
+				return diagnostic.Describe(errors.Wrap(err, "build telegram options"), corei18n.Message{ID: "errors.context.build_telegram_options", Args: map[string]any{"Reason": err}})
 			}
 			app, err := tclient.GetApp(opts.KV)
 			if err != nil {
-				return errors.Wrap(err, "get app")
+				return diagnostic.Describe(errors.Wrap(err, "get app"), corei18n.Message{ID: "errors.context.get_app", Args: map[string]any{"Reason": err}})
 			}
 
 			session, err := storage.NewSession(opts.KV, false).LoadSession(ctx)
 			if err != nil {
-				return errors.Wrap(err, "load session")
+				return diagnostic.Describe(errors.Wrap(err, "load session"), corei18n.Message{ID: "errors.context.load_session", Args: map[string]any{"Reason": err}})
 			}
 
 			dataDir := filepath.Join(consts.ExtensionsDataPath, ext.Name())
 			if err = os.MkdirAll(dataDir, 0o755); err != nil {
-				return errors.Wrap(err, "create extension data dir")
+				return diagnostic.Describe(errors.Wrap(err, "create extension data dir"), corei18n.Message{ID: "errors.context.create_extension_data_dir", Args: map[string]any{"Reason": err}})
 			}
 
+			language := string(corei18n.English)
+			if translator := corei18n.FromContext(ctx); translator != nil {
+				language = string(translator.Language())
+			}
 			env := &extbase.Env{
 				Name:      ext.Name(),
 				AppID:     app.AppID,
@@ -132,6 +139,7 @@ func NewExtensionCmd(em *extensions.Manager, ext extensions.Extension, stdin io.
 				Proxy:     opts.Proxy,
 				Pool:      viper.GetInt64(consts.FlagPoolSize),
 				Debug:     viper.GetBool(consts.FlagDebug),
+				Language:  language,
 			}
 
 			if err = em.Dispatch(ext, args, env, stdin, stdout, stderr); err != nil {
@@ -139,7 +147,7 @@ func NewExtensionCmd(em *extensions.Manager, ext extensions.Extension, stdin io.
 				if errors.As(err, &execError) {
 					return execError
 				}
-				return fmt.Errorf("failed to run extension: %w", err)
+				return diagnostic.Describe(fmt.Errorf("failed to run extension: %w", err), corei18n.Message{ID: "errors.message.failed_to_run_extension_value", Args: map[string]any{"Arg1": err}})
 			}
 			return nil
 		},

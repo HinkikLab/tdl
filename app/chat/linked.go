@@ -23,9 +23,13 @@ import (
 	"github.com/gotd/td/tgerr"
 	"go.uber.org/multierr"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/tgref"
 	"github.com/iyear/tdl/core/util/tutil"
+	"github.com/iyear/tdl/pkg/console"
+	uimessages "github.com/iyear/tdl/pkg/messages"
 )
 
 // LinkOptions controls bounded resolution of resources linked from a post.
@@ -67,34 +71,34 @@ func (o *LinkOptions) Normalize() error {
 		{"max_flood_wait_seconds", &o.MaxFloodWait, 3600, 86400},
 	} {
 		if *field.value < 0 || *field.value > field.max {
-			return fmt.Errorf("%s must be between 0 and %d", field.name, field.max)
+			return diagnostic.Describe(fmt.Errorf("%s must be between 0 and %d", field.name, field.max), corei18n.Message{ID: "errors.message.value_must_be_between_0_and_value", Args: map[string]any{"Arg1": field.name, "Arg2": field.max}})
 		}
 		if *field.value == 0 {
 			*field.value = field.fallback
 		}
 	}
 	if o.BotIdle >= o.BotTimeout {
-		return fmt.Errorf("bot_idle_seconds must be less than bot_timeout_seconds")
+		return diagnostic.Describe(fmt.Errorf("bot_idle_seconds must be less than bot_timeout_seconds"), corei18n.Message{ID: "errors.message.bot_key_idle_key_seconds_must_be_less_than_bot_key_timeout_key_seconds"})
 	}
 	if o.PollInterval >= o.BotTimeout*1000 {
-		return fmt.Errorf("poll_interval_ms must be less than bot_timeout_seconds")
+		return diagnostic.Describe(fmt.Errorf("poll_interval_ms must be less than bot_timeout_seconds"), corei18n.Message{ID: "errors.message.poll_key_interval_key_ms_must_be_less_than_bot_key_timeout_key_seconds"})
 	}
 	if o.ReRequestLimit == nil {
 		v := 3
 		o.ReRequestLimit = &v
 	}
 	if *o.ReRequestLimit < 0 || *o.ReRequestLimit > 10 {
-		return fmt.Errorf("rerequest_limit must be between 0 and 10")
+		return diagnostic.Describe(fmt.Errorf("rerequest_limit must be between 0 and 10"), corei18n.Message{ID: "errors.message.rerequest_key_limit_must_be_between_0_and_10"})
 	}
 	if o.FloodRetries == nil {
 		v := 5
 		o.FloodRetries = &v
 	}
 	if *o.FloodRetries < 0 || *o.FloodRetries > 20 {
-		return fmt.Errorf("flood_retries must be between 0 and 20")
+		return diagnostic.Describe(fmt.Errorf("flood_retries must be between 0 and 20"), corei18n.Message{ID: "errors.message.flood_key_retries_must_be_between_0_and_20"})
 	}
 	if o.FloodWait > o.MaxFloodWait {
-		return fmt.Errorf("flood_wait_seconds must not exceed max_flood_wait_seconds")
+		return diagnostic.Describe(fmt.Errorf("flood_wait_seconds must not exceed max_flood_wait_seconds"), corei18n.Message{ID: "errors.bot.flood_wait_limit"})
 	}
 	return nil
 }
@@ -144,7 +148,6 @@ func (l resourceLink) URL() string {
 }
 
 var telegramURL = regexp.MustCompile(`(?i)(?:https?://(?:t\.me|telegram\.me|telegram\.dog)/|(?:t\.me|telegram\.me|telegram\.dog)/|tg://)[^\s<>"\x{200b}]+`)
-var telegramUsername = regexp.MustCompile(`^[A-Za-z0-9_]+$`)
 
 // Only message links and bot start links are actionable. Home, invite, payment,
 // share and external web links do not identify a resource for this archive.
@@ -255,16 +258,19 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 		}
 		hop := linkHop{URL: l.URL(), Depth: depth}
 		if active[l.key()] {
-			return stop(hop, fmt.Errorf("resource link cycle at %s", l.URL()))
+			return stop(hop, func() error {
+				messageArg1 := l.URL()
+				return diagnostic.Describe(fmt.Errorf("resource link cycle at %s", messageArg1), corei18n.Message{ID: "errors.message.resource_link_cycle_at_value", Args: map[string]any{"Arg1": messageArg1}})
+			}())
 		}
 		if done[l.key()] {
 			return nil
 		}
 		if depth > r.opts.MaxDepth {
-			return stop(hop, fmt.Errorf("resource link depth exceeds %d", r.opts.MaxDepth))
+			return stop(hop, diagnostic.Describe(fmt.Errorf("resource link depth exceeds %d", r.opts.MaxDepth), corei18n.Message{ID: "errors.message.resource_link_depth_exceeds_value", Args: map[string]any{"Arg1": r.opts.MaxDepth}}))
 		}
 		if len(done) >= r.opts.MaxLinks {
-			return stop(hop, fmt.Errorf("resource link count exceeds %d", r.opts.MaxLinks))
+			return stop(hop, diagnostic.Describe(fmt.Errorf("resource link count exceeds %d", r.opts.MaxLinks), corei18n.Message{ID: "errors.message.resource_link_count_exceeds_value", Args: map[string]any{"Arg1": r.opts.MaxLinks}}))
 		}
 		done[l.key()], active[l.key()] = true, true
 		defer delete(active, l.key())
@@ -276,7 +282,11 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 			return err
 		}
 		if err != nil {
-			err = fmt.Errorf("resolve %s: %w", l.URL(), r.unavailable.remember(l, err))
+			err = func() error {
+				messageArg1 := l.URL()
+				messageArg2 := r.unavailable.rememberContext(ctx, l, err)
+				return diagnostic.Describe(fmt.Errorf("resolve %s: %w", messageArg1, messageArg2), corei18n.Message{ID: "errors.message.resolve_value_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": messageArg2}})
+			}()
 			var noReplies *botNoResourceError
 			if isUnavailableResource(err) || errors.As(err, &noReplies) {
 				return stop(hop, err)
@@ -301,7 +311,7 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 			for _, m := range msgs {
 				comments, err := r.backend.Comments(ctx, m.Peer, m.Message, r.opts.CommentLimit)
 				if err != nil {
-					return fmt.Errorf("linked post comments: %w", err)
+					return diagnostic.Describe(fmt.Errorf("linked post comments: %w", err), corei18n.Message{ID: "errors.message.linked_post_comments_value", Args: map[string]any{"Arg1": err}})
 				}
 				for _, comment := range comments {
 					next = append(next, messageResourceLinks(comment.Message)...)
@@ -309,7 +319,10 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 			}
 		}
 		if !usable && len(next) == 0 {
-			return stop(hop, fmt.Errorf("%s returned no files or resource links", l.URL()))
+			return stop(hop, func() error {
+				messageArg1 := l.URL()
+				return diagnostic.Describe(fmt.Errorf("%s returned no files or resource links", messageArg1), corei18n.Message{ID: "errors.message.value_returned_no_files_or_resource_links", Args: map[string]any{"Arg1": messageArg1}})
+			}())
 		}
 		hops = append(hops, hop)
 		for _, n := range next {
@@ -331,11 +344,11 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 		if deadEnds != nil {
 			return nil, hops, deadEnds
 		}
-		return nil, hops, fmt.Errorf("no resource files resolved")
+		return nil, hops, diagnostic.Describe(fmt.Errorf("no resource files resolved"), corei18n.Message{ID: "errors.message.no_resource_files_resolved"})
 	}
 	for _, hop := range hops {
 		if hop.Skipped != "" {
-			fmt.Printf("Resource branch %s skipped; keeping %d resolved file(s): %s\n", hop.URL, len(files), hop.Skipped)
+			fmt.Println(console.Translate(ctx, uimessages.LinkedBranchSkipped(hop.URL, len(files), hop.Skipped)))
 		}
 	}
 	return files, hops, nil
@@ -402,7 +415,7 @@ func (b *telegramLinkBackend) Cleanup(ctx context.Context) error {
 		batch := ids[start:min(start+100, len(ids))]
 		_, err := b.api.MessagesDeleteMessages(ctx, &tg.MessagesDeleteMessagesRequest{Revoke: true, ID: batch})
 		if err != nil {
-			failures = multierr.Append(failures, fmt.Errorf("delete bot archive messages %v: %w", batch, err))
+			failures = multierr.Append(failures, diagnostic.Describe(fmt.Errorf("delete bot archive messages %v: %w", batch, err), corei18n.Message{ID: "errors.message.delete_bot_archive_messages_value_value", Args: map[string]any{"Arg1": batch, "Arg2": err}}))
 			continue
 		}
 		for _, id := range batch {
@@ -416,9 +429,11 @@ type botCooldownError struct{ seconds int }
 
 func (e *botCooldownError) Error() string { return fmt.Sprintf("bot cooldown: %d seconds", e.seconds) }
 
-var botFloodMarker = regexp.MustCompile(`(?i)flood|too many|rate.?limit|retry after|try again in|please wait|频繁|太快|冷却|稍后再试|请.{0,8}等待|间隔.{0,8}(请求|获取)|请求.{0,8}间隔`)
-var botFloodDuration = regexp.MustCompile(`(?i)(\d+)\s*(seconds?|secs?|sec|s\b|minutes?|mins?|min|m\b|hours?|hrs?|h\b|秒钟?|分钟?|小时)`)
-var botFloodExplicit = regexp.MustCompile(`(?i)flood|too many|rate.?limit|retry|again`)
+var (
+	botFloodMarker   = regexp.MustCompile(`(?i)flood|too many|rate.?limit|retry after|try again in|please wait|频繁|太快|冷却|稍后再试|请.{0,8}等待|间隔.{0,8}(请求|获取)|请求.{0,8}间隔`)
+	botFloodDuration = regexp.MustCompile(`(?i)(\d+)\s*(seconds?|secs?|sec|s\b|minutes?|mins?|min|m\b|hours?|hrs?|h\b|秒钟?|分钟?|小时)`)
+	botFloodExplicit = regexp.MustCompile(`(?i)flood|too many|rate.?limit|retry|again`)
+)
 
 func botCooldown(text string, fallback int) (int, bool) {
 	if !botFloodMarker.MatchString(text) {
@@ -474,7 +489,7 @@ func (b *telegramLinkBackend) Fetch(ctx context.Context, l resourceLink) ([]reso
 		peer, err = tutil.GetInputPeer(ctx, b.manager, l.Chat)
 	}
 	if err != nil {
-		return nil, fmt.Errorf("resolve %s peer %q: %w", l.Kind, l.Chat, err)
+		return nil, diagnostic.Describe(fmt.Errorf("resolve %s peer %q: %w", l.Kind, l.Chat, err), corei18n.Message{ID: "errors.message.resolve_value_peer_value_value", Args: map[string]any{"Arg1": l.Kind, "Arg2": fmt.Sprintf("%q", l.Chat), "Arg3": err}})
 	}
 	if l.Kind == "bot" {
 		u, ok := peer.(peers.User)
@@ -496,7 +511,7 @@ func (b *telegramLinkBackend) Fetch(ctx context.Context, l resourceLink) ([]reso
 				return nil, err
 			}
 			if !linkedTopicMember(m, l.TopicID) {
-				return nil, fmt.Errorf("message %d does not belong to linked forum topic %d", m.ID, l.TopicID)
+				return nil, diagnostic.Describe(fmt.Errorf("message %d does not belong to linked forum topic %d", m.ID, l.TopicID), corei18n.Message{ID: "errors.message.message_value_does_not_belong_to_linked_forum_topic_value", Args: map[string]any{"Arg1": m.ID, "Arg2": l.TopicID}})
 			}
 		}
 		discussionPeer, _, err := b.discussion(ctx, archiveInputPeer(peer), m)
@@ -519,12 +534,12 @@ func getLinkedMessage(ctx context.Context, api *tg.Client, peer tg.InputPeerClas
 	if m, ok := raw.(*tg.MessageService); ok {
 		return nil, unsupportedLinkedService(m)
 	}
-	return nil, fmt.Errorf("message %d is unavailable or deleted", id)
+	return nil, diagnostic.Describe(fmt.Errorf("message %d is unavailable or deleted", id), corei18n.Message{ID: "errors.message.message_value_is_unavailable_or_deleted", Args: map[string]any{"Arg1": id}})
 }
 
 func getLinkedRawMessage(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, id int) (tg.MessageClass, error) {
 	if id <= 0 {
-		return nil, fmt.Errorf("message ID must be positive")
+		return nil, diagnostic.Describe(fmt.Errorf("message ID must be positive"), corei18n.Message{ID: "errors.message.message_id_must_be_positive"})
 	}
 	if err := ctx.Err(); err != nil {
 		return nil, err
@@ -545,7 +560,7 @@ func getLinkedRawMessage(ctx context.Context, api *tg.Client, peer tg.InputPeerC
 		return nil, err
 	}
 	if !ok {
-		return nil, fmt.Errorf("unexpected message result %T", res)
+		return nil, diagnostic.Describe(fmt.Errorf("unexpected message result %T", res), corei18n.Message{ID: "errors.message.unexpected_message_result_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", res)}})
 	}
 	for _, raw := range modified.GetMessages() {
 		if raw.GetID() == id {
@@ -555,7 +570,7 @@ func getLinkedRawMessage(ctx context.Context, api *tg.Client, peer tg.InputPeerC
 			return raw, nil
 		}
 	}
-	return nil, fmt.Errorf("message %d is unavailable or deleted", id)
+	return nil, diagnostic.Describe(fmt.Errorf("message %d is unavailable or deleted", id), corei18n.Message{ID: "errors.message.message_value_is_unavailable_or_deleted", Args: map[string]any{"Arg1": id}})
 }
 
 func (b *telegramLinkBackend) messageAlbum(ctx context.Context, peer tg.InputPeerClass, id int, single bool) ([]resourceMessage, error) {
@@ -575,7 +590,7 @@ func (b *telegramLinkBackend) albumFromMessage(ctx context.Context, peer tg.Inpu
 			return nil, err
 		}
 		if len(album) == 0 {
-			return nil, fmt.Errorf("linked album is unavailable")
+			return nil, diagnostic.Describe(fmt.Errorf("linked album is unavailable"), corei18n.Message{ID: "errors.message.linked_album_is_unavailable"})
 		}
 	}
 	result := make([]resourceMessage, 0, len(album))
@@ -584,7 +599,7 @@ func (b *telegramLinkBackend) albumFromMessage(ctx context.Context, peer tg.Inpu
 			return nil, err
 		}
 		if topicID > 0 && !linkedTopicMember(m, topicID) {
-			return nil, fmt.Errorf("album message %d does not belong to linked forum topic %d", m.ID, topicID)
+			return nil, diagnostic.Describe(fmt.Errorf("album message %d does not belong to linked forum topic %d", m.ID, topicID), corei18n.Message{ID: "errors.message.album_message_value_does_not_belong_to_linked_forum_topic_value", Args: map[string]any{"Arg1": m.ID, "Arg2": topicID}})
 		}
 		result = append(result, resourceMessage{Peer: peer, Message: m})
 	}
@@ -625,7 +640,7 @@ func (b *telegramLinkBackend) discussion(ctx context.Context, peer tg.InputPeerC
 			}
 		}
 	}
-	return nil, 0, fmt.Errorf("discussion root is unavailable")
+	return nil, 0, diagnostic.Describe(fmt.Errorf("discussion root is unavailable"), corei18n.Message{ID: "errors.message.discussion_root_is_unavailable"})
 }
 
 func (b *telegramLinkBackend) Comments(ctx context.Context, peer tg.InputPeerClass, m *tg.Message, limit int) ([]resourceMessage, error) {
@@ -654,11 +669,14 @@ func (b *telegramLinkBackend) historySince(ctx context.Context, peer tg.InputPee
 	for {
 		res, err := b.api.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{Peer: peer, MinID: after, OffsetID: offset, Limit: 100})
 		if err != nil {
-			return result, fmt.Errorf("read bot %d response history after %d (offset %d): %w", tutil.GetInputPeerID(peer), after, offset, err)
+			return result, func() error {
+				messageArg1 := tutil.GetInputPeerID(peer)
+				return diagnostic.Describe(fmt.Errorf("read bot %d response history after %d (offset %d): %w", messageArg1, after, offset, err), corei18n.Message{ID: "errors.message.read_bot_value_response_history_after_value_offset_value_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": after, "Arg3": offset, "Arg4": err}})
+			}()
 		}
 		modified, ok := res.AsModified()
 		if !ok {
-			return result, fmt.Errorf("unexpected bot history result")
+			return result, diagnostic.Describe(fmt.Errorf("unexpected bot history result"), corei18n.Message{ID: "errors.message.unexpected_bot_history_result"})
 		}
 		raw := modified.GetMessages()
 		if len(raw) == 0 {
@@ -674,13 +692,13 @@ func (b *telegramLinkBackend) historySince(ctx context.Context, peer tg.InputPee
 			}
 		}
 		if responses > b.opts.MaxBotMessages {
-			return result, fmt.Errorf("bot response exceeds max_bot_messages")
+			return result, diagnostic.Describe(fmt.Errorf("bot response exceeds max_bot_messages"), corei18n.Message{ID: "errors.message.bot_response_exceeds_max_key_bot_key_messages"})
 		}
 		if len(raw) < 100 || last <= after {
 			break
 		}
 		if offset != 0 && last >= offset {
-			return result, fmt.Errorf("bot history pagination did not advance")
+			return result, diagnostic.Describe(fmt.Errorf("bot history pagination did not advance"), corei18n.Message{ID: "errors.message.bot_history_pagination_did_not_advance"})
 		}
 		offset = last
 	}
@@ -749,12 +767,12 @@ func (b *telegramLinkBackend) requestBot(ctx context.Context, bot peers.User, st
 			return result, err
 		}
 		if retry >= *b.opts.FloodRetries {
-			return nil, fmt.Errorf("bot flood_retries exhausted: %w", err)
+			return nil, diagnostic.Describe(fmt.Errorf("bot flood_retries exhausted: %w", err), corei18n.Message{ID: "errors.message.bot_flood_key_retries_exhausted_value", Args: map[string]any{"Arg1": err}})
 		}
 		if cooldown.seconds > b.opts.MaxFloodWait {
-			return nil, fmt.Errorf("bot cooldown exceeds max_flood_wait_seconds: %w", err)
+			return nil, diagnostic.Describe(fmt.Errorf("bot cooldown exceeds max_flood_wait_seconds: %w", err), corei18n.Message{ID: "errors.message.bot_cooldown_exceeds_max_key_flood_key_wait_key_seconds_value", Args: map[string]any{"Arg1": err}})
 		}
-		fmt.Printf("Bot %d rate limited; waiting %d seconds before retry %d/%d\n", bot.ID(), cooldown.seconds, retry+1, *b.opts.FloodRetries)
+		fmt.Println(console.Translate(ctx, uimessages.LinkedBotRateLimit(bot.ID(), cooldown.seconds, retry+1, *b.opts.FloodRetries)))
 		if err := waitLinked(ctx, time.Duration(cooldown.seconds)*time.Second); err != nil {
 			return nil, err
 		}
@@ -783,7 +801,7 @@ func (b *telegramLinkBackend) waitBotRequestInterval(ctx context.Context, bot pe
 		if remaining <= 0 {
 			return nil
 		}
-		fmt.Printf("Bot %d: waiting %.1f seconds after its last reply before requesting again\n", botID, remaining.Seconds())
+		fmt.Println(console.Translate(ctx, uimessages.LinkedBotInterval(botID, remaining.Seconds())))
 		if err := waitLinked(ctx, remaining); err != nil {
 			return err
 		}
@@ -792,11 +810,11 @@ func (b *telegramLinkBackend) waitBotRequestInterval(ctx context.Context, bot pe
 			// the interval boundary. Repeated history copies keep their date.
 			res, err := b.api.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{Peer: bot.InputPeer(), Limit: 100})
 			if err != nil {
-				return fmt.Errorf("check bot %d replies during request interval: %w", botID, err)
+				return diagnostic.Describe(fmt.Errorf("check bot %d replies during request interval: %w", botID, err), corei18n.Message{ID: "errors.message.check_bot_value_replies_during_request_interval_value", Args: map[string]any{"Arg1": botID, "Arg2": err}})
 			}
 			modified, ok := res.AsModified()
 			if !ok {
-				return fmt.Errorf("unexpected bot history result")
+				return diagnostic.Describe(fmt.Errorf("unexpected bot history result"), corei18n.Message{ID: "errors.message.unexpected_bot_history_result"})
 			}
 			for _, raw := range modified.GetMessages() {
 				if m, ok := raw.(*tg.Message); ok && tutil.GetPeerID(m.PeerID) == botID {
@@ -821,11 +839,14 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 	}
 	res, err := b.api.MessagesGetHistory(ctx, &tg.MessagesGetHistoryRequest{Peer: bot.InputPeer(), Limit: watermarkLimit})
 	if err != nil {
-		return nil, fmt.Errorf("read bot %d request watermark: %w", bot.ID(), err)
+		return nil, func() error {
+			messageArg1 := bot.ID()
+			return diagnostic.Describe(fmt.Errorf("read bot %d request watermark: %w", messageArg1, err), corei18n.Message{ID: "errors.message.read_bot_value_request_watermark_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": err}})
+		}()
 	}
 	modified, ok := res.AsModified()
 	if !ok {
-		return nil, fmt.Errorf("unexpected bot history result")
+		return nil, diagnostic.Describe(fmt.Errorf("unexpected bot history result"), corei18n.Message{ID: "errors.message.unexpected_bot_history_result"})
 	}
 	watermark := 0
 	for _, m := range modified.GetMessages() {
@@ -841,7 +862,10 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 		if b.updates != nil && !b.watchedBots[bot.ID()] {
 			b.updates.Stop(bot.ID())
 		}
-		return nil, fmt.Errorf("wait bot %d request interval: %w", bot.ID(), err)
+		return nil, func() error {
+			messageArg1 := bot.ID()
+			return diagnostic.Describe(fmt.Errorf("wait bot %d request interval: %w", messageArg1, err), corei18n.Message{ID: "errors.message.wait_bot_value_request_interval_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": err}})
+		}()
 	}
 	if b.opts.BotRequestInterval > 0 {
 		// Exclude previous-request replies that arrived while waiting, even
@@ -850,7 +874,10 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 	}
 	var random [8]byte
 	if _, err := rand.Read(random[:]); err != nil {
-		return nil, fmt.Errorf("generate bot %d request ID: %w", bot.ID(), err)
+		return nil, func() error {
+			messageArg1 := bot.ID()
+			return diagnostic.Describe(fmt.Errorf("generate bot %d request ID: %w", messageArg1, err), corei18n.Message{ID: "errors.message.generate_bot_value_request_id_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": err}})
+		}()
 	}
 	randomID := int64(binary.LittleEndian.Uint64(random[:]))
 	updates, err := b.api.MessagesStartBot(ctx, &tg.MessagesStartBotRequest{Bot: bot.InputUser(), Peer: bot.InputPeer(), RandomID: randomID, StartParam: start})
@@ -861,7 +888,10 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 		if seconds, ok := tgerr.AsFloodWait(err); ok {
 			return nil, &botCooldownError{seconds: int(seconds/time.Second) + 1}
 		}
-		return nil, fmt.Errorf("start bot %d: %w", bot.ID(), err)
+		return nil, func() error {
+			messageArg1 := bot.ID()
+			return diagnostic.Describe(fmt.Errorf("start bot %d: %w", messageArg1, err), corei18n.Message{ID: "errors.message.start_bot_value_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": err}})
+		}()
 	}
 	responseCtx, cancelResponse := context.WithTimeout(ctx, time.Duration(b.opts.BotTimeout)*time.Second)
 	defer cancelResponse()
@@ -914,7 +944,7 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 			}
 		}
 		if len(seen) > b.opts.MaxBotMessages {
-			return fmt.Errorf("bot response exceeds max_bot_messages")
+			return diagnostic.Describe(fmt.Errorf("bot response exceeds max_bot_messages"), corei18n.Message{ID: "errors.message.bot_response_exceeds_max_key_bot_key_messages"})
 		}
 		return nil
 	}
@@ -1062,9 +1092,11 @@ func (e *botNoResourceError) Unwrap() error { return e.err }
 
 func botResponseTimeout(botID int64, seconds int, messages map[int]*tg.Message) error {
 	reason := "no actionable resource received"
+	reasonMessage := corei18n.Message{ID: "bot.timeout.no_actionable", Default: "no actionable resource received"}
 	actionable := botMessagesActionable(messages)
 	if actionable {
 		reason = "resource replies did not settle"
+		reasonMessage = corei18n.Message{ID: "bot.timeout.unsettled", Default: "resource replies did not settle"}
 	}
 	lastID := 0
 	summary := ""
@@ -1082,10 +1114,15 @@ func botResponseTimeout(botID int64, seconds int, messages map[int]*tg.Message) 
 	if len(runes) > 160 {
 		summary = string(runes[:159]) + "…"
 	}
+	var summaryMessage any = fmt.Sprintf("%q", summary)
 	if summary == "" {
 		summary = "no reply content"
+		summaryMessage = corei18n.Message{ID: "bot.timeout.no_content", Default: "\"no reply content\""}
 	}
-	err := fmt.Errorf("bot %d response did not settle within %d seconds (%d messages): %s; last reply (ID %d): %q; adjust bot_timeout_seconds/bot_idle_seconds: %w", botID, seconds, len(messages), reason, lastID, summary, context.DeadlineExceeded)
+	err := func() error {
+		messageArg3 := len(messages)
+		return diagnostic.Describe(fmt.Errorf("bot %d response did not settle within %d seconds (%d messages): %s; last reply (ID %d): %q; adjust bot_timeout_seconds/bot_idle_seconds: %w", botID, seconds, messageArg3, reason, lastID, summary, context.DeadlineExceeded), corei18n.Message{ID: "errors.bot.response_timeout", Args: map[string]any{"Arg1": botID, "Arg2": seconds, "Arg3": messageArg3, "Arg4": reasonMessage, "Arg5": lastID, "Arg6": summaryMessage, "Arg7": context.DeadlineExceeded}})
+	}()
 	if !actionable {
 		return &botNoResourceError{err: err}
 	}

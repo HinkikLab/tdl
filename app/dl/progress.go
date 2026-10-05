@@ -11,12 +11,17 @@ import (
 	pw "github.com/jedib0t/go-pretty/v6/progress"
 	"go.uber.org/multierr"
 
+	"github.com/iyear/tdl/core/diagnostic"
 	"github.com/iyear/tdl/core/downloader"
+	corei18n "github.com/iyear/tdl/core/i18n"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/prog"
 	"github.com/iyear/tdl/pkg/utils"
 )
 
 type progress struct {
+	ctx      context.Context
 	pw       pw.Writer
 	trackers *sync.Map // map[ID]*pw.Tracker
 	opts     Options
@@ -25,7 +30,12 @@ type progress struct {
 }
 
 func newProgress(p pw.Writer, it *iter, opts Options) *progress {
+	return newProgressContext(context.Background(), p, it, opts)
+}
+
+func newProgressContext(ctx context.Context, p pw.Writer, it *iter, opts Options) *progress {
 	return &progress{
+		ctx:      ctx,
 		pw:       p,
 		trackers: &sync.Map{},
 		opts:     opts,
@@ -95,7 +105,7 @@ func (p *progress) OnDone(elem downloader.Elem, err error) {
 	defer p.trackers.Delete(e.id)
 	if err != nil {
 		if !errors.Is(err, context.Canceled) { // don't report user cancel
-			p.fail(t, elem, errors.Wrap(err, "progress"))
+			p.fail(t, elem, diagnostic.Describe(errors.Wrap(err, "progress"), corei18n.Message{ID: "errors.context.progress", Args: map[string]any{"Reason": err}}))
 		}
 		// keep the partial file and its parts sidecar so the next run can
 		// resume instead of starting over
@@ -109,7 +119,9 @@ func (p *progress) OnDone(elem downloader.Elem, err error) {
 }
 
 func (p *progress) fail(t *pw.Tracker, elem downloader.Elem, err error) {
-	p.pw.Log(color.RedString("%s error: %s", p.elemString(elem), err.Error()))
+	reason := console.FormatError(err, corei18n.FromContext(p.ctx))
+	message := console.Translate(p.ctx, messages.DownloadItemError(p.elemString(elem), reason))
+	p.pw.Log(color.RedString("%s", message))
 	t.MarkAsErrored()
 }
 

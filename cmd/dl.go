@@ -9,6 +9,8 @@ import (
 	"github.com/spf13/viper"
 
 	"github.com/iyear/tdl/app/dl"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/pkg/consts"
@@ -24,7 +26,7 @@ func NewDownload() *cobra.Command {
 		GroupID: groupTools.ID,
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if len(opts.URLs) == 0 && len(opts.Files) == 0 {
-				return fmt.Errorf("no urls or files provided")
+				return diagnostic.Describe(fmt.Errorf("no urls or files provided"), corei18n.Message{ID: "errors.message.no_urls_or_files_provided"})
 			}
 
 			opts.Template = viper.GetString(consts.FlagDlTemplate)

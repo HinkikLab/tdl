@@ -1,0 +1,44 @@
+{
+  "prompt.error_prefix": {
+    "other": "回答无效："
+  },
+  "prompt.select_instructions": {
+    "other": "使用方向键移动，输入文本筛选"
+  },
+  "prompt.input_instructions": {
+    "other": "使用方向键移动，回车选择，输入文本继续"
+  },
+  "prompt.more_help": {
+    "other": "查看更多帮助"
+  },
+  "prompt.help": {
+    "other": "查看帮助"
+  },
+  "prompt.suggestions": {
+    "other": "查看建议"
+  },
+  "prompt.yes": {
+    "other": "是"
+  },
+  "prompt.no": {
+    "other": "否"
+  },
+  "prompt.invalid_answer": {
+    "other": "{{.Value}} 不是有效回答，请重试。"
+  },
+  "prompt.required": {
+    "other": "必须填写一个值"
+  },
+  "prompt.select_empty": {
+    "other": "请提供可选项目"
+  },
+  "prompt.select_default_missing": {
+    "other": "选项中找不到默认值 {{.Value}}"
+  },
+  "prompt.select_default_index": {
+    "other": "默认索引 {{.Index}} 超出选项范围"
+  },
+  "prompt.select_default_type": {
+    "other": "默认选项必须为整数或字符串"
+  }
+}

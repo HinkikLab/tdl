@@ -12,7 +12,9 @@ import (
 	"github.com/gotd/td/tg"
 	"go.uber.org/multierr"
 
+	"github.com/iyear/tdl/core/diagnostic"
 	"github.com/iyear/tdl/core/downloader"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/internal/transfer"
 )
 
@@ -34,12 +36,14 @@ func newTagIndex(target string, id int64, r *transfer.Reservations) (*tagIndex, 
 		return nil, err
 	}
 	i := &tagIndex{file: f, target: target, first: true}
+	// i18n:ignore Stable machine-readable export schema.
 	if _, err := fmt.Fprintf(f, "{\"id\":%d,\"messages\":[", id); err != nil {
 		_ = i.abort()
 		return nil, err
 	}
 	return i, nil
 }
+
 func (i *tagIndex) append(m tagMedia) error {
 	if !i.first {
 		if _, err := i.file.WriteString(","); err != nil {
@@ -49,6 +53,7 @@ func (i *tagIndex) append(m tagMedia) error {
 	i.first = false
 	return json.NewEncoder(i.file).Encode(Message{ID: m.ID, Type: m.Type, File: m.File, Date: m.Date, Text: m.Text})
 }
+
 func (i *tagIndex) commit() error {
 	if _, err := i.file.WriteString("]}\n"); err != nil {
 		return err
@@ -62,6 +67,7 @@ func (i *tagIndex) commit() error {
 	i.file = nil
 	return nil
 }
+
 func (i *tagIndex) abort() error {
 	if i.file == nil {
 		return nil
@@ -73,13 +79,13 @@ func (i *tagIndex) abort() error {
 
 func archiveTagPost(ctx context.Context, root string, post tagPost, album []*tg.Message, peer tg.InputPeerClass, opts TagOptions, delay *transfer.Delay) error {
 	dir := filepath.Join(root, post.Directory)
-	if err := migrateTagDirectory(root, dir, post); err != nil {
+	if err := migrateTagDirectoryContext(ctx, root, dir, post); err != nil {
 		return err
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	completed, err := loadTagCompleted(dir, post, opts.Reservations)
+	completed, err := loadTagCompleted(ctx, dir, post, opts.Reservations)
 	if err != nil {
 		return err
 	}
@@ -100,7 +106,7 @@ func archiveTagPost(ctx context.Context, root string, post tagPost, album []*tg.
 		message := byID[m.ID]
 		md, ok := photoOrVideo(message)
 		if !ok {
-			return fmt.Errorf("discovered media %d is unavailable", m.ID)
+			return diagnostic.Describe(fmt.Errorf("discovered media %d is unavailable", m.ID), corei18n.Message{ID: "errors.message.discovered_media_value_is_unavailable", Args: map[string]any{"Arg1": m.ID}})
 		}
 		name, err := filenamify.FilenamifyV2(md.Name)
 		if err != nil {
@@ -120,7 +126,7 @@ func archiveTagPost(ctx context.Context, root string, post tagPost, album []*tg.
 			}
 			continue
 		}
-		if err := preserveArchiveFile(path, opts.Reservations); err != nil {
+		if err := preserveArchiveFile(ctx, path, opts.Reservations); err != nil {
 			return err
 		}
 		elems = append(elems, &linkedElem{resource: linkedResource{resourceMessage: resourceMessage{Peer: peer, Message: message}, Media: md}, path: path, takeout: opts.Takeout, api: opts.Pool.Default(ctx)})

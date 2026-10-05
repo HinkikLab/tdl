@@ -10,6 +10,9 @@ import (
 	"github.com/gotd/td/telegram"
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tg"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 // Keep the real user identity when Saved Messages resolves to InputPeerSelf.
@@ -27,7 +30,7 @@ func archiveAccount(ctx context.Context, client *telegram.Client, scope string, 
 	}
 	user, err := client.Self(ctx)
 	if err != nil {
-		return "", fmt.Errorf("resolve archive account identity: %w", err)
+		return "", diagnostic.Describe(fmt.Errorf("resolve archive account identity: %w", err), corei18n.Message{ID: "errors.message.resolve_archive_account_identity_value", Args: map[string]any{"Arg1": err}})
 	}
 	key := fmt.Sprintf("user:%d", user.ID)
 	if scope != "" {
@@ -73,13 +76,13 @@ func checkArchiveOwner(dir string, expected tagPost) error {
 		if private {
 			return nil
 		}
-		return fmt.Errorf("read archive owner: %w", err)
+		return diagnostic.Describe(fmt.Errorf("read archive owner: %w", err), corei18n.Message{ID: "errors.message.read_archive_owner_value", Args: map[string]any{"Arg1": err}})
 	}
 	if private && (saved.ChatID == 0 || saved.MessageID == 0) {
 		return nil
 	}
 	if !sameArchiveOwner(saved, expected) {
-		return fmt.Errorf("existing archive %q belongs to another source, account or post; preserved for recovery", dir)
+		return diagnostic.Describe(fmt.Errorf("existing archive %q belongs to another source, account or post; preserved for recovery", dir), corei18n.Message{ID: "errors.archive.owner_mismatch", Args: map[string]any{"Arg1": fmt.Sprintf("%q", dir)}})
 	}
 	return nil
 }

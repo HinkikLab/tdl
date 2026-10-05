@@ -2,6 +2,7 @@ package downloader
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"sync"
 	"time"
@@ -10,6 +11,9 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
 	"golang.org/x/sync/errgroup"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 type ignoreSchema struct {
@@ -43,13 +47,13 @@ func (s *ignoreSchema) chunk(ctx context.Context, offset int64, limit int) ([]by
 				}
 				continue
 			}
-			return nil, errors.Wrap(err, "get next chunk")
+			return nil, diagnostic.Describe(errors.Wrap(err, "get next chunk"), corei18n.Message{ID: "errors.context.get_next_chunk", Args: map[string]any{"Reason": err}})
 		}
 		switch f := res.(type) {
 		case *tg.UploadFile:
 			return f.Bytes, nil
 		default:
-			return nil, errors.Errorf("unexpected type %T", res)
+			return nil, diagnostic.Describe(errors.Errorf("unexpected type %T", res), corei18n.Message{ID: "errors.message.unexpected_type_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", res)}})
 		}
 	}
 }
@@ -106,10 +110,13 @@ func (d *Downloader) parallelIgnore(ctx context.Context, client *tg.Client, elem
 					return err
 				}
 				if int64(len(data)) != min(int64(MaxPartSize), size-offset) {
-					return errors.Wrapf(io.ErrUnexpectedEOF, "part %d: got %d bytes", index, len(data))
+					return func() error {
+						messageArg3 := len(data)
+						return diagnostic.Describe(errors.Wrapf(io.ErrUnexpectedEOF, "part %d: got %d bytes", index, messageArg3), corei18n.Message{ID: "errors.context.part_value_got_value_bytes", Args: map[string]any{"Arg1": index, "Arg2": messageArg3, "Reason": io.ErrUnexpectedEOF}})
+					}()
 				}
 				if _, err := w.WriteAt(data, offset); err != nil {
-					return errors.Wrap(err, "write output")
+					return diagnostic.Describe(errors.Wrap(err, "write output"), corei18n.Message{ID: "errors.context.write_output", Args: map[string]any{"Reason": err}})
 				}
 			}
 		})

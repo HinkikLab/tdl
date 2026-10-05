@@ -1,6 +1,7 @@
 package chat
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -8,6 +9,10 @@ import (
 
 	"github.com/gotd/td/telegram/peers"
 	"github.com/gotd/td/tgerr"
+
+	corei18n "github.com/iyear/tdl/core/i18n"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 // UnavailableLinks remembers dead targets for one batch run, across jobs and
@@ -35,6 +40,10 @@ func (c *UnavailableLinks) lookup(l resourceLink) error {
 }
 
 func (c *UnavailableLinks) remember(l resourceLink, err error) error {
+	return c.rememberContext(context.Background(), l, err)
+}
+
+func (c *UnavailableLinks) rememberContext(ctx context.Context, l resourceLink, err error) error {
 	var missingPeer *peers.PeerNotFoundError
 	if !errors.As(err, &missingPeer) && !tgerr.Is(err, "USERNAME_INVALID", "USERNAME_NOT_OCCUPIED", "BOT_INVALID",
 		"INPUT_USER_DEACTIVATED", "USER_DEACTIVATED", "CHANNEL_INVALID", "CHANNEL_PRIVATE") {
@@ -51,7 +60,7 @@ func (c *UnavailableLinks) remember(l resourceLink, err error) error {
 	}
 	missing := &unavailableResourceError{chat: l.Chat, err: err}
 	c.targets[key] = missing
-	fmt.Printf("Ignoring resource target %s for this batch run: %s\n", l.Chat, err)
+	fmt.Println(console.Translate(ctx, messages.LinkedUnavailableTarget(l.Chat, console.FormatError(err, corei18n.FromContext(ctx)))))
 	return missing
 }
 

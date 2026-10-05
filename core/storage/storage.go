@@ -4,6 +4,9 @@ import (
 	"context"
 
 	"github.com/go-faster/errors"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 type Storage interface {
@@ -12,4 +15,4 @@ type Storage interface {
 	Delete(ctx context.Context, key string) error
 }
 
-var ErrNotFound = errors.New("key not found")
+var ErrNotFound = diagnostic.Describe(errors.New("key not found"), corei18n.Message{ID: "errors.message.key_not_found"})

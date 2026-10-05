@@ -20,12 +20,16 @@ import (
 	"go.uber.org/multierr"
 
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/tclient"
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/tutil"
 	"github.com/iyear/tdl/internal/transfer"
+	"github.com/iyear/tdl/pkg/console"
 	"github.com/iyear/tdl/pkg/consts"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 // TagOptions selects media posts by the hashtag in their Telegram caption.
@@ -104,7 +108,7 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 		return err
 	}
 	if opts.MaxPosts < 0 {
-		return fmt.Errorf("max posts must not be negative")
+		return diagnostic.Describe(fmt.Errorf("max posts must not be negative"), corei18n.Message{ID: "errors.message.max_posts_must_not_be_negative"})
 	}
 	tags, err := normalizeTags(opts.Tag, opts.Tags)
 	if err != nil {
@@ -115,7 +119,7 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 		mode = "any"
 	}
 	if mode != "any" && mode != "all" {
-		return fmt.Errorf("tag match mode must be any or all")
+		return diagnostic.Describe(fmt.Errorf("tag match mode must be any or all"), corei18n.Message{ID: "errors.message.tag_match_mode_must_be_any_or_all"})
 	}
 	manager := opts.Manager
 	if manager == nil {
@@ -124,7 +128,7 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 	chat := target.Chat
 	peer, err := tutil.GetInputPeer(ctx, manager, chat)
 	if err != nil {
-		return fmt.Errorf("resolve chat %q: %w", chat, err)
+		return diagnostic.Describe(fmt.Errorf("resolve chat %q: %w", chat, err), corei18n.Message{ID: "errors.message.resolve_chat_value_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", chat), "Arg2": err}})
 	}
 	history, topic, err := tagHistory(ctx, api, archiveInputPeer(peer), target.TopicID)
 	if err != nil {
@@ -134,10 +138,10 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 	if topic != nil {
 		topicTitle = topic.Title
 	}
-	announceTarget(TargetName(peer, target.TopicID, topicTitle, target.TopicID == 0), opts.OnResolved)
+	announceTarget(ctx, TargetNameContext(ctx, peer, target.TopicID, topicTitle, target.TopicID == 0), opts.OnResolved)
 	if !opts.CheckOnly && opts.Pool == nil {
 		if c == nil {
-			return fmt.Errorf("tag archive requires a download pool")
+			return diagnostic.Describe(fmt.Errorf("tag archive requires a download pool"), corei18n.Message{ID: "errors.message.tag_archive_requires_a_download_pool"})
 		}
 		poolSize := opts.PoolSize
 		if !opts.PoolSizeSet {
@@ -179,7 +183,7 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 			opts.counts.Posts++
 			if opts.CheckOnly {
 				opts.counts.Files += int64(len(post.Messages))
-				fmt.Printf("  %d: %d photo/video file(s), %s\n", post.MessageID, len(post.Messages), post.Directory)
+				fmt.Println(console.Translate(ctx, messages.TagArchiveFile(post.MessageID, len(post.Messages), post.Directory)))
 			} else {
 				if index == nil {
 					if err := os.MkdirAll(root, 0o755); err != nil {
@@ -189,7 +193,7 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 					if err != nil {
 						return false, err
 					}
-					fmt.Printf("Archive: %s\n", root)
+					fmt.Println(console.Translate(ctx, messages.TagArchiveRoot(root)))
 				}
 				if err := archiveTagPost(ctx, root, post, album, archiveInputPeer(peer), opts, delay); err != nil {
 					return false, err
@@ -209,7 +213,7 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 	if err != nil {
 		return err
 	}
-	fmt.Printf("Scanned %d messages; found %d posts matching %s (%s).\n", scanned, selected, strings.Join(tags, ", "), mode)
+	fmt.Println(console.Translate(ctx, messages.TagScanSummary(scanned, selected, strings.Join(tags, ", "), mode)))
 	if opts.CheckOnly {
 		return nil
 	}
@@ -219,7 +223,7 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 		}
 	}
 	if !complete && opts.Window.Until > 0 {
-		return fmt.Errorf("max_posts truncated the incremental archive window; keeping last_ts")
+		return diagnostic.Describe(fmt.Errorf("max_posts truncated the incremental archive window; keeping last_ts"), corei18n.Message{ID: "errors.message.max_key_posts_truncated_the_incremental_archive_window_keeping_last_key_ts"})
 	}
 	return nil
 }
@@ -234,11 +238,11 @@ func matchAlbumIfMedia(pending []tagMedia, tags []string, mode string, id int64,
 func normalizeTag(raw string) (string, error) {
 	tag := strings.TrimPrefix(strings.TrimSpace(raw), "#")
 	if tag == "" {
-		return "", fmt.Errorf("tag is required")
+		return "", diagnostic.Describe(fmt.Errorf("tag is required"), corei18n.Message{ID: "errors.message.tag_is_required"})
 	}
 	for _, r := range tag {
 		if !tagChar(r) {
-			return "", fmt.Errorf("invalid hashtag %q", raw)
+			return "", diagnostic.Describe(fmt.Errorf("invalid hashtag %q", raw), corei18n.Message{ID: "errors.message.invalid_hashtag_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", raw)}})
 		}
 	}
 	return "#" + tag, nil
@@ -250,7 +254,7 @@ func normalizeTags(single string, multiple []string) ([]string, error) {
 		inputs = append([]string{single}, inputs...)
 	}
 	if len(inputs) == 0 {
-		return nil, fmt.Errorf("at least one tag is required")
+		return nil, diagnostic.Describe(fmt.Errorf("at least one tag is required"), corei18n.Message{ID: "errors.message.at_least_one_tag_is_required"})
 	}
 	tags := make([]string, 0, len(inputs))
 	seen := make(map[string]struct{}, len(inputs))
@@ -395,6 +399,10 @@ func postDirectory(caption string, id int, matchedTag string) string {
 // migrateTagDirectory moves an archive made with an older folder naming rule
 // only when its metadata confirms the same Telegram message ID.
 func migrateTagDirectory(root, target string, post tagPost) error {
+	return migrateTagDirectoryContext(context.Background(), root, target, post)
+}
+
+func migrateTagDirectoryContext(ctx context.Context, root, target string, post tagPost) error {
 	id := post.MessageID
 	if _, err := os.Stat(target); err == nil {
 		return checkArchiveOwner(target, post)
@@ -417,17 +425,17 @@ func migrateTagDirectory(root, target string, post tagPost) error {
 		}
 		var meta tagPost
 		if json.Unmarshal(b, &meta) != nil || !sameArchiveOwner(meta, post) {
-			fmt.Printf("Archive %s has incompatible or unverified source/account metadata; preserved for recovery\n", candidate)
+			fmt.Println(console.Translate(ctx, messages.TagArchiveUnverified(candidate)))
 			continue
 		}
 		if source != "" {
-			return fmt.Errorf("multiple existing archives for message %d", id)
+			return diagnostic.Describe(fmt.Errorf("multiple existing archives for message %d", id), corei18n.Message{ID: "errors.message.multiple_existing_archives_for_message_value", Args: map[string]any{"Arg1": id}})
 		}
 		source = candidate
 	}
 	if source != "" {
 		if err := os.Rename(source, target); err != nil {
-			return fmt.Errorf("migrate archive %s: %w", source, err)
+			return diagnostic.Describe(fmt.Errorf("migrate archive %s: %w", source, err), corei18n.Message{ID: "errors.message.migrate_archive_value_value", Args: map[string]any{"Arg1": source, "Arg2": err}})
 		}
 	}
 	return nil

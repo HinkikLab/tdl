@@ -36,6 +36,7 @@ func newExportStream(dir string, dialogID int64) (*exportStream, error) {
 		file: file, buffer: buffer, encoder: json.NewEncoder(buffer), first: true,
 		path: filepath.Join(destination, fmt.Sprintf("tdl-export-%d-%d.json", dialogID, time.Now().UnixNano())),
 	}
+	// i18n:ignore Stable machine-readable export schema.
 	if _, err := fmt.Fprintf(buffer, "{\"id\":%d,\"messages\":[\n", dialogID); err != nil {
 		s.Abort()
 		return nil, err

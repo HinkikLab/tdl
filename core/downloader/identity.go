@@ -5,6 +5,9 @@ import (
 	"os"
 
 	"github.com/gotd/td/tg"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 // FileIdentity describes the bytes selected for a resumable download. Expiring
@@ -22,7 +25,7 @@ type FileIdentity struct {
 // FileIdentityOf extracts the stable identity used by part journals.
 func FileIdentityOf(file File) (FileIdentity, error) {
 	if file == nil {
-		return FileIdentity{}, fmt.Errorf("file is required")
+		return FileIdentity{}, diagnostic.Describe(fmt.Errorf("file is required"), corei18n.Message{ID: "errors.message.file_is_required"})
 	}
 	id := FileIdentity{Size: file.Size(), DC: file.DC(), PartSize: MaxPartSize}
 	switch loc := file.Location().(type) {
@@ -35,10 +38,13 @@ func FileIdentityOf(file File) (FileIdentity, error) {
 			id.Kind, id.ID, id.ThumbSize = "photo", loc.ID, loc.ThumbSize
 		}
 	default:
-		return FileIdentity{}, fmt.Errorf("unsupported resumable file location %T", file.Location())
+		return FileIdentity{}, func() error {
+			messageArg1 := file.Location()
+			return diagnostic.Describe(fmt.Errorf("unsupported resumable file location %T", messageArg1), corei18n.Message{ID: "errors.message.unsupported_resumable_file_location_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", messageArg1)}})
+		}()
 	}
 	if !id.valid() {
-		return FileIdentity{}, fmt.Errorf("invalid resumable file identity: %+v", id)
+		return FileIdentity{}, diagnostic.Describe(fmt.Errorf("invalid resumable file identity: %+v", id), corei18n.Message{ID: "errors.message.invalid_resumable_file_identity_value", Args: map[string]any{"Arg1": id}})
 	}
 	return id, nil
 }

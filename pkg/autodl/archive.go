@@ -12,6 +12,8 @@ import (
 
 	"github.com/iyear/tdl/app/chat"
 	"github.com/iyear/tdl/core/util/tutil"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 // runArchiveWindow applies the same range/incremental precedence as ordinary
@@ -45,9 +47,9 @@ func (r *Runner) runArchiveWindow(ctx context.Context, job *Job, dir string, dow
 	end := time.Now().Unix()
 	overlap := r.overlapSeconds(job)
 	start := max(int64(0), state.GetLastTS()-int64(overlap))
-	color.Cyan("Incremental archive window: %s ~ %s (last=%s, overlap=%ds)",
+	color.Cyan("%s", console.Translate(ctx, messages.BatchIncrementalWindow(
 		time.Unix(start, 0).Format(time.RFC3339), time.Unix(end, 0).Format(time.RFC3339),
-		formatLastTS(state.GetLastTS()), overlap)
+		formatLastTSContext(ctx, state.GetLastTS()), overlap, true)))
 	if err := download(chat.ArchiveWindow{Since: start, Until: end}); err != nil {
 		return err
 	}
@@ -116,12 +118,17 @@ func (r *Runner) archiveStateScopeForSource(job *Job, dir, source string) (strin
 		MaxPosts int
 		Metadata bool
 		Links    any
-	}{identityRunner.stateScope(&copyJob, link, dir), link.MessageID, job.FollowLinks,
-		tags, match, job.MaxPosts, job.WritesMetadata(r.cfg.WriteMetadata), struct {
+	}{
+		identityRunner.stateScope(&copyJob, link, dir), link.MessageID, job.FollowLinks,
+		tags, match, job.MaxPosts, job.WritesMetadata(r.cfg.WriteMetadata),
+		struct {
 			Depth, Links, Messages, TopicMessages, Comments int
 			ScanComments, Previews                          bool
-		}{job.LinkOptions.MaxDepth, job.LinkOptions.MaxLinks, job.LinkOptions.MaxBotMessages, job.LinkOptions.MaxTopicMessages, job.LinkOptions.CommentLimit,
-			job.LinkOptions.ScanComments == nil || *job.LinkOptions.ScanComments, job.LinkOptions.IncludePreviews == nil || *job.LinkOptions.IncludePreviews}})
+		}{
+			job.LinkOptions.MaxDepth, job.LinkOptions.MaxLinks, job.LinkOptions.MaxBotMessages, job.LinkOptions.MaxTopicMessages, job.LinkOptions.CommentLimit,
+			job.LinkOptions.ScanComments == nil || *job.LinkOptions.ScanComments, job.LinkOptions.IncludePreviews == nil || *job.LinkOptions.IncludePreviews,
+		},
+	})
 	if err != nil {
 		return "", err
 	}

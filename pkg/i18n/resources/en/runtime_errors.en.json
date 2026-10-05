@@ -1,0 +1,1103 @@
+{
+  "errors.message.resolve_archive_account_identity_value": {
+    "other": "resolve archive account identity: {{.Arg1}}"
+  },
+  "errors.message.read_archive_owner_value": {
+    "other": "read archive owner: {{.Arg1}}"
+  },
+  "errors.archive.owner_mismatch": {
+    "other": "existing archive {{.Arg1}} belongs to another source, account or post; preserved for recovery"
+  },
+  "errors.message.incremental_archive_scan_exceeded_100000_messages_keeping_last_key_ts": {
+    "other": "incremental archive scan exceeded 100000 messages; keeping last_ts"
+  },
+  "errors.message.scan_chat_history_value": {
+    "other": "scan chat history: {{.Arg1}}"
+  },
+  "errors.message.bot_live_updates_exceed_max_key_bot_key_messages": {
+    "other": "bot live updates exceed max_bot_messages"
+  },
+  "errors.message.failed_to_walk_fields_value": {
+    "other": "failed to walk fields: {{.Arg1}}"
+  },
+  "errors.message.failed_to_compile_filter_value": {
+    "other": "failed to compile filter: {{.Arg1}}"
+  },
+  "errors.message.failed_to_get_peer_value": {
+    "other": "failed to get peer: {{.Arg1}}"
+  },
+  "errors.message.failed_to_get_broadcast_full_raw_value": {
+    "other": "failed to get broadcast full raw: {{.Arg1}}"
+  },
+  "errors.message.no_linked_group": {
+    "other": "no linked group"
+  },
+  "errors.message.failed_to_run_filter_value": {
+    "other": "failed to run filter: {{.Arg1}}"
+  },
+  "errors.message.failed_to_marshal_message_value": {
+    "other": "failed to marshal message: {{.Arg1}}"
+  },
+  "errors.message.value_must_be_between_0_and_value": {
+    "other": "{{.Arg1}} must be between 0 and {{.Arg2}}"
+  },
+  "errors.message.bot_key_idle_key_seconds_must_be_less_than_bot_key_timeout_key_seconds": {
+    "other": "bot_idle_seconds must be less than bot_timeout_seconds"
+  },
+  "errors.message.poll_key_interval_key_ms_must_be_less_than_bot_key_timeout_key_seconds": {
+    "other": "poll_interval_ms must be less than bot_timeout_seconds"
+  },
+  "errors.message.rerequest_key_limit_must_be_between_0_and_10": {
+    "other": "rerequest_limit must be between 0 and 10"
+  },
+  "errors.message.flood_key_retries_must_be_between_0_and_20": {
+    "other": "flood_retries must be between 0 and 20"
+  },
+  "errors.bot.flood_wait_limit": {
+    "other": "flood_wait_seconds must not exceed max_flood_wait_seconds"
+  },
+  "errors.message.resource_link_cycle_at_value": {
+    "other": "resource link cycle at {{.Arg1}}"
+  },
+  "errors.message.resource_link_depth_exceeds_value": {
+    "other": "resource link depth exceeds {{.Arg1}}"
+  },
+  "errors.message.resource_link_count_exceeds_value": {
+    "other": "resource link count exceeds {{.Arg1}}"
+  },
+  "errors.message.resolve_value_value": {
+    "other": "resolve {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.message.linked_post_comments_value": {
+    "other": "linked post comments: {{.Arg1}}"
+  },
+  "errors.message.value_returned_no_files_or_resource_links": {
+    "other": "{{.Arg1}} returned no files or resource links"
+  },
+  "errors.message.no_resource_files_resolved": {
+    "other": "no resource files resolved"
+  },
+  "errors.message.delete_bot_archive_messages_value_value": {
+    "other": "delete bot archive messages {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.message.resolve_value_peer_value_value": {
+    "other": "resolve {{.Arg1}} peer {{.Arg2}}: {{.Arg3}}"
+  },
+  "errors.message.message_value_does_not_belong_to_linked_forum_topic_value": {
+    "other": "message {{.Arg1}} does not belong to linked forum topic {{.Arg2}}"
+  },
+  "errors.message.message_value_is_unavailable_or_deleted": {
+    "other": "message {{.Arg1}} is unavailable or deleted"
+  },
+  "errors.message.unexpected_message_result_value": {
+    "other": "unexpected message result {{.Arg1}}"
+  },
+  "errors.message.linked_album_is_unavailable": {
+    "other": "linked album is unavailable"
+  },
+  "errors.message.album_message_value_does_not_belong_to_linked_forum_topic_value": {
+    "other": "album message {{.Arg1}} does not belong to linked forum topic {{.Arg2}}"
+  },
+  "errors.message.discussion_root_is_unavailable": {
+    "other": "discussion root is unavailable"
+  },
+  "errors.message.read_bot_value_response_history_after_value_offset_value_value": {
+    "other": "read bot {{.Arg1}} response history after {{.Arg2}} (offset {{.Arg3}}): {{.Arg4}}"
+  },
+  "errors.message.unexpected_bot_history_result": {
+    "other": "unexpected bot history result"
+  },
+  "errors.message.bot_response_exceeds_max_key_bot_key_messages": {
+    "other": "bot response exceeds max_bot_messages"
+  },
+  "errors.message.bot_history_pagination_did_not_advance": {
+    "other": "bot history pagination did not advance"
+  },
+  "errors.message.bot_flood_key_retries_exhausted_value": {
+    "other": "bot flood_retries exhausted: {{.Arg1}}"
+  },
+  "errors.message.bot_cooldown_exceeds_max_key_flood_key_wait_key_seconds_value": {
+    "other": "bot cooldown exceeds max_flood_wait_seconds: {{.Arg1}}"
+  },
+  "errors.message.check_bot_value_replies_during_request_interval_value": {
+    "other": "check bot {{.Arg1}} replies during request interval: {{.Arg2}}"
+  },
+  "errors.message.read_bot_value_request_watermark_value": {
+    "other": "read bot {{.Arg1}} request watermark: {{.Arg2}}"
+  },
+  "errors.message.wait_bot_value_request_interval_value": {
+    "other": "wait bot {{.Arg1}} request interval: {{.Arg2}}"
+  },
+  "errors.message.generate_bot_value_request_id_value": {
+    "other": "generate bot {{.Arg1}} request ID: {{.Arg2}}"
+  },
+  "errors.message.start_bot_value_value": {
+    "other": "start bot {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.bot.response_timeout": {
+    "other": "bot {{.Arg1}} response did not settle within {{.Arg2}} seconds ({{.Arg3}} messages): {{.Arg4}}; last reply (ID {{.Arg5}}): {{.Arg6}}; adjust bot_timeout_seconds/bot_idle_seconds: {{.Arg7}}"
+  },
+  "errors.message.linked_archive_requires_a_download_pool": {
+    "other": "linked archive requires a download pool"
+  },
+  "errors.message.source_must_be_a_main_chat_or_post": {
+    "other": "source must be a main chat or post"
+  },
+  "errors.message.max_key_posts_must_not_be_negative": {
+    "other": "max_posts must not be negative"
+  },
+  "errors.message.tag_key_match_must_be_any_or_all": {
+    "other": "tag_match must be any or all"
+  },
+  "errors.message.post_value_comments_value": {
+    "other": "post {{.Arg1}} comments: {{.Arg2}}"
+  },
+  "errors.message.max_key_posts_truncated_the_incremental_archive_window_keeping_last_key_ts": {
+    "other": "max_posts truncated the incremental archive window; keeping last_ts"
+  },
+  "errors.message.clean_up_bot_messages_value": {
+    "other": "clean up bot messages: {{.Arg1}}"
+  },
+  "errors.message.all_resource_files_excluded_by_extension_filters": {
+    "other": "all resource files excluded by extension filters"
+  },
+  "errors.message.message_value_has_unsupported_service_action_value": {
+    "other": "message {{.Arg1}} has unsupported service action {{.Arg2}}"
+  },
+  "errors.message.unexpected_linked_message_type_value": {
+    "other": "unexpected linked message type {{.Arg1}}"
+  },
+  "errors.message.linked_message_value_peer_mismatch_requested_value_received_value": {
+    "other": "linked message {{.Arg1}} peer mismatch: requested {{.Arg2}}, received {{.Arg3}}"
+  },
+  "errors.message.topic_creation_message_value_conflicts_with_linked_forum_topic_value": {
+    "other": "topic creation message {{.Arg1}} conflicts with linked forum topic {{.Arg2}}"
+  },
+  "errors.message.linked_topic_value_requires_a_forum_channel": {
+    "other": "linked topic {{.Arg1}} requires a forum channel"
+  },
+  "errors.message.verify_linked_forum_topic_value_value": {
+    "other": "verify linked forum topic {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.message.linked_service_message_value_is_not_a_confirmed_accessible_forum_topic": {
+    "other": "linked service message {{.Arg1}} is not a confirmed accessible forum topic"
+  },
+  "errors.message.max_key_topic_key_messages_must_be_between_1_and_100000": {
+    "other": "max_topic_messages must be between 1 and 100000"
+  },
+  "errors.message.read_linked_forum_topic_value_value": {
+    "other": "read linked forum topic {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.message.unexpected_linked_topic_result_value": {
+    "other": "unexpected linked topic result {{.Arg1}}"
+  },
+  "errors.message.linked_topic_value_returned_invalid_message_id_value": {
+    "other": "linked topic {{.Arg1}} returned invalid message ID {{.Arg2}}"
+  },
+  "errors.message.linked_forum_topic_value_exceeds_max_key_topic_key_messages_value": {
+    "other": "linked forum topic {{.Arg1}} exceeds max_topic_messages ({{.Arg2}})"
+  },
+  "errors.message.linked_forum_topic_value_pagination_did_not_advance": {
+    "other": "linked forum topic {{.Arg1}} pagination did not advance"
+  },
+  "errors.message.resource_rerequest_key_limit_exhausted": {
+    "other": "resource rerequest_limit exhausted"
+  },
+  "errors.message.resource_set_changed_after_reissuing_the_chain_rerun_to_archive_the_new_set": {
+    "other": "resource set changed after reissuing the chain; rerun to archive the new set"
+  },
+  "errors.archive.refreshed_file_missing": {
+    "other": "reissued resources do not contain the same file with a fresh reference: {{.Arg1}}"
+  },
+  "errors.message.source_message_no_longer_contains_media": {
+    "other": "source message no longer contains media"
+  },
+  "errors.message.marshal_json_value": {
+    "other": "marshal json: {{.Arg1}}"
+  },
+  "errors.message.unknown_output_value": {
+    "other": "unknown output: {{.Arg1}}"
+  },
+  "errors.context.get_forum_topics": {
+    "other": "get forum topics: {{.Reason}}"
+  },
+  "errors.message.max_posts_must_not_be_negative": {
+    "other": "max posts must not be negative"
+  },
+  "errors.message.tag_match_mode_must_be_any_or_all": {
+    "other": "tag match mode must be any or all"
+  },
+  "errors.message.resolve_chat_value_value": {
+    "other": "resolve chat {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.message.tag_archive_requires_a_download_pool": {
+    "other": "tag archive requires a download pool"
+  },
+  "errors.message.tag_is_required": {
+    "other": "tag is required"
+  },
+  "errors.message.invalid_hashtag_value": {
+    "other": "invalid hashtag {{.Arg1}}"
+  },
+  "errors.message.at_least_one_tag_is_required": {
+    "other": "at least one tag is required"
+  },
+  "errors.message.multiple_existing_archives_for_message_value": {
+    "other": "multiple existing archives for message {{.Arg1}}"
+  },
+  "errors.message.migrate_archive_value_value": {
+    "other": "migrate archive {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.archive.completion_owner_mismatch": {
+    "other": "private archive completion state belongs to another source/account/post; preserved for recovery"
+  },
+  "errors.message.cannot_record_incomplete_archive_file_value": {
+    "other": "cannot record incomplete archive file {{.Arg1}}"
+  },
+  "errors.message.output_path_value_is_not_a_regular_file": {
+    "other": "output path {{.Arg1}} is not a regular file"
+  },
+  "errors.message.preserve_unverified_archive_file_value": {
+    "other": "preserve unverified archive file: {{.Arg1}}"
+  },
+  "errors.message.topic_key_id_must_be_positive": {
+    "other": "topic_id must be positive"
+  },
+  "errors.message.tag_job_chat_key_url_does_not_support_value_use_a_chat_or_topic_link": {
+    "other": "tag job chat_url does not support {{.Arg1}}; use a chat or topic link"
+  },
+  "errors.message.topic_key_id_value_conflicts_with_chat_key_url_topic_value": {
+    "other": "topic_id ({{.Arg1}}) conflicts with chat_url topic ({{.Arg2}})"
+  },
+  "errors.message.verify_forum_topic_value_value": {
+    "other": "verify forum topic {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.chat.topic_inaccessible": {
+    "other": "chat_url/topic_id does not identify an accessible forum topic ({{.Arg1}}); use the chat home URL to scan the whole chat"
+  },
+  "errors.message.discovered_media_value_is_unavailable": {
+    "other": "discovered media {{.Arg1}} is unavailable"
+  },
+  "errors.message.missing_domain_id": {
+    "other": "missing domain id"
+  },
+  "errors.message.invalid_type_of_chat_channels_groups_are_supported_only": {
+    "other": "invalid type of chat. channels/groups are supported only"
+  },
+  "errors.message.failed_to_output_value_value": {
+    "other": "failed to output {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.context.get_total_count": {
+    "other": "get total count: {{.Reason}}"
+  },
+  "errors.context.marshal_user": {
+    "other": "marshal user: {{.Reason}}"
+  },
+  "errors.download.resume_version": {
+    "other": "unsupported download resume version; legacy positional state is retained for recovery"
+  },
+  "errors.context.parse_template": {
+    "other": "parse template: {{.Reason}}"
+  },
+  "errors.message.you_must_specify_at_least_one_message": {
+    "other": "you must specify at least one message"
+  },
+  "errors.context.resolve_from_input_peer": {
+    "other": "resolve from input peer: {{.Reason}}"
+  },
+  "errors.context.resolve_message": {
+    "other": "resolve message: {{.Reason}}"
+  },
+  "errors.context.execute_template": {
+    "other": "execute template: {{.Reason}}"
+  },
+  "errors.context.resolve_output_path": {
+    "other": "resolve output path: {{.Reason}}"
+  },
+  "errors.context.create_dir": {
+    "other": "create dir: {{.Reason}}"
+  },
+  "errors.context.create_file": {
+    "other": "create file: {{.Reason}}"
+  },
+  "errors.context.resolve_grouped_message_value_value": {
+    "other": "resolve grouped message {{.Arg1}}/{{.Arg2}}: {{.Reason}}"
+  },
+  "errors.context.progress": {
+    "other": "progress: {{.Reason}}"
+  },
+  "errors.context.invalid_message_id": {
+    "other": "invalid message id: {{.Reason}}"
+  },
+  "errors.context.resolve_peer": {
+    "other": "resolve peer: {{.Reason}}"
+  },
+  "errors.context.convitem": {
+    "other": "convItem: {{.Reason}}"
+  },
+  "errors.message.message_is_not_a_media": {
+    "other": "message is not a media"
+  },
+  "errors.message.document_is_empty": {
+    "other": "document is empty"
+  },
+  "errors.message.list_extensions_failed": {
+    "other": "list extensions failed"
+  },
+  "errors.context.list_extensions_with_metadata": {
+    "other": "list extensions with metadata: {{.Reason}}"
+  },
+  "errors.message.no_extensions_installed": {
+    "other": "no extensions installed"
+  },
+  "errors.context.list_extensions": {
+    "other": "list extensions: {{.Reason}}"
+  },
+  "errors.context.collect_dialogs": {
+    "other": "collect dialogs: {{.Reason}}"
+  },
+  "errors.context.resolve_dest_peer": {
+    "other": "resolve dest peer: {{.Reason}}"
+  },
+  "errors.context.resolve_edit": {
+    "other": "resolve edit: {{.Reason}}"
+  },
+  "errors.context.parse_from_url": {
+    "other": "parse from url: {{.Reason}}"
+  },
+  "errors.context.parse_from_file": {
+    "other": "parse from file: {{.Reason}}"
+  },
+  "errors.context.get_from_peer": {
+    "other": "get from peer: {{.Reason}}"
+  },
+  "errors.context.get_message_value": {
+    "other": "get message: {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.message_routing": {
+    "other": "message routing: {{.Reason}}"
+  },
+  "errors.context.decode_dest_value": {
+    "other": "decode dest: {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.message_router_must_return_string_or_dest_value": {
+    "other": "message router must return string or dest: {{.Arg1}}"
+  },
+  "errors.context.edit_message": {
+    "other": "edit message: {{.Reason}}"
+  },
+  "errors.message.edit_must_return_string_value": {
+    "other": "edit must return string: {{.Arg1}}"
+  },
+  "errors.context.parse_edited_message": {
+    "other": "parse edited message: {{.Reason}}"
+  },
+  "errors.context.resolve_dest_value": {
+    "other": "resolve dest: {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.open_kv": {
+    "other": "open kv: {{.Reason}}"
+  },
+  "errors.context.set_app": {
+    "other": "set app: {{.Reason}}"
+  },
+  "errors.message.don_t_support_sign_up_telegram_account": {
+    "other": "don't support sign up Telegram account"
+  },
+  "errors.login.desktop_data_missing": {
+    "other": "no data found in possible paths, please specify path to Telegram Desktop directory with `-d` flag"
+  },
+  "errors.message.unsupported_login_type_value": {
+    "other": "unsupported login type: {{.Arg1}}"
+  },
+  "errors.context.create_client": {
+    "other": "create client: {{.Reason}}"
+  },
+  "errors.context.create_qr": {
+    "other": "create qr: {{.Reason}}"
+  },
+  "errors.context.qr_auth": {
+    "other": "qr auth: {{.Reason}}"
+  },
+  "errors.context.2fa_password": {
+    "other": "2fa password: {{.Reason}}"
+  },
+  "errors.context.2fa_auth": {
+    "other": "2fa auth: {{.Reason}}"
+  },
+  "errors.context.get_self": {
+    "other": "get self: {{.Reason}}"
+  },
+  "errors.context.read_metadata": {
+    "other": "read metadata: {{.Reason}}"
+  },
+  "errors.context.create_zstd_encoder": {
+    "other": "create zstd encoder: {{.Reason}}"
+  },
+  "errors.context.marshal_metadata": {
+    "other": "marshal metadata: {{.Reason}}"
+  },
+  "errors.context.write_metadata": {
+    "other": "write metadata: {{.Reason}}"
+  },
+  "errors.context.confirm": {
+    "other": "confirm: {{.Reason}}"
+  },
+  "errors.context.read_data": {
+    "other": "read data: {{.Reason}}"
+  },
+  "errors.context.create_dest_storage": {
+    "other": "create dest storage: {{.Reason}}"
+  },
+  "errors.context.migrate_from": {
+    "other": "migrate from: {{.Reason}}"
+  },
+  "errors.context.open_file": {
+    "other": "open file: {{.Reason}}"
+  },
+  "errors.context.create_zstd_decoder": {
+    "other": "create zstd decoder: {{.Reason}}"
+  },
+  "errors.context.unmarshal_metadata": {
+    "other": "unmarshal metadata: {{.Reason}}"
+  },
+  "errors.context.resolve_file": {
+    "other": "resolve file: {{.Reason}}"
+  },
+  "errors.context.resolve_destination": {
+    "other": "resolve destination: {{.Reason}}"
+  },
+  "errors.context.resolve_caption": {
+    "other": "resolve caption: {{.Reason}}"
+  },
+  "errors.context.resolve_thumbnail": {
+    "other": "resolve thumbnail: {{.Reason}}"
+  },
+  "errors.context.stat_file": {
+    "other": "stat file: {{.Reason}}"
+  },
+  "errors.context.resolve_chat": {
+    "other": "resolve chat: {{.Reason}}"
+  },
+  "errors.context.parse_expression": {
+    "other": "parse expression: {{.Reason}}"
+  },
+  "errors.context.parse_caption": {
+    "other": "parse caption: {{.Reason}}"
+  },
+  "errors.message.caption_must_return_string_got_value": {
+    "other": "caption must return string, got {{.Arg1}}"
+  },
+  "errors.context.parse_caption_html": {
+    "other": "parse caption HTML: {{.Reason}}"
+  },
+  "errors.context.detect_thumbnail_file_value": {
+    "other": "detect thumbnail file: {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.invalid_thumbnail_file_value": {
+    "other": "invalid thumbnail file: {{.Arg1}}"
+  },
+  "errors.context.open_thumbnail_file": {
+    "other": "open thumbnail file: {{.Reason}}"
+  },
+  "errors.context.close_file": {
+    "other": "close file: {{.Reason}}"
+  },
+  "errors.context.remove_file": {
+    "other": "remove file: {{.Reason}}"
+  },
+  "errors.context.close_thumb": {
+    "other": "close thumb: {{.Reason}}"
+  },
+  "errors.context.get_target_peer": {
+    "other": "get target peer: {{.Reason}}"
+  },
+  "errors.context.get_caption": {
+    "other": "get caption: {{.Reason}}"
+  },
+  "errors.context.get_executable_path": {
+    "other": "get executable path: {{.Reason}}"
+  },
+  "errors.context.resolve_executable_path": {
+    "other": "resolve executable path: {{.Reason}}"
+  },
+  "errors.context.fetch_release": {
+    "other": "fetch release: {{.Reason}}"
+  },
+  "errors.context.confirm_use_yes_to_skip_the_prompt": {
+    "other": "confirm (use --yes to skip the prompt): {{.Reason}}"
+  },
+  "errors.message.no_release_assets_for_platform_value_value_value": {
+    "other": "no release assets for platform {{.Arg1}}/{{.Arg2}}/{{.Arg3}}"
+  },
+  "errors.context.create_temp_dir": {
+    "other": "create temp dir: {{.Reason}}"
+  },
+  "errors.context.download_archive": {
+    "other": "download archive: {{.Reason}}"
+  },
+  "errors.context.download_checksums": {
+    "other": "download checksums: {{.Reason}}"
+  },
+  "errors.context.read_checksums": {
+    "other": "read checksums: {{.Reason}}"
+  },
+  "errors.context.verify_checksum": {
+    "other": "verify checksum: {{.Reason}}"
+  },
+  "errors.context.extract_binary": {
+    "other": "extract binary: {{.Reason}}"
+  },
+  "errors.context.replace_binary": {
+    "other": "replace binary: {{.Reason}}"
+  },
+  "errors.message.invalid_target_version_value_value": {
+    "other": "invalid target version {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.context.github_api": {
+    "other": "github api: {{.Reason}}"
+  },
+  "errors.message.release_not_found": {
+    "other": "release not found"
+  },
+  "errors.message.asset_value_not_found_in_release_value": {
+    "other": "asset {{.Arg1}} not found in release {{.Arg2}}"
+  },
+  "errors.context.create_request": {
+    "other": "create request: {{.Reason}}"
+  },
+  "errors.context.do_request": {
+    "other": "do request: {{.Reason}}"
+  },
+  "errors.message.unexpected_status_code_value": {
+    "other": "unexpected status code: {{.Arg1}}"
+  },
+  "errors.context.save_file": {
+    "other": "save file: {{.Reason}}"
+  },
+  "errors.message.checksum_for_value_not_found": {
+    "other": "checksum for {{.Arg1}} not found"
+  },
+  "errors.context.hash_file": {
+    "other": "hash file: {{.Reason}}"
+  },
+  "errors.message.checksum_mismatch_expected_value_got_value": {
+    "other": "checksum mismatch: expected {{.Arg1}}, got {{.Arg2}}"
+  },
+  "errors.message.unsupported_archive_format_value": {
+    "other": "unsupported archive format: {{.Arg1}}"
+  },
+  "errors.context.chmod_binary": {
+    "other": "chmod binary: {{.Reason}}"
+  },
+  "errors.context.open_archive": {
+    "other": "open archive: {{.Reason}}"
+  },
+  "errors.context.gzip_reader": {
+    "other": "gzip reader: {{.Reason}}"
+  },
+  "errors.message.value_not_found_in_archive": {
+    "other": "{{.Arg1}} not found in archive"
+  },
+  "errors.context.tar_next": {
+    "other": "tar next: {{.Reason}}"
+  },
+  "errors.context.create_output_file": {
+    "other": "create output file: {{.Reason}}"
+  },
+  "errors.context.copy_binary": {
+    "other": "copy binary: {{.Reason}}"
+  },
+  "errors.context.zip_open_reader": {
+    "other": "zip open reader: {{.Reason}}"
+  },
+  "errors.context.open_zip_entry": {
+    "other": "open zip entry: {{.Reason}}"
+  },
+  "errors.context.close_output_file": {
+    "other": "close output file: {{.Reason}}"
+  },
+  "errors.update.stage_permission": {
+    "other": "stage new binary in {{.Arg1}}: permission denied (check directory ownership, or use your package manager): {{.Reason}}"
+  },
+  "errors.context.stage_new_binary": {
+    "other": "stage new binary: {{.Reason}}"
+  },
+  "errors.context.backup_old_binary": {
+    "other": "backup old binary: {{.Reason}}"
+  },
+  "errors.context.open_source": {
+    "other": "open source: {{.Reason}}"
+  },
+  "errors.context.create_destination": {
+    "other": "create destination: {{.Reason}}"
+  },
+  "errors.context.copy_content": {
+    "other": "copy content: {{.Reason}}"
+  },
+  "errors.context.sync_destination": {
+    "other": "sync destination: {{.Reason}}"
+  },
+  "errors.message.value_value": {
+    "other": "{{.Arg1}}; {{.Arg2}}"
+  },
+  "errors.message.value_must_not_be_negative": {
+    "other": "--{{.Arg1}} must not be negative"
+  },
+  "errors.message.overlap_seconds_must_not_be_less_than_1": {
+    "other": "--overlap-seconds must not be less than -1"
+  },
+  "errors.message.input_data_should_be_2_integers_when_export_type_is_value": {
+    "other": "input data should be 2 integers when export type is {{.Arg1}}"
+  },
+  "errors.message.input_data_should_be_1_integer_when_export_type_is_value": {
+    "other": "input data should be 1 integer when export type is {{.Arg1}}"
+  },
+  "errors.message.unknown_export_type_value": {
+    "other": "unknown export type: {{.Arg1}}"
+  },
+  "errors.message.no_urls_or_files_provided": {
+    "other": "no urls or files provided"
+  },
+  "errors.context.build_telegram_options": {
+    "other": "build telegram options: {{.Reason}}"
+  },
+  "errors.context.get_app": {
+    "other": "get app: {{.Reason}}"
+  },
+  "errors.context.load_session": {
+    "other": "load session: {{.Reason}}"
+  },
+  "errors.context.create_extension_data_dir": {
+    "other": "create extension data dir: {{.Reason}}"
+  },
+  "errors.message.failed_to_run_extension_value": {
+    "other": "failed to run extension: {{.Arg1}}"
+  },
+  "errors.context.mkdir": {
+    "other": "mkdir: {{.Reason}}"
+  },
+  "errors.context.gendoc": {
+    "other": "gendoc: {{.Reason}}"
+  },
+  "errors.context.migrate_legacy_to_bolt": {
+    "other": "migrate legacy to bolt: {{.Reason}}"
+  },
+  "errors.context.create_kv_storage": {
+    "other": "create kv storage: {{.Reason}}"
+  },
+  "errors.context.open_kv_storage": {
+    "other": "open kv storage: {{.Reason}}"
+  },
+  "errors.context.create_legacy_kv_storage": {
+    "other": "create legacy kv storage: {{.Reason}}"
+  },
+  "errors.context.create_bolt_kv_storage": {
+    "other": "create bolt kv storage: {{.Reason}}"
+  },
+  "errors.message.error_flags_chat_should_be_set_when_topic_is_set": {
+    "other": "error flags: --chat should be set when --topic is set"
+  },
+  "errors.message.conflicting_flags_chat_and_to_cannot_be_set_at_the_same_time": {
+    "other": "conflicting flags: --chat and --to cannot be set at the same time"
+  },
+  "errors.context.read_config": {
+    "other": "read config: {{.Reason}}"
+  },
+  "errors.context.parse_config": {
+    "other": "parse config: {{.Reason}}"
+  },
+  "errors.message.multiple_yaml_documents_are_not_supported": {
+    "other": "multiple YAML documents are not supported"
+  },
+  "errors.message.config_has_no_jobs": {
+    "other": "config has no jobs"
+  },
+  "errors.message.value_must_be_positive": {
+    "other": "{{.Arg1}} must be positive"
+  },
+  "errors.message.pool_must_not_be_negative": {
+    "other": "pool must not be negative"
+  },
+  "errors.message.overlap_key_seconds_must_not_be_negative": {
+    "other": "overlap_seconds must not be negative"
+  },
+  "errors.message.chat_key_url_is_required": {
+    "other": "chat_url is required"
+  },
+  "errors.message.comment_must_be_a_boolean_or_integer": {
+    "other": "comment must be a boolean or integer"
+  },
+  "errors.message.comment_must_be_a_boolean_or_positive_integer": {
+    "other": "comment must be a boolean or positive integer"
+  },
+  "errors.message.topic_key_id_and_reply_key_post_key_id_cannot_be_combined": {
+    "other": "topic_id and reply_post_id cannot be combined"
+  },
+  "errors.message.subdir_value_must_stay_inside_download_key_base": {
+    "other": "subdir {{.Arg1}} must stay inside download_base"
+  },
+  "errors.message.start_key_comment_must_be_positive": {
+    "other": "start_comment must be positive"
+  },
+  "errors.message.end_key_comment_must_be_positive": {
+    "other": "end_comment must be positive"
+  },
+  "errors.batch.link_source_selector": {
+    "other": "follow_links source must be a main chat/post; comment/topic selectors are not supported"
+  },
+  "errors.message.follow_key_links_cannot_combine_a_post_url_and_a_range": {
+    "other": "follow_links cannot combine a post URL and a range"
+  },
+  "errors.message.tag_must_not_be_blank": {
+    "other": "tag must not be blank"
+  },
+  "errors.message.tags_must_not_contain_blanks": {
+    "other": "tags must not contain blanks"
+  },
+  "errors.message.tag_job_cannot_select_comment_mode_or_reply_key_post_key_id": {
+    "other": "tag job cannot select comment mode or reply_post_id"
+  },
+  "errors.message.tag_or_tags_is_required": {
+    "other": "tag or tags is required"
+  },
+  "errors.batch.selector_requires_incremental": {
+    "other": "topic_id and reply_post_id require incremental mode for message jobs"
+  },
+  "errors.batch.range_required": {
+    "other": "start_comment and end_comment are required unless incremental mode is enabled"
+  },
+  "errors.message.message_range_exceeds_the_safety_limit_of_value": {
+    "other": "message range exceeds the safety limit of {{.Arg1}}"
+  },
+  "errors.message.archive_ranges_require_both_start_key_comment_and_end_key_comment": {
+    "other": "archive ranges require both start_comment and end_comment"
+  },
+  "errors.message.bot_start_links_are_not_a_batch_message_source": {
+    "other": "bot start links are not a batch message source"
+  },
+  "errors.context.iterate": {
+    "other": "iterate: {{.Reason}}"
+  },
+  "errors.message.load_configuration_comment_translations_value": {
+    "other": "load configuration comment translations: {{.Arg1}}"
+  },
+  "errors.message.config_path_must_not_be_empty": {
+    "other": "config path must not be empty"
+  },
+  "errors.message.create_config_directory_value": {
+    "other": "create config directory: {{.Arg1}}"
+  },
+  "errors.config.exists": {
+    "other": "config {{.Arg1}} already exists; choose another --config path or use --force to overwrite"
+  },
+  "errors.message.create_config_value_value": {
+    "other": "create config {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.message.write_config_value_value": {
+    "other": "write config {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.message.close_config_value_value": {
+    "other": "close config {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.message.create_temporary_config_value": {
+    "other": "create temporary config: {{.Arg1}}"
+  },
+  "errors.message.replace_config_value_value": {
+    "other": "replace config {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.message.empty_translation_id_in_example_config": {
+    "other": "empty translation ID in example config"
+  },
+  "errors.message.missing_translation_value_for_example_config": {
+    "other": "missing translation {{.Arg1}} for example config"
+  },
+  "errors.message.unsupported_config_language_value_use_auto_zh_or_en": {
+    "other": "unsupported config language {{.Arg1}}; use auto, zh or en"
+  },
+  "errors.message.invalid_mode_value": {
+    "other": "invalid mode {{.Arg1}}"
+  },
+  "errors.context.compile_export_key_filter_value": {
+    "other": "compile export_filter {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.batch.incremental_scan_limit": {
+    "other": "incremental scan exceeded {{.Arg1}} messages; keeping last_ts to avoid losing older messages"
+  },
+  "errors.context.run_export_key_filter": {
+    "other": "run export_filter: {{.Reason}}"
+  },
+  "errors.context.resolve_topic_root": {
+    "other": "resolve topic root: {{.Reason}}"
+  },
+  "errors.context.iterate_history": {
+    "other": "iterate history: {{.Reason}}"
+  },
+  "errors.message.value_message_s_still_missing_keeping_last_key_ts": {
+    "other": "{{.Arg1}} message(s) still missing; keeping last_ts"
+  },
+  "errors.context.save_state": {
+    "other": "save state: {{.Reason}}"
+  },
+  "errors.context.resolve_messages": {
+    "other": "resolve messages: {{.Reason}}"
+  },
+  "errors.context.resolve_topic_key_id_value": {
+    "other": "resolve topic_id {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.create_download_dir_value": {
+    "other": "create download dir {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.performance_overrides_and_delay_must_not_be_negative": {
+    "other": "performance overrides and delay must not be negative"
+  },
+  "errors.message.overlap_key_seconds_override_must_not_be_negative": {
+    "other": "overlap_seconds override must not be negative"
+  },
+  "errors.message.include_and_exclude_cannot_be_combined": {
+    "other": "include and exclude cannot be combined"
+  },
+  "errors.context.export_key_filter": {
+    "other": "export_filter: {{.Reason}}"
+  },
+  "errors.batch.state_path_conflict": {
+    "other": "state file {{.Arg1}} is also owned by job {{.Arg2}}; give each job a distinct subdir/state path"
+  },
+  "errors.context.template": {
+    "other": "template: {{.Reason}}"
+  },
+  "errors.message.template_output_value_conflicts_with_job_value": {
+    "other": "template output {{.Arg1}} conflicts with job {{.Arg2}}"
+  },
+  "errors.message.template_produces_the_same_output_path_for_multiple_messages": {
+    "other": "template produces the same output path for multiple messages"
+  },
+  "errors.message.nil_prepared_batch_run": {
+    "other": "nil prepared batch run"
+  },
+  "errors.context.resolve_authorized_batch_account": {
+    "other": "resolve authorized batch account: {{.Reason}}"
+  },
+  "errors.context.job_value_value": {
+    "other": "job {{.Arg1}} ({{.Arg2}}): {{.Reason}}"
+  },
+  "errors.context.job_value_state_ownership": {
+    "other": "job {{.Arg1}} state ownership: {{.Reason}}"
+  },
+  "errors.context.resolve_chat_value": {
+    "other": "resolve chat {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.chat_value_has_no_comment_section": {
+    "other": "chat {{.Arg1}} has no comment section"
+  },
+  "errors.context.get_channel_full": {
+    "other": "get channel full: {{.Reason}}"
+  },
+  "errors.message.chat_value_has_no_linked_discussion_group": {
+    "other": "chat {{.Arg1}} has no linked discussion group"
+  },
+  "errors.context.resolve_discussion_group": {
+    "other": "resolve discussion group: {{.Reason}}"
+  },
+  "errors.context.resolve_chat_override_value": {
+    "other": "resolve chat override {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.batch.source_mismatch": {
+    "other": "chat override {{.Arg1}} resolves to {{.Arg2}}, but chat_url/comment mode selects {{.Arg3}}; scan and download sources must match"
+  },
+  "errors.context.read_state_value": {
+    "other": "read state {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.parse_state_value": {
+    "other": "parse state {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.batch.state_scope_mismatch": {
+    "other": "state {{.Arg1}} belongs to {{.Arg2}}, not {{.Arg3}}; preserved unchanged: use a new state file/subdir to rescan, or keep a backup before explicitly resetting it"
+  },
+  "errors.batch.legacy_state_scope_missing": {
+    "other": "legacy state {{.Arg1}} has no verifiable source identity; preserved unchanged: use a new state file/subdir to rescan, or keep a backup before explicitly resetting it"
+  },
+  "errors.context.marshal_state": {
+    "other": "marshal state: {{.Reason}}"
+  },
+  "errors.context.create_state_dir_value": {
+    "other": "create state dir {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.write_state_value": {
+    "other": "write state {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.stat_committed_media": {
+    "other": "stat committed media: {{.Reason}}"
+  },
+  "errors.message.committed_media_value_has_size_value_expected_value": {
+    "other": "committed media {{.Arg1}} has size {{.Arg2}}, expected {{.Arg3}}"
+  },
+  "errors.message.too_many_ntp_hosts": {
+    "other": "too many ntp hosts"
+  },
+  "errors.context.read_manifest_file_value": {
+    "other": "read manifest file {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.unmarshal_manifest_file_value": {
+    "other": "unmarshal manifest file {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.already_up_to_date": {
+    "other": "already up to date"
+  },
+  "errors.message.only_github_extension_can_be_upgraded_by_tdl": {
+    "other": "only GitHub extension can be upgraded by tdl"
+  },
+  "errors.context.create_temp": {
+    "other": "create temp: {{.Reason}}"
+  },
+  "errors.context.marshal_env": {
+    "other": "marshal env: {{.Reason}}"
+  },
+  "errors.context.write_env_to_temp": {
+    "other": "write env to temp: {{.Reason}}"
+  },
+  "errors.context.close_env_file": {
+    "other": "close env file: {{.Reason}}"
+  },
+  "errors.context.read_dir_entries": {
+    "other": "read dir entries: {{.Reason}}"
+  },
+  "errors.context.load_manifest_of_value": {
+    "other": "load manifest of {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.remove_old_version_extension": {
+    "other": "remove old version extension: {{.Reason}}"
+  },
+  "errors.context.install_github_extension_value": {
+    "other": "install GitHub extension {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.invalid_target_value": {
+    "other": "invalid target: {{.Arg1}}"
+  },
+  "errors.context.source_extension_stat": {
+    "other": "source extension stat: {{.Reason}}"
+  },
+  "errors.message.invalid_src_extension_value_only_regular_file_is_allowed": {
+    "other": "invalid src extension: {{.Arg1}}, only regular file is allowed"
+  },
+  "errors.context.create_target_dir_value_for_extension_value": {
+    "other": "create target dir {{.Arg1}} for extension {{.Arg2}}: {{.Reason}}"
+  },
+  "errors.context.install_local_extension_value": {
+    "other": "install local extension: {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.invalid_repo_name_value_should_start_with_value": {
+    "other": "invalid repo name: {{.Arg1}}, should start with {{.Arg2}}"
+  },
+  "errors.context.get_latest_release_of_value_value": {
+    "other": "get latest release of {{.Arg1}}/{{.Arg2}}: {{.Reason}}"
+  },
+  "errors.message.no_matched_binary_value_found_in_the_release_value": {
+    "other": "no matched binary({{.Arg1}}) found in the release({{.Arg2}})"
+  },
+  "errors.context.create_target_dir_value_for_extension_value_value": {
+    "other": "create target dir {{.Arg1}} for extension {{.Arg2}}/{{.Arg3}}: {{.Reason}}"
+  },
+  "errors.context.download_github_asset_value": {
+    "other": "download github asset {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.marshal_manifest": {
+    "other": "marshal manifest: {{.Reason}}"
+  },
+  "errors.context.write_manifest_to_value": {
+    "other": "write manifest to {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.extension_already_exists_please_remove_it_first": {
+    "other": "extension already exists, please remove it first"
+  },
+  "errors.context.remove_existing_extension_value": {
+    "other": "remove existing extension {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.no_extension_found_value": {
+    "other": "no extension found: {{.Arg1}}"
+  },
+  "errors.context.download_release_asset_value": {
+    "other": "download release asset {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.open_file_value": {
+    "other": "open file {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.copy_http_body_to_value": {
+    "other": "copy http body to {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.open_src_value": {
+    "other": "open src {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.stat_file_value": {
+    "other": "stat file {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.invalid_source_file_value_only_regular_file_is_allowed": {
+    "other": "invalid source file: {{.Arg1}}, only regular file is allowed"
+  },
+  "errors.context.open_dst_value": {
+    "other": "open dst {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.copy_file_value_to_value": {
+    "other": "copy file {{.Arg1}} to {{.Arg2}}: {{.Reason}}"
+  },
+  "errors.context.decode_options": {
+    "other": "decode options: {{.Reason}}"
+  },
+  "errors.context.validate_options": {
+    "other": "validate options: {{.Reason}}"
+  },
+  "errors.context.open": {
+    "other": "open: {{.Reason}}"
+  },
+  "errors.context.walk": {
+    "other": "walk: {{.Reason}}"
+  },
+  "errors.context.create_bucket": {
+    "other": "create bucket: {{.Reason}}"
+  },
+  "errors.context.put": {
+    "other": "put: {{.Reason}}"
+  },
+  "errors.context.update": {
+    "other": "update: {{.Reason}}"
+  },
+  "errors.message.namespace_is_required": {
+    "other": "namespace is required"
+  },
+  "errors.context.open_db": {
+    "other": "open db: {{.Reason}}"
+  },
+  "errors.context.create_file_directory": {
+    "other": "create file directory: {{.Reason}}"
+  },
+  "errors.context.read": {
+    "other": "read: {{.Reason}}"
+  },
+  "errors.context.open_namespace": {
+    "other": "open namespace: {{.Reason}}"
+  },
+  "errors.message.unsupported_driver_value": {
+    "other": "unsupported driver: {{.Arg1}}"
+  },
+  "errors.context.parse_driver": {
+    "other": "parse driver: {{.Reason}}"
+  },
+  "errors.context.iterate_buckets": {
+    "other": "iterate buckets: {{.Reason}}"
+  },
+  "errors.context.iterate_namespaces": {
+    "other": "iterate namespaces: {{.Reason}}"
+  },
+  "errors.message.can_t_find_app_value_please_try_re_login": {
+    "other": "can't find app: {{.Arg1}}, please try re-login"
+  },
+  "errors.message.please_input_a_struct": {
+    "other": "please input a struct"
+  },
+  "errors.message.can_t_get_chat_type_or_chat_id": {
+    "other": "can't get chat type or chat id"
+  },
+  "errors.message.valid_values_are_value": {
+    "other": "valid values are {{.Arg1}}"
+  }
+}

@@ -7,6 +7,9 @@ import (
 	"sort"
 	"sync"
 	"time"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 // PartsExt is the extension of the sidecar file holding the parts of a
@@ -96,7 +99,7 @@ func NewPartsStore(tempPath string, size int64, identities ...FileIdentity) *Par
 		return s
 	}
 	if !stat.Mode().IsRegular() {
-		s.loadErr = fmt.Errorf("partial path %q is not a regular file", tempPath)
+		s.loadErr = diagnostic.Describe(fmt.Errorf("partial path %q is not a regular file", tempPath), corei18n.Message{ID: "errors.message.partial_path_value_is_not_a_regular_file", Args: map[string]any{"Arg1": fmt.Sprintf("%q", tempPath)}})
 		return s
 	}
 	for _, i := range f.Done {
@@ -224,10 +227,10 @@ func (s *PartsStore) flush() error {
 // previous bytes can be trusted. New callers should use OpenPartialFile.
 func OpenPartial(path string, size int64, identities ...FileIdentity) (*os.File, *PartsStore, error) {
 	if size < 0 || len(identities) > 1 {
-		return nil, nil, fmt.Errorf("invalid partial download size or identity count")
+		return nil, nil, diagnostic.Describe(fmt.Errorf("invalid partial download size or identity count"), corei18n.Message{ID: "errors.message.invalid_partial_download_size_or_identity_count"})
 	}
 	if len(identities) == 1 && (!identities[0].valid() || identities[0].Size != size) {
-		return nil, nil, fmt.Errorf("invalid partial file identity")
+		return nil, nil, diagnostic.Describe(fmt.Errorf("invalid partial file identity"), corei18n.Message{ID: "errors.message.invalid_partial_file_identity"})
 	}
 	s := NewPartsStore(path, size, identities...)
 	if s.loadErr != nil {
@@ -238,7 +241,7 @@ func OpenPartial(path string, size int64, identities ...FileIdentity) (*os.File,
 		return nil, nil, err
 	}
 	if stat != nil && !stat.Mode().IsRegular() {
-		return nil, nil, fmt.Errorf("partial path %q is not a regular file", path)
+		return nil, nil, diagnostic.Describe(fmt.Errorf("partial path %q is not a regular file", path), corei18n.Message{ID: "errors.message.partial_path_value_is_not_a_regular_file", Args: map[string]any{"Arg1": fmt.Sprintf("%q", path)}})
 	}
 	// An orphan nonempty temp file is just as unverified as a legacy journal.
 	if s.rejection != "" || (len(s.done) == 0 && stat != nil && stat.Size() > 0) {
@@ -301,10 +304,10 @@ func preservePartial(path string) ([]string, error) {
 			if err := os.Rename(p, destinations[i]); err != nil {
 				if i > 0 && present[0] {
 					if rollbackErr := os.Rename(destinations[0], paths[0]); rollbackErr != nil {
-						return nil, fmt.Errorf("preserve partial: %w; restore data: %v", err, rollbackErr)
+						return nil, diagnostic.Describe(fmt.Errorf("preserve partial: %w; restore data: %v", err, rollbackErr), corei18n.Message{ID: "errors.message.preserve_partial_value_restore_data_value", Args: map[string]any{"Arg1": err, "Arg2": rollbackErr}})
 					}
 				}
-				return nil, fmt.Errorf("preserve partial %q: %w", p, err)
+				return nil, diagnostic.Describe(fmt.Errorf("preserve partial %q: %w", p, err), corei18n.Message{ID: "errors.message.preserve_partial_value_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", p), "Arg2": err}})
 			}
 			moved = append(moved, destinations[i])
 		}

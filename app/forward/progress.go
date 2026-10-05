@@ -1,6 +1,7 @@
 package forward
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"sync"
@@ -10,11 +11,15 @@ import (
 	"github.com/mattn/go-runewidth"
 
 	"github.com/iyear/tdl/core/forwarder"
+	corei18n "github.com/iyear/tdl/core/i18n"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/prog"
 	"github.com/iyear/tdl/pkg/utils"
 )
 
 type progress struct {
+	ctx       context.Context
 	pw        pw.Writer
 	trackers  *sync.Map // map[tuple]*pw.Tracker
 	trackerMu sync.Mutex
@@ -29,7 +34,12 @@ type tuple struct {
 }
 
 func newProgress(p pw.Writer) *progress {
+	return newProgressContext(context.Background(), p)
+}
+
+func newProgressContext(ctx context.Context, p pw.Writer) *progress {
 	return &progress{
+		ctx:      ctx,
 		pw:       p,
 		trackers: &sync.Map{},
 		elemName: make(map[int64]string),
@@ -68,7 +78,8 @@ func (p *progress) OnDone(elem forwarder.Elem, err error) {
 	tracker := trackerValue.(*pw.Tracker)
 
 	if err != nil {
-		p.pw.Log(color.RedString("%s error: %s", p.metaString(elem), err.Error()))
+		reason := console.FormatError(err, corei18n.FromContext(p.ctx))
+		p.pw.Log(color.RedString("%s", console.Translate(p.ctx, messages.TransferItemError(p.metaString(elem), reason))))
 		tracker.MarkAsErrored()
 		return
 	}

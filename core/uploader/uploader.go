@@ -17,6 +17,8 @@ import (
 	"go.uber.org/multierr"
 	"golang.org/x/sync/errgroup"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/util/fsutil"
 	"github.com/iyear/tdl/core/util/mediautil"
 )
@@ -42,16 +44,16 @@ func New(o Options) *Uploader {
 
 func (u *Uploader) Upload(ctx context.Context, limit int) error {
 	if limit <= 0 {
-		return errors.New("upload limit must be positive")
+		return diagnostic.Describe(errors.New("upload limit must be positive"), corei18n.Message{ID: "errors.message.upload_limit_must_be_positive"})
 	}
 	if u.opts.Client == nil {
-		return errors.New("upload client is required")
+		return diagnostic.Describe(errors.New("upload client is required"), corei18n.Message{ID: "errors.message.upload_client_is_required"})
 	}
 	if u.opts.Iter == nil {
-		return errors.New("upload iterator is required")
+		return diagnostic.Describe(errors.New("upload iterator is required"), corei18n.Message{ID: "errors.message.upload_iterator_is_required"})
 	}
 	if u.opts.Progress == nil {
-		return errors.New("upload progress is required")
+		return diagnostic.Describe(errors.New("upload progress is required"), corei18n.Message{ID: "errors.message.upload_progress_is_required"})
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -76,7 +78,7 @@ func (u *Uploader) Upload(ctx context.Context, limit int) error {
 			if err != nil {
 				// canceled by user, so we directly return error to stop all
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					return errors.Wrap(err, "upload")
+					return diagnostic.Describe(errors.Wrap(err, "upload"), corei18n.Message{ID: "errors.context.upload", Args: map[string]any{"Reason": err}})
 				}
 
 				// Keep processing independent files, but make the command fail after
@@ -96,7 +98,7 @@ func (u *Uploader) Upload(ctx context.Context, limit int) error {
 	}
 	err := wg.Wait()
 	if iterErr != nil {
-		err = multierr.Append(err, errors.Wrap(iterErr, "iter"))
+		err = multierr.Append(err, diagnostic.Describe(errors.Wrap(iterErr, "iter"), corei18n.Message{ID: "errors.context.iter", Args: map[string]any{"Reason": iterErr}}))
 	}
 	failureMu.Lock()
 	err = multierr.Append(err, failures)
@@ -121,15 +123,15 @@ func (u *Uploader) upload(ctx context.Context, elem Elem) error {
 
 	f, err := up.Upload(ctx, uploader.NewUpload(elem.File().Name(), elem.File(), elem.File().Size()))
 	if err != nil {
-		return errors.Wrap(err, "upload file")
+		return diagnostic.Describe(errors.Wrap(err, "upload file"), corei18n.Message{ID: "errors.context.upload_file", Args: map[string]any{"Reason": err}})
 	}
 
 	if _, err = elem.File().Seek(0, io.SeekStart); err != nil {
-		return errors.Wrap(err, "seek file")
+		return diagnostic.Describe(errors.Wrap(err, "seek file"), corei18n.Message{ID: "errors.context.seek_file", Args: map[string]any{"Reason": err}})
 	}
 	mime, err := mimetype.DetectReader(elem.File())
 	if err != nil {
-		return errors.Wrap(err, "detect mime")
+		return diagnostic.Describe(errors.Wrap(err, "detect mime"), corei18n.Message{ID: "errors.context.detect_mime", Args: map[string]any{"Reason": err}})
 	}
 
 	// here convert underlying entities to formatters for message caption
@@ -165,7 +167,7 @@ func (u *Uploader) upload(ctx context.Context, elem Elem) error {
 	case mediautil.IsVideo(mime.String()):
 		// reset reader
 		if _, err = elem.File().Seek(0, io.SeekStart); err != nil {
-			return errors.Wrap(err, "seek file")
+			return diagnostic.Describe(errors.Wrap(err, "seek file"), corei18n.Message{ID: "errors.context.seek_file", Args: map[string]any{"Reason": err}})
 		}
 		if dur, w, h, err := mediautil.GetMP4Info(elem.File()); err == nil {
 			// #132. There may be some errors, but we can still upload the file
@@ -184,7 +186,7 @@ func (u *Uploader) upload(ctx context.Context, elem Elem) error {
 		Reply(elem.Thread()).
 		Media(ctx, media)
 	if err != nil {
-		return errors.Wrap(err, "send message")
+		return diagnostic.Describe(errors.Wrap(err, "send message"), corei18n.Message{ID: "errors.context.send_message", Args: map[string]any{"Reason": err}})
 	}
 
 	return nil

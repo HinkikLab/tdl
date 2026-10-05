@@ -10,8 +10,12 @@ import (
 	"github.com/spf13/viper"
 	"github.com/stretchr/testify/require"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/pkg/autodl"
+	"github.com/iyear/tdl/pkg/console"
 	"github.com/iyear/tdl/pkg/consts"
+	pki18n "github.com/iyear/tdl/pkg/i18n"
 )
 
 func TestBatchOptionsPreserveExplicitUnlimitedPool(t *testing.T) {
@@ -22,6 +26,34 @@ func TestBatchOptionsPreserveExplicitUnlimitedPool(t *testing.T) {
 	opts := (&batchFlags{}).options(cmd)
 	require.True(t, opts.PoolSizeSet)
 	require.Zero(t, opts.PoolSize)
+}
+
+func TestFlagParseErrorsAreLocalizedAndKeepTheirCause(t *testing.T) {
+	translator, err := pki18n.New(corei18n.Chinese)
+	require.NoError(t, err)
+	root := NewWithTranslator(translator)
+	root.SetArgs([]string{"--threads", "invalid"})
+	err = root.Execute()
+	require.Error(t, err)
+	var diagnosticErr *diagnostic.Error
+	require.ErrorAs(t, err, &diagnosticErr)
+	require.Error(t, diagnosticErr.Cause)
+	require.Contains(t, console.FormatError(err, translator), "参数 --threads 的值 \"invalid\" 无效（要求 int）")
+	require.Contains(t, diagnosticErr.Error(), "Invalid value")
+}
+
+func TestArgumentValidationErrorsAreLocalizedAndKeepTheirCause(t *testing.T) {
+	translator, err := pki18n.New(corei18n.Chinese)
+	require.NoError(t, err)
+	root := NewWithTranslator(translator)
+	root.SetArgs([]string{"batch", "unexpected"})
+	err = root.Execute()
+	require.Error(t, err)
+	var diagnosticErr *diagnostic.Error
+	require.ErrorAs(t, err, &diagnosticErr)
+	require.Error(t, diagnosticErr.Cause)
+	require.Contains(t, console.FormatError(err, translator), "不接受位置参数")
+	require.Contains(t, diagnosticErr.Error(), "unknown command")
 }
 
 func TestBatchInitCommand(t *testing.T) {
@@ -38,7 +70,7 @@ func TestBatchInitCommand(t *testing.T) {
 	}
 	out, err := run("init", "-c", path)
 	require.NoError(t, err)
-	require.Contains(t, out, "11 example jobs, English comments")
+	require.Contains(t, out, "11 example jobs; English comments")
 	require.Contains(t, out, "--check-only")
 	cfg, err := autodl.LoadConfig(path)
 	require.NoError(t, err)
@@ -52,7 +84,7 @@ func TestBatchInitCommand(t *testing.T) {
 	require.Equal(t, "keep", string(b))
 	out, err = run("init", "-c", path, "--force", "--lang", "zh")
 	require.NoError(t, err)
-	require.Contains(t, out, "中文注释")
+	require.Contains(t, out, "Chinese comments")
 	b, err = os.ReadFile(path)
 	require.NoError(t, err)
 	require.Contains(t, string(b), "# 01. 直接下载")

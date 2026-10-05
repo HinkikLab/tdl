@@ -1,0 +1,338 @@
+{
+  "errors.message.message_id_must_be_positive": {
+    "other": "消息 ID 必须为正数"
+  },
+  "errors.context.download": {
+    "other": "下载: {{.Reason}}"
+  },
+  "errors.message.download_limit_must_be_positive": {
+    "other": "下载并发数必须为正数"
+  },
+  "errors.message.download_pool_is_required": {
+    "other": "需要下载连接池"
+  },
+  "errors.message.download_iterator_is_required": {
+    "other": "需要下载迭代器"
+  },
+  "errors.message.download_progress_is_required": {
+    "other": "需要下载进度报告器"
+  },
+  "errors.context.iter": {
+    "other": "迭代: {{.Reason}}"
+  },
+  "errors.message.incomplete_download_got_value_bytes_expected_value": {
+    "other": "下载不完整：已获取 {{.Arg1}} 字节，预期 {{.Arg2}} 字节"
+  },
+  "errors.message.file_is_required": {
+    "other": "需要文件"
+  },
+  "errors.message.unsupported_resumable_file_location_value": {
+    "other": "不支持的可恢复文件位置类型：{{.Arg1}}"
+  },
+  "errors.message.invalid_resumable_file_identity_value": {
+    "other": "可恢复文件标识无效：{{.Arg1}}"
+  },
+  "errors.message.partial_path_value_is_not_a_regular_file": {
+    "other": "分片路径 {{.Arg1}} 不是普通文件"
+  },
+  "errors.message.invalid_partial_download_size_or_identity_count": {
+    "other": "分片下载的大小或标识数量无效"
+  },
+  "errors.message.invalid_partial_file_identity": {
+    "other": "分片文件标识无效"
+  },
+  "errors.message.preserve_partial_value_restore_data_value": {
+    "other": "保留分片：{{.Arg1}}；恢复数据：{{.Arg2}}"
+  },
+  "errors.message.preserve_partial_value_value": {
+    "other": "保留分片 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.message.reissued_attachment_changed_during_download": {
+    "other": "重新请求的附件在下载过程中发生变化"
+  },
+  "errors.context.refresh_file_reference": {
+    "other": "刷新文件引用: {{.Reason}}"
+  },
+  "errors.message.source_message_returned_the_same_file_reference": {
+    "other": "源消息返回了相同的文件引用"
+  },
+  "errors.context.get_source_message": {
+    "other": "获取源消息: {{.Reason}}"
+  },
+  "errors.message.unexpected_source_messages_type_value": {
+    "other": "源消息类型异常：{{.Arg1}}"
+  },
+  "errors.message.source_message_value_belongs_to_a_different_peer_than_value": {
+    "other": "源消息 {{.Arg1}} 不属于指定的聊天对象 {{.Arg2}}"
+  },
+  "errors.message.source_message_value_no_longer_has_media": {
+    "other": "源消息 {{.Arg1}} 已不包含媒体"
+  },
+  "errors.message.source_message_value_media_changed_during_download": {
+    "other": "源消息 {{.Arg1}} 的媒体在下载过程中发生变化"
+  },
+  "errors.message.source_message_value_is_unavailable_or_deleted": {
+    "other": "源消息 {{.Arg1}} 不可用或已删除"
+  },
+  "errors.context.get_next_chunk": {
+    "other": "获取下一个分片: {{.Reason}}"
+  },
+  "errors.message.unexpected_type_value": {
+    "other": "类型异常：{{.Arg1}}"
+  },
+  "errors.context.part_value_got_value_bytes": {
+    "other": "分片 {{.Arg1}}：已获取 {{.Arg2}} 字节: {{.Reason}}"
+  },
+  "errors.context.write_output": {
+    "other": "写入输出: {{.Reason}}"
+  },
+  "errors.context.create_temp_file": {
+    "other": "创建临时文件: {{.Reason}}"
+  },
+  "errors.context.seek": {
+    "other": "定位: {{.Reason}}"
+  },
+  "errors.context.upload": {
+    "other": "上传: {{.Reason}}"
+  },
+  "errors.message.forward_pool_is_required": {
+    "other": "需要转发连接池"
+  },
+  "errors.message.forward_iterator_is_required": {
+    "other": "需要转发迭代器"
+  },
+  "errors.message.forward_progress_is_required": {
+    "other": "需要转发进度报告器"
+  },
+  "errors.context.resolve_grouped_messages": {
+    "other": "解析相册消息: {{.Reason}}"
+  },
+  "errors.context.media_total_size": {
+    "other": "计算媒体总大小: {{.Reason}}"
+  },
+  "errors.message.empty_message_content_skip_send_value": {
+    "other": "消息内容为空，跳过发送：{{.Arg1}}"
+  },
+  "errors.context.send_message": {
+    "other": "发送消息: {{.Reason}}"
+  },
+  "errors.message.message_value_is_not_a_media_message": {
+    "other": "消息 {{.Arg1}} 不是媒体消息"
+  },
+  "errors.message.can_t_convert_message_value_to_input_class_directly": {
+    "other": "无法直接转换消息 {{.Arg1}} 为输入类型"
+  },
+  "errors.message.unsupported_media_value": {
+    "other": "不支持的媒体类型：{{.Arg1}}"
+  },
+  "errors.context.clone_media": {
+    "other": "复制媒体: {{.Reason}}"
+  },
+  "errors.message.empty_document_value": {
+    "other": "文档 {{.Arg1}} 为空"
+  },
+  "errors.context.clone_thumb": {
+    "other": "复制缩略图: {{.Reason}}"
+  },
+  "errors.context.upload_media": {
+    "other": "上传媒体: {{.Reason}}"
+  },
+  "errors.message.can_t_convert_uploaded_media_to_input_class": {
+    "other": "无法将已上传媒体转换为输入类型"
+  },
+  "errors.context.directly_forward": {
+    "other": "直接转发: {{.Reason}}"
+  },
+  "errors.context.send_multi_media": {
+    "other": "发送多个媒体: {{.Reason}}"
+  },
+  "errors.context.send_single_media": {
+    "other": "发送单个媒体: {{.Reason}}"
+  },
+  "errors.message.unsupported_mode_value": {
+    "other": "不支持的模式：{{.Arg1}}"
+  },
+  "errors.message.can_t_get_media_from_message_value": {
+    "other": "无法获取消息 {{.Arg1}} 的媒体"
+  },
+  "errors.context.recover": {
+    "other": "恢复: {{.Reason}}"
+  },
+  "errors.context.retry_middleware_skip": {
+    "other": "跳过重试中间件: {{.Reason}}"
+  },
+  "errors.message.retry_limit_reached_after_value_attempts": {
+    "other": "重试 {{.Arg1}} 次后达到上限"
+  },
+  "errors.message.bin_decoder_is_not_implemented": {
+    "other": "尚未实现 bin.Decoder"
+  },
+  "errors.message.key_not_found": {
+    "other": "找不到键"
+  },
+  "errors.context.create_network_clock": {
+    "other": "创建网络时钟: {{.Reason}}"
+  },
+  "errors.context.get_dialer": {
+    "other": "获取拨号器: {{.Reason}}"
+  },
+  "errors.message.not_authorized_please_login_first": {
+    "other": "尚未授权，请先登录"
+  },
+  "errors.message.upload_limit_must_be_positive": {
+    "other": "上传并发数必须为正数"
+  },
+  "errors.message.upload_client_is_required": {
+    "other": "需要上传客户端"
+  },
+  "errors.message.upload_iterator_is_required": {
+    "other": "需要上传迭代器"
+  },
+  "errors.message.upload_progress_is_required": {
+    "other": "需要上传进度报告器"
+  },
+  "errors.context.upload_file": {
+    "other": "上传文件: {{.Reason}}"
+  },
+  "errors.context.seek_file": {
+    "other": "定位文件: {{.Reason}}"
+  },
+  "errors.context.detect_mime": {
+    "other": "检测媒体类型: {{.Reason}}"
+  },
+  "errors.message.generated_path_is_empty": {
+    "other": "生成的路径为空"
+  },
+  "errors.message.generated_path_escapes_the_output_directory_value": {
+    "other": "生成的路径超出输出目录：{{.Arg1}}"
+  },
+  "errors.message.no_h264_track_found": {
+    "other": "找不到 H.264 轨道"
+  },
+  "errors.context.parse_proxy_url": {
+    "other": "解析代理链接: {{.Reason}}"
+  },
+  "errors.context.proxy_from_url": {
+    "other": "从链接创建代理: {{.Reason}}"
+  },
+  "errors.message.proxy_dialer_is_not_contextdialer": {
+    "other": "代理拨号器未实现 ContextDialer"
+  },
+  "errors.message.empty_telegram_reference": {
+    "other": "Telegram 引用为空"
+  },
+  "errors.message.invalid_chat_name_or_id_value": {
+    "other": "聊天名称或 ID {{.Arg1}} 无效"
+  },
+  "errors.message.invalid_telegram_url_value": {
+    "other": "Telegram 链接无效：{{.Arg1}}"
+  },
+  "errors.message.invalid_telegram_host_or_fragment": {
+    "other": "Telegram 链接的主机或片段无效"
+  },
+  "errors.message.invalid_telegram_url_query_value": {
+    "other": "Telegram 链接的查询参数无效：{{.Arg1}}"
+  },
+  "errors.message.telegram_url_must_contain_only_one_value_value": {
+    "other": "Telegram 链接只能包含一个 {{.Arg1}} 值"
+  },
+  "errors.message.unsupported_telegram_action": {
+    "other": "不支持的 Telegram 操作"
+  },
+  "errors.message.unsupported_link_host_value_expected_t_me": {
+    "other": "不支持的链接主机 {{.Arg1}}（需要 t.me）"
+  },
+  "errors.message.invalid_telegram_chat_message_link": {
+    "other": "Telegram 聊天或消息链接无效"
+  },
+  "errors.message.telegram_link_must_use_http_s": {
+    "other": "Telegram 链接必须使用 http(s)"
+  },
+  "errors.message.private_chat_id_must_be_a_positive_integer": {
+    "other": "私有聊天 ID 必须为正整数"
+  },
+  "errors.message.thread_id_conflicts_with_the_topic_id_in_chat_key_url": {
+    "other": "thread ID 与 chat_url 中的话题 ID 冲突"
+  },
+  "errors.message.comment_link_requires_a_post_id": {
+    "other": "评论链接需要帖子 ID"
+  },
+  "errors.message.invalid_bot_link": {
+    "other": "机器人链接无效"
+  },
+  "errors.message.value_must_be_a_positive_integer": {
+    "other": "{{.Arg1}} 必须为正整数"
+  },
+  "errors.message.message_may_be_deleted": {
+    "other": "消息可能已删除"
+  },
+  "errors.message.message_link_must_identify_a_post_value": {
+    "other": "消息链接必须指向帖子：{{.Arg1}}"
+  },
+  "errors.context.input_peer": {
+    "other": "解析聊天: {{.Reason}}"
+  },
+  "errors.message.not_channel": {
+    "other": "聊天对象不是频道"
+  },
+  "errors.context.full_raw": {
+    "other": "获取完整信息: {{.Reason}}"
+  },
+  "errors.message.no_linked_chat": {
+    "other": "没有关联的聊天"
+  },
+  "errors.context.input_discussion_peer": {
+    "other": "解析讨论组: {{.Reason}}"
+  },
+  "errors.message.failed_to_get_result_from_value_value": {
+    "other": "获取 {{.Arg1}} 的结果失败：{{.Arg2}}"
+  },
+  "errors.context.get_single_message": {
+    "other": "获取单条消息: {{.Reason}}"
+  },
+  "errors.message.invalid_message_value": {
+    "other": "消息 {{.Arg1}} 无效"
+  },
+  "errors.message.the_message_value_value_value": {
+    "other": "消息 {{.Arg1}}/{{.Arg2}}：{{.Arg3}}"
+  },
+  "errors.message.unsupported_message_source_peer_value": {
+    "other": "不支持的消息来源类型：{{.Arg1}}"
+  },
+  "errors.context.get_messages": {
+    "other": "获取消息: {{.Reason}}"
+  },
+  "errors.message.unexpected_messages_type_value": {
+    "other": "消息类型异常：{{.Arg1}}"
+  },
+  "errors.message.message_value_belongs_to_a_different_peer_than_value_value": {
+    "other": "消息 {{.Arg1}} 不属于指定的聊天对象 {{.Arg2}}/{{.Arg3}}"
+  },
+  "errors.message.not_grouped_message": {
+    "other": "消息不属于相册组"
+  },
+  "errors.context.get_grouped_messages": {
+    "other": "获取相册消息: {{.Reason}}"
+  },
+  "errors.message.please_launch_extension_with_tdl_extension_key_name": {
+    "other": "请通过 tdl EXTENSION_NAME 启动扩展"
+  },
+  "errors.context.read_env_file": {
+    "other": "读取环境文件: {{.Reason}}"
+  },
+  "errors.context.unmarshal_extension_environment": {
+    "other": "解码扩展环境: {{.Reason}}"
+  },
+  "errors.context.resolve_extension_language": {
+    "other": "选择扩展语言: {{.Reason}}"
+  },
+  "errors.context.load_extension_translations": {
+    "other": "加载扩展翻译: {{.Reason}}"
+  },
+  "errors.context.build_client": {
+    "other": "创建客户端: {{.Reason}}"
+  },
+  "errors.context.store_session": {
+    "other": "存储会话: {{.Reason}}"
+  }
+}

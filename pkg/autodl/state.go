@@ -2,6 +2,7 @@ package autodl
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -10,7 +11,9 @@ import (
 
 	"github.com/go-faster/errors"
 
+	"github.com/iyear/tdl/core/diagnostic"
 	"github.com/iyear/tdl/core/downloader"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 // MediaRecord binds a committed message to the exact media and output path.
@@ -89,7 +92,7 @@ func loadState(path, scope string) (*State, error) {
 		if os.IsNotExist(err) {
 			return s, nil
 		}
-		return nil, errors.Wrapf(err, "read state %s", path)
+		return nil, diagnostic.Describe(errors.Wrapf(err, "read state %s", path), corei18n.Message{ID: "errors.context.read_state_value", Args: map[string]any{"Arg1": path, "Reason": err}})
 	}
 
 	var raw struct {
@@ -101,13 +104,13 @@ func loadState(path, scope string) (*State, error) {
 		Filtered     []int               `json:"filtered"`
 	}
 	if err = json.Unmarshal(b, &raw); err != nil {
-		return nil, errors.Wrapf(err, "parse state %s", path)
+		return nil, diagnostic.Describe(errors.Wrapf(err, "parse state %s", path), corei18n.Message{ID: "errors.context.parse_state_value", Args: map[string]any{"Arg1": path, "Reason": err}})
 	}
 	if scope != "" && raw.Scope != "" && raw.Scope != scope {
-		return nil, errors.Errorf("state %s belongs to %q, not %q; preserved unchanged: use a new state file/subdir to rescan, or keep a backup before explicitly resetting it", path, raw.Scope, scope)
+		return nil, diagnostic.Describe(errors.Errorf("state %s belongs to %q, not %q; preserved unchanged: use a new state file/subdir to rescan, or keep a backup before explicitly resetting it", path, raw.Scope, scope), corei18n.Message{ID: "errors.batch.state_scope_mismatch", Args: map[string]any{"Arg1": path, "Arg2": fmt.Sprintf("%q", raw.Scope), "Arg3": fmt.Sprintf("%q", scope)}})
 	}
 	if scope != "" && raw.Scope == "" && (len(raw.Finished) > 0 || len(raw.Skipped) > 0 || len(raw.MediaRecords) > 0 || len(raw.Filtered) > 0 || raw.LastTS > 0) {
-		return nil, errors.Errorf("legacy state %s has no verifiable source identity; preserved unchanged: use a new state file/subdir to rescan, or keep a backup before explicitly resetting it", path)
+		return nil, diagnostic.Describe(errors.Errorf("legacy state %s has no verifiable source identity; preserved unchanged: use a new state file/subdir to rescan, or keep a backup before explicitly resetting it", path), corei18n.Message{ID: "errors.batch.legacy_state_scope_missing", Args: map[string]any{"Arg1": path}})
 	}
 
 	s.Scope = raw.Scope
@@ -175,18 +178,18 @@ func (s *State) Save(path string) error {
 
 	b, err := json.MarshalIndent(raw, "", "  ")
 	if err != nil {
-		return errors.Wrap(err, "marshal state")
+		return diagnostic.Describe(errors.Wrap(err, "marshal state"), corei18n.Message{ID: "errors.context.marshal_state", Args: map[string]any{"Reason": err}})
 	}
 
 	if dir := filepath.Dir(path); dir != "" && dir != "." {
 		if err = os.MkdirAll(dir, 0o755); err != nil {
-			return errors.Wrapf(err, "create state dir %s", dir)
+			return diagnostic.Describe(errors.Wrapf(err, "create state dir %s", dir), corei18n.Message{ID: "errors.context.create_state_dir_value", Args: map[string]any{"Arg1": dir, "Reason": err}})
 		}
 	}
 
 	tmp := path + ".new"
 	if err = os.WriteFile(tmp, b, 0o644); err != nil {
-		return errors.Wrapf(err, "write state %s", path)
+		return diagnostic.Describe(errors.Wrapf(err, "write state %s", path), corei18n.Message{ID: "errors.context.write_state_value", Args: map[string]any{"Arg1": path, "Reason": err}})
 	}
 
 	if err = os.Rename(tmp, path); err != nil {
@@ -251,10 +254,13 @@ func (s *State) Skip(ids ...int) {
 func (s *State) CompleteMedia(id int, identity downloader.FileIdentity, path string) error {
 	info, err := os.Stat(path)
 	if err != nil {
-		return errors.Wrap(err, "stat committed media")
+		return diagnostic.Describe(errors.Wrap(err, "stat committed media"), corei18n.Message{ID: "errors.context.stat_committed_media", Args: map[string]any{"Reason": err}})
 	}
 	if !info.Mode().IsRegular() || info.Size() != identity.Size {
-		return errors.Errorf("committed media %s has size %d, expected %d", path, info.Size(), identity.Size)
+		return func() error {
+			messageArg2 := info.Size()
+			return diagnostic.Describe(errors.Errorf("committed media %s has size %d, expected %d", path, messageArg2, identity.Size), corei18n.Message{ID: "errors.message.committed_media_value_has_size_value_expected_value", Args: map[string]any{"Arg1": path, "Arg2": messageArg2, "Arg3": identity.Size}})
+		}()
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -323,6 +329,7 @@ func (s *State) mediaRecords() map[int]MediaRecord {
 	}
 	return out
 }
+
 func (s *State) filteredIDs() []int {
 	out := make([]int, 0, len(s.filtered))
 	for id := range s.filtered {

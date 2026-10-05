@@ -8,20 +8,26 @@ import (
 	"go.uber.org/multierr"
 	"go.uber.org/zap"
 
+	"github.com/iyear/tdl/core/diagnostic"
 	tdl "github.com/iyear/tdl/core/downloader"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/internal/transfer"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/prog"
 	"github.com/iyear/tdl/pkg/utils"
 )
 
 func (r *Runner) download(ctx context.Context, job *Job, link Link, dir string, ids []int,
-	store *stateStore, state *State, threads, limit int) error {
+	store *stateStore, state *State, threads, limit int,
+) error {
 	return r.downloadSelection(ctx, job, link, dir, ids, 0, 0, store, state, threads, limit)
 }
 
 func (r *Runner) downloadSelection(ctx context.Context, job *Job, link Link, dir string, ids []int,
-	start, end int, store *stateStore, state *State, threads, limit int) error {
+	start, end int, store *stateStore, state *State, threads, limit int,
+) error {
 	count := len(ids)
 	if end > start {
 		count = countPendingRange(state, start, end)
@@ -33,7 +39,7 @@ func (r *Runner) downloadSelection(ctx context.Context, job *Job, link Link, dir
 
 	log := logctx.From(ctx)
 
-	pw := prog.New(utils.Byte.FormatBinaryBytes)
+	pw := prog.NewContext(ctx, utils.Byte.FormatBinaryBytes)
 
 	jobCtx := &jobContext{
 		job:         job,
@@ -117,8 +123,8 @@ func (r *Runner) downloadSelection(ctx context.Context, job *Job, link Link, dir
 	// were looked up in the wrong dialog, typically comment ids that were
 	// resolved against the channel instead of its discussion group.
 	if count > 0 && done == 0 && failed == 0 && skipped >= count {
-		color.Red("None of the %d message(s) exist in dialog %d.", count, dialog.ID())
-		color.Red("Check --mode / the \"comment\" setting of the job and the id range, then run again with --retry-skipped.")
+		color.Red("%s", console.Translate(ctx, messages.DownloadNoneFound(count, dialog.ID())))
+		color.Red("%s", console.Translate(ctx, messages.DownloadNoneFoundHint()))
 		log.Warn("Every target was unavailable",
 			zap.Int("ids", count),
 			zap.Int64("dialog", dialog.ID()),
@@ -126,11 +132,11 @@ func (r *Runner) downloadSelection(ctx context.Context, job *Job, link Link, dir
 	}
 
 	if err != nil {
-		return errors.Wrap(err, "download")
+		return diagnostic.Describe(errors.Wrap(err, "download"), corei18n.Message{ID: "errors.context.download", Args: map[string]any{"Reason": err}})
 	}
 
 	if itErr := it.Err(); itErr != nil {
-		return errors.Wrap(itErr, "iterate")
+		return diagnostic.Describe(errors.Wrap(itErr, "iterate"), corei18n.Message{ID: "errors.context.iterate", Args: map[string]any{"Reason": itErr}})
 	}
 
 	return nil

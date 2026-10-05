@@ -15,20 +15,25 @@ import (
 	"github.com/skip2/go-qrcode"
 	"github.com/spf13/viper"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
+	"github.com/iyear/tdl/pkg/console"
+	localizedprompt "github.com/iyear/tdl/pkg/console/prompt"
 	"github.com/iyear/tdl/pkg/consts"
 	"github.com/iyear/tdl/pkg/key"
 	"github.com/iyear/tdl/pkg/kv"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/tclient"
 )
 
 func QR(ctx context.Context) error {
 	kvd, err := kv.From(ctx).Open(viper.GetString(consts.FlagNamespace))
 	if err != nil {
-		return errors.Wrap(err, "open kv")
+		return diagnostic.Describe(errors.Wrap(err, "open kv"), corei18n.Message{ID: "errors.context.open_kv", Args: map[string]any{"Reason": err}})
 	}
 
 	if err = kvd.Set(ctx, key.App(), []byte(tclient.AppDesktop)); err != nil {
-		return errors.Wrap(err, "set app")
+		return diagnostic.Describe(errors.Wrap(err, "set app"), corei18n.Message{ID: "errors.context.set_app", Args: map[string]any{"Reason": err}})
 	}
 
 	d := tg.NewUpdateDispatcher()
@@ -41,17 +46,17 @@ func QR(ctx context.Context) error {
 		UpdateHandler:    d,
 	}, true)
 	if err != nil {
-		return errors.Wrap(err, "create client")
+		return diagnostic.Describe(errors.Wrap(err, "create client"), corei18n.Message{ID: "errors.context.create_client", Args: map[string]any{"Reason": err}})
 	}
 
 	return c.Run(ctx, func(ctx context.Context) error {
-		color.Blue("Scan QR code with your Telegram app...")
+		color.Blue("%s", console.Translate(ctx, messages.LoginScanQR()))
 
 		var lines int
 		_, err = c.QR().Auth(ctx, qrlogin.OnLoginToken(d), func(ctx context.Context, token qrlogin.Token) error {
 			qr, err := qrcode.New(token.URL(), qrcode.Medium)
 			if err != nil {
-				return errors.Wrap(err, "create qr")
+				return diagnostic.Describe(errors.Wrap(err, "create qr"), corei18n.Message{ID: "errors.context.create_qr", Args: map[string]any{"Reason": err}})
 			}
 			code := qr.ToSmallString(false)
 			lines = strings.Count(code, "\n")
@@ -73,30 +78,30 @@ func QR(ctx context.Context) error {
 		if err != nil {
 			// https://core.telegram.org/api/auth#2fa
 			if !tgerr.Is(err, "SESSION_PASSWORD_NEEDED") {
-				return errors.Wrap(err, "qr auth")
+				return diagnostic.Describe(errors.Wrap(err, "qr auth"), corei18n.Message{ID: "errors.context.qr_auth", Args: map[string]any{"Reason": err}})
 			}
 
 			pwd := ""
-			prompt := &survey.Password{
-				Message: "Enter 2FA Password:",
+			prompt := &localizedprompt.Password{
+				Message: console.Translate(ctx, messages.LoginPasswordPrompt()),
 			}
 
-			if err = survey.AskOne(prompt, &pwd, survey.WithValidator(survey.Required)); err != nil {
-				return errors.Wrap(err, "2fa password")
+			if err = localizedprompt.AskOne(ctx, prompt, &pwd, survey.WithValidator(localizedprompt.Required)); err != nil {
+				return diagnostic.Describe(errors.Wrap(err, "2fa password"), corei18n.Message{ID: "errors.context.2fa_password", Args: map[string]any{"Reason": err}})
 			}
 
 			if _, err = c.Auth().Password(ctx, pwd); err != nil {
-				return errors.Wrap(err, "2fa auth")
+				return diagnostic.Describe(errors.Wrap(err, "2fa auth"), corei18n.Message{ID: "errors.context.2fa_auth", Args: map[string]any{"Reason": err}})
 			}
 		}
 
 		user, err := c.Self(ctx)
 		if err != nil {
-			return errors.Wrap(err, "get self")
+			return diagnostic.Describe(errors.Wrap(err, "get self"), corei18n.Message{ID: "errors.context.get_self", Args: map[string]any{"Reason": err}})
 		}
 
 		fmt.Print(text.EraseLine.Sprint())
-		color.Green("Login successfully! ID: %d, Username: %s", user.ID, user.Username)
+		color.Green("%s", console.Translate(ctx, messages.LoginSuccess(user.ID, user.Username)))
 		return nil
 	})
 }

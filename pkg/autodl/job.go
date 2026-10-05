@@ -2,7 +2,6 @@ package autodl
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 
@@ -12,7 +11,11 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/iyear/tdl/app/chat"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 // runJob processes a single config job.
@@ -89,16 +92,16 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 		if topic, err := chat.ResolveForumTopic(ctx, r.pool.Default(ctx), peer.InputPeer(), topicID); err == nil {
 			topicTitle = topic.Title
 		} else {
-			return errors.Wrapf(err, "resolve topic_id %d", topicID)
+			return diagnostic.Describe(errors.Wrapf(err, "resolve topic_id %d", topicID), corei18n.Message{ID: "errors.context.resolve_topic_key_id_value", Args: map[string]any{"Arg1": topicID, "Reason": err}})
 		}
 	}
 	if onResolved != nil {
-		onResolved(chat.TargetName(peer, topicID, topicTitle, !incremental || (topicID == 0 && job.ReplyPostID == nil)))
+		onResolved(chat.TargetNameContext(ctx, peer, topicID, topicTitle, !incremental || (topicID == 0 && job.ReplyPostID == nil)))
 	}
 
 	if !r.opts.CheckOnly {
 		if err = os.MkdirAll(dir, 0o755); err != nil {
-			return errors.Wrapf(err, "create download dir %s", dir)
+			return diagnostic.Describe(errors.Wrapf(err, "create download dir %s", dir), corei18n.Message{ID: "errors.context.create_download_dir_value", Args: map[string]any{"Arg1": dir, "Reason": err}})
 		}
 	}
 
@@ -110,7 +113,7 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 
 	if r.opts.RetrySkipped {
 		if n := state.ClearSkipped(); n > 0 {
-			color.Yellow("Retrying %d message(s) that an earlier run recorded as unavailable", n)
+			color.Yellow("%s", console.Translate(ctx, messages.BatchRetrySkipped(n)))
 			log.Info("Clear skipped messages", zap.Int("count", n), zap.String("state", statePath))
 
 			if !r.opts.CheckOnly {
@@ -145,7 +148,7 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 
 	if len(targets) == 0 {
 		log.Info("Nothing to download")
-		color.Yellow("No messages to download for this job")
+		color.Yellow("%s", console.Translate(ctx, messages.BatchNoMessages()))
 
 		// an empty window still has to move the timestamp, otherwise the next
 		// run scans the same range again
@@ -162,16 +165,16 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 		zap.Int("finished", state.Len()),
 		zap.Int("missing", len(missing)))
 
-	color.Cyan("Target range: %s", formatIDs(targets))
-	color.Cyan("Recorded as finished: %d, to validate/download: %d", state.Len(), len(missing))
+	color.Cyan("%s", console.Translate(ctx, messages.BatchTargetRange(formatIDsContext(ctx, targets))))
+	color.Cyan("%s", console.Translate(ctx, messages.BatchRecorded(state.Len(), len(missing))))
 
 	if r.opts.CheckOnly {
-		color.Yellow("Check only: skipping the download step")
+		color.Yellow("%s", console.Translate(ctx, messages.BatchCheckOnly()))
 		return nil
 	}
 
 	if len(missing) == 0 {
-		color.Green("Everything is already downloaded")
+		color.Green("%s", console.Translate(ctx, messages.BatchEverythingDownloaded()))
 		if incremental {
 			return r.advanceIncremental(ctx, job, store, state, targets, exportTS)
 		}
@@ -184,14 +187,14 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 
 	left := state.Missing(targets)
 	if len(left) > 0 {
-		color.Yellow("%d message(s) are still missing after this run", len(left))
-		log.Warn("Messages still missing", zap.Int("count", len(left)), zap.Ints("ids", left))
+		color.Yellow("%s", console.Translate(ctx, messages.BatchMissingAfterRun(len(left))))
+		log.Warn("batch.messages_missing", zap.String("event_id", "batch.messages_missing"), zap.Int("count", len(left)), zap.Ints("ids", left))
 
-		if !r.confirm(ctx, fmt.Sprintf("Retry the %d missing message(s) now?", len(left)), true) {
+		if !r.confirm(ctx, console.Translate(ctx, messages.BatchRetryPrompt(len(left))), true) {
 			if incremental {
-				color.Yellow("Keeping the incremental timestamp so the next run covers this range again")
+				color.Yellow("%s", console.Translate(ctx, messages.BatchKeepIncrementalTimestamp()))
 			}
-			return errors.Errorf("%d message(s) still missing", len(left))
+			return diagnostic.New("errors.batch.messages_missing", map[string]any{"Count": len(left)})
 		}
 
 		if err = r.download(ctx, job, link, dir, left, store, state, threads, limit); err != nil {
@@ -199,8 +202,8 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 		}
 
 		if left = state.Missing(targets); len(left) > 0 {
-			color.Yellow("%d message(s) are still missing", len(left))
-			return errors.Errorf("%d message(s) still missing", len(left))
+			color.Yellow("%s", console.Translate(ctx, messages.BatchMissing(len(left))))
+			return diagnostic.New("errors.batch.messages_missing", map[string]any{"Count": len(left)})
 		}
 	}
 

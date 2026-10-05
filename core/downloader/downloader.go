@@ -11,6 +11,8 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/util/tutil"
 )
@@ -49,16 +51,16 @@ func (d *Downloader) SetSkipParts(skip bool) {
 
 func (d *Downloader) Download(ctx context.Context, limit int) error {
 	if limit <= 0 {
-		return errors.New("download limit must be positive")
+		return diagnostic.Describe(errors.New("download limit must be positive"), corei18n.Message{ID: "errors.message.download_limit_must_be_positive"})
 	}
 	if d.opts.Pool == nil {
-		return errors.New("download pool is required")
+		return diagnostic.Describe(errors.New("download pool is required"), corei18n.Message{ID: "errors.message.download_pool_is_required"})
 	}
 	if d.opts.Iter == nil {
-		return errors.New("download iterator is required")
+		return diagnostic.Describe(errors.New("download iterator is required"), corei18n.Message{ID: "errors.message.download_iterator_is_required"})
 	}
 	if d.opts.Progress == nil {
-		return errors.New("download progress is required")
+		return diagnostic.Describe(errors.New("download progress is required"), corei18n.Message{ID: "errors.message.download_progress_is_required"})
 	}
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -81,7 +83,7 @@ func (d *Downloader) Download(ctx context.Context, limit int) error {
 			if err != nil {
 				// canceled by user, so we directly return error to stop all
 				if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
-					return errors.Wrap(err, "download")
+					return diagnostic.Describe(errors.Wrap(err, "download"), corei18n.Message{ID: "errors.context.download", Args: map[string]any{"Reason": err}})
 				}
 
 				// Continue independent files, but report every failure after all
@@ -108,7 +110,7 @@ func (d *Downloader) Download(ctx context.Context, limit int) error {
 	// Finalizers and progress callbacks own files/state; always wait for workers.
 	err := wg.Wait()
 	if iterErr != nil {
-		err = multierr.Append(err, errors.Wrap(iterErr, "iter"))
+		err = multierr.Append(err, diagnostic.Describe(errors.Wrap(iterErr, "iter"), corei18n.Message{ID: "errors.context.iter", Args: map[string]any{"Reason": iterErr}}))
 	}
 	failureMu.Lock()
 	err = multierr.Append(err, failures)
@@ -136,7 +138,7 @@ func (d *Downloader) download(ctx context.Context, elem Elem) error {
 			zap.Int("threads", threads))
 
 		if err := d.parallelIgnore(ctx, client, elem, parts, threads); err != nil {
-			return errors.Wrap(err, "download")
+			return diagnostic.Describe(errors.Wrap(err, "download"), corei18n.Message{ID: "errors.context.download", Args: map[string]any{"Reason": err}})
 		}
 		return nil
 	}
@@ -147,10 +149,13 @@ func (d *Downloader) download(ctx context.Context, elem Elem) error {
 		WithThreads(threads).
 		Parallel(ctx, w)
 	if err != nil {
-		return errors.Wrap(err, "download")
+		return diagnostic.Describe(errors.Wrap(err, "download"), corei18n.Message{ID: "errors.context.download", Args: map[string]any{"Reason": err}})
 	}
 	if size := elem.File().Size(); size > 0 && w.downloaded.Load() != size {
-		return errors.Errorf("incomplete download: got %d bytes, expected %d", w.downloaded.Load(), size)
+		return func() error {
+			messageArg1 := w.downloaded.Load()
+			return diagnostic.Describe(errors.Errorf("incomplete download: got %d bytes, expected %d", messageArg1, size), corei18n.Message{ID: "errors.message.incomplete_download_got_value_bytes_expected_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": size}})
+		}()
 	}
 
 	return nil

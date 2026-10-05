@@ -1,6 +1,7 @@
 package autodl
 
 import (
+	"context"
 	"fmt"
 	"path/filepath"
 	"runtime"
@@ -11,8 +12,11 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/iyear/tdl/app/chat"
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/util/fsutil"
 	"github.com/iyear/tdl/internal/transfer"
+	"github.com/iyear/tdl/pkg/console"
 )
 
 // EffectiveOptions contains the values chosen once, before opening an account.
@@ -91,16 +95,16 @@ func prepareConfig(cfg *Config, opts Options) (*PreparedRun, error) {
 	}
 	opts.Mode = strings.ToLower(opts.Mode)
 	if opts.Mode != ModeAuto && opts.Mode != ModeComment && opts.Mode != ModeDirect {
-		return nil, &ConfigError{Path: opts.ConfigPath, Err: errors.Errorf("invalid mode %q", opts.Mode)}
+		return nil, &ConfigError{Path: opts.ConfigPath, Err: diagnostic.Describe(errors.Errorf("invalid mode %q", opts.Mode), corei18n.Message{ID: "errors.message.invalid_mode_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", opts.Mode)}})}
 	}
 	if opts.PoolSize < 0 || opts.Threads < 0 || opts.Limit < 0 || opts.Delay < 0 {
-		return nil, &ConfigError{Path: opts.ConfigPath, Err: errors.New("performance overrides and delay must not be negative")}
+		return nil, &ConfigError{Path: opts.ConfigPath, Err: diagnostic.Describe(errors.New("performance overrides and delay must not be negative"), corei18n.Message{ID: "errors.message.performance_overrides_and_delay_must_not_be_negative"})}
 	}
 	if opts.OverlapSeconds != nil && *opts.OverlapSeconds < 0 {
-		return nil, &ConfigError{Path: opts.ConfigPath, Err: errors.New("overlap_seconds override must not be negative")}
+		return nil, &ConfigError{Path: opts.ConfigPath, Err: diagnostic.Describe(errors.New("overlap_seconds override must not be negative"), corei18n.Message{ID: "errors.message.overlap_key_seconds_override_must_not_be_negative"})}
 	}
 	if len(opts.Include) > 0 && len(opts.Exclude) > 0 {
-		return nil, &ConfigError{Path: opts.ConfigPath, Err: errors.New("include and exclude cannot be combined")}
+		return nil, &ConfigError{Path: opts.ConfigPath, Err: diagnostic.Describe(errors.New("include and exclude cannot be combined"), corei18n.Message{ID: "errors.message.include_and_exclude_cannot_be_combined"})}
 	}
 	ns := strings.TrimSpace(opts.Namespace)
 	origins := OptionOrigins{Namespace: "default", Pool: "default", Threads: "default", Limit: "default"}
@@ -168,7 +172,7 @@ func prepareConfig(cfg *Config, opts Options) (*PreparedRun, error) {
 			job.mode = mode
 			if strings.TrimSpace(job.ExportFilter) != "" {
 				if _, err := expr.Compile(job.ExportFilter, expr.AsBool()); err != nil {
-					return nil, wrap(errors.Wrap(err, "export_filter"))
+					return nil, wrap(diagnostic.Describe(errors.Wrap(err, "export_filter"), corei18n.Message{ID: "errors.context.export_key_filter", Args: map[string]any{"Reason": err}}))
 				}
 			}
 		}
@@ -185,7 +189,7 @@ func prepareConfig(cfg *Config, opts Options) (*PreparedRun, error) {
 		if !job.IsTagJob() && !job.FollowLinks || job.UsesIncremental(cfg.Incremental) {
 			key := canonicalPath(r.statePath(job))
 			if earlier, exists := paths[key]; exists {
-				return nil, wrap(errors.Errorf("state file %s is also owned by job %d; give each job a distinct subdir/state path", key, earlier))
+				return nil, wrap(diagnostic.Describe(errors.Errorf("state file %s is also owned by job %d; give each job a distinct subdir/state path", key, earlier), corei18n.Message{ID: "errors.batch.state_path_conflict", Args: map[string]any{"Arg1": key, "Arg2": earlier}}))
 			}
 			paths[key] = i + 1
 			if err := reservations.ReserveState(key, fmt.Sprintf("job %d state", i+1)); err != nil {
@@ -195,11 +199,11 @@ func prepareConfig(cfg *Config, opts Options) (*PreparedRun, error) {
 		if !job.IsTagJob() && !job.FollowLinks {
 			a, err := tpl.execute(&fileTemplate{DialogID: 1, MessageID: 1, FileName: "first.mp4"})
 			if err != nil {
-				return nil, wrap(errors.Wrap(err, "template"))
+				return nil, wrap(diagnostic.Describe(errors.Wrap(err, "template"), corei18n.Message{ID: "errors.context.template", Args: map[string]any{"Reason": err}}))
 			}
 			b, err := tpl.execute(&fileTemplate{DialogID: 2, MessageID: 2, FileName: "second.mp4"})
 			if err != nil {
-				return nil, wrap(errors.Wrap(err, "template"))
+				return nil, wrap(diagnostic.Describe(errors.Wrap(err, "template"), corei18n.Message{ID: "errors.context.template", Args: map[string]any{"Reason": err}}))
 			}
 			if _, err := fsutil.JoinWithin(job.dir, a); err != nil {
 				return nil, wrap(err)
@@ -207,14 +211,14 @@ func prepareConfig(cfg *Config, opts Options) (*PreparedRun, error) {
 			if a == b {
 				path := canonicalPath(filepath.Join(job.dir, a))
 				if earlier, exists := staticOutputs[path]; exists {
-					return nil, wrap(errors.Errorf("template output %s conflicts with job %d", path, earlier))
+					return nil, wrap(diagnostic.Describe(errors.Errorf("template output %s conflicts with job %d", path, earlier), corei18n.Message{ID: "errors.message.template_output_value_conflicts_with_job_value", Args: map[string]any{"Arg1": path, "Arg2": earlier}}))
 				}
 				staticOutputs[path] = i + 1
 				if _, err := reservations.Reserve(path, fmt.Sprintf("job %d template", i+1)); err != nil {
 					return nil, wrap(err)
 				}
 				if num(job.EndComment)-num(job.StartComment) > 1 {
-					return nil, wrap(errors.New("template produces the same output path for multiple messages"))
+					return nil, wrap(diagnostic.Describe(errors.New("template produces the same output path for multiple messages"), corei18n.Message{ID: "errors.message.template_produces_the_same_output_path_for_multiple_messages"}))
 				}
 			}
 		}
@@ -243,4 +247,8 @@ func canonicalPath(path string) string {
 
 func (p *PreparedRun) String() string {
 	return fmt.Sprintf("%d jobs; namespace=%s pool=%d threads=%d limit=%d", len(p.cfg.Jobs), p.effective.Namespace, p.effective.Pool, p.effective.Threads, p.effective.Limit)
+}
+
+func (p *PreparedRun) Summary(ctx context.Context) string {
+	return console.Translate(ctx, corei18n.Message{ID: "batch.summary", Default: "{{.Jobs}} jobs; namespace={{.Namespace}} pool={{.Pool}} threads={{.Threads}} limit={{.Limit}}", Args: map[string]any{"Jobs": len(p.cfg.Jobs), "Namespace": p.effective.Namespace, "Pool": p.effective.Pool, "Threads": p.effective.Threads, "Limit": p.effective.Limit}})
 }

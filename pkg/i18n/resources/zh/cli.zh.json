@@ -1,0 +1,515 @@
+{
+  "cli.root.short": {
+    "other": "Telegram 下载器，同时支持更多功能"
+  },
+  "cli.group.account": {
+    "other": "账号相关"
+  },
+  "cli.group.tools": {
+    "other": "工具"
+  },
+  "cli.group.extensions": {
+    "other": "扩展"
+  },
+  "cli.command.batch.short": {
+    "other": "批量下载消息、评论、标签归档或链接资源"
+  },
+  "cli.command.batch.long": {
+    "other": "根据 config.yaml 批量下载 Telegram 消息、评论、说明文字标签归档或\n链接资源。运行 \"tdl batch init\" 可生成兼容原生批量解析器的各模式配置示例。\n\n未指定 --config 时，优先使用当前目录中的 config.yaml，其次使用 config.yml\n和旧版 config.json。直接运行 \"tdl\" 且不带参数时，如果配置存在且账号已登录，\n程序会自动启动此命令。\n\n所有任务类型均支持 ID 范围或增量时间窗口。消息任务会记录已完成的 ID；\n增量归档会记录 last_ts 并校验已保存文件。未完成的下载会保留分片，只重新获取缺失分片。"
+  },
+  "cli.command.batch.init.short": {
+    "other": "生成包含所有批量模式示例和注释的 config.yaml"
+  },
+  "cli.command.batch.init.long": {
+    "other": "生成有效的 YAML 配置，包含直接消息范围、评论范围、聊天/话题/回复增量任务、\n说明文字标签归档和链接资源归档。保留需要的任务，并在运行 batch 前替换示例 URL、\nID 和标签。说明内容写在 YAML 注释中；comment 字段用于选择评论模式。仍支持旧版\nJSON 配置。此操作不需要连接 Telegram 或登录。\n\n默认使用全局 --language 设置注释语言，也可用 --lang 覆盖生成文件的注释语言。\n--lang zh 或 --lang en 可分别指定中文或英文注释。\n\n除非指定 --force，否则不会覆盖已有配置。"
+  },
+  "cli.command.batch.init.example": {
+    "other": "  tdl batch init\n  tdl batch init --lang zh\n  tdl batch init --lang en -c examples/config.yaml\n  tdl batch init -c config.yaml --force"
+  },
+  "cli.command.login.short": {
+    "other": "登录 Telegram"
+  },
+  "cli.command.download.short": {
+    "other": "从 Telegram（受保护）聊天下载内容"
+  },
+  "cli.command.forward.short": {
+    "other": "转发消息，自动回退并按路由发送"
+  },
+  "cli.command.upload.short": {
+    "other": "向 Telegram 上传内容"
+  },
+  "cli.command.chat.short": {
+    "other": "聊天工具集"
+  },
+  "cli.command.chat.download_tag.short": {
+    "other": "下载说明文字中含指定标签的图片和视频消息"
+  },
+  "cli.command.chat.ls.short": {
+    "other": "列出聊天"
+  },
+  "cli.command.chat.export.short": {
+    "other": "导出（受保护）聊天中的消息以供下载"
+  },
+  "cli.command.chat.users.short": {
+    "other": "导出（受保护）频道中的用户"
+  },
+  "cli.command.backup.short": {
+    "other": "备份数据"
+  },
+  "cli.command.recover.short": {
+    "other": "恢复数据"
+  },
+  "cli.command.migrate.short": {
+    "other": "将当前数据迁移到另一种存储"
+  },
+  "cli.command.gen.short": {
+    "other": "生成工具集"
+  },
+  "cli.command.gen.doc.short": {
+    "other": "生成文档"
+  },
+  "cli.command.update.short": {
+    "other": "将 tdl 更新到最新版本"
+  },
+  "cli.command.update.long": {
+    "other": "从 GitHub 下载发行版本、验证校验和并替换当前程序，以就地更新 tdl。\n\n示例：\n  tdl update                     # 安装最新的已验证版本\n  tdl update --dry-run           # 仅查看是否有可用更新\n  tdl update --version v0.20.4   # 安装指定版本\n  tdl update --force             # 重新安装或允许降级"
+  },
+  "cli.command.version.short": {
+    "other": "查看版本信息"
+  },
+  "cli.command.extension.short": {
+    "other": "管理 tdl 扩展"
+  },
+  "cli.command.extension.list.short": {
+    "other": "列出已安装的扩展命令"
+  },
+  "cli.command.extension.install.short": {
+    "other": "安装 tdl 扩展"
+  },
+  "cli.command.extension.upgrade.short": {
+    "other": "升级 tdl 扩展"
+  },
+  "cli.command.extension.remove.short": {
+    "other": "移除 tdl 扩展"
+  },
+  "cli.help.usage": {
+    "other": "用法："
+  },
+  "cli.help.aliases": {
+    "other": "别名："
+  },
+  "cli.help.examples": {
+    "other": "示例："
+  },
+  "cli.help.available_commands": {
+    "other": "可用命令："
+  },
+  "cli.help.additional_commands": {
+    "other": "其他命令："
+  },
+  "cli.help.flags": {
+    "other": "参数："
+  },
+  "cli.help.global_flags": {
+    "other": "全局参数："
+  },
+  "cli.help.additional_help_topics": {
+    "other": "其他帮助主题："
+  },
+  "cli.help.more_information": {
+    "other": "运行 \"{{.CommandPath}} [command] --help\" 查看命令的更多信息。"
+  },
+  "cli.help.use_command": {
+    "other": "运行"
+  },
+  "cli.help.more_information_tail": {
+    "other": "查看命令的更多信息。"
+  },
+  "cli.flags.help.description": {
+    "other": "显示 {{.Command}} 命令的帮助"
+  },
+  "cli.flags.root.storage.description": {
+    "other": "存储选项，格式：type=driver,key1=value1,key2=value2。可用驱动：[bolt,legacy]"
+  },
+  "cli.flags.root.proxy.description": {
+    "other": "代理地址，格式：protocol://username:password@host:port"
+  },
+  "cli.flags.root.ns.description": {
+    "other": "Telegram 会话使用的命名空间"
+  },
+  "cli.flags.root.debug.description": {
+    "other": "启用调试模式"
+  },
+  "cli.flags.root.size.description": {
+    "other": "传输分片大小"
+  },
+  "cli.flags.root.threads.description": {
+    "other": "单个项目传输时的最大线程数"
+  },
+  "cli.flags.root.limit.description": {
+    "other": "并发任务的最大数量"
+  },
+  "cli.flags.root.pool.description": {
+    "other": "DC 连接池大小，0 表示不限制"
+  },
+  "cli.flags.root.delay.description": {
+    "other": "任务间隔，0 表示不延迟"
+  },
+  "cli.flags.root.ntp.description": {
+    "other": "NTP 服务器地址；未设置时使用系统时间"
+  },
+  "cli.flags.root.reconnect_timeout.description": {
+    "other": "Telegram 客户端重连退避超时，设为 0 时不限制"
+  },
+  "cli.flags.root.disable_progress_ps.description": {
+    "other": "禁用进度状态刷新，某些终端可能因此显示异常"
+  },
+  "cli.flags.root.language.description": {
+    "other": "输出语言：auto、zh 或 en；所有中文地区和脚本标记均使用简体中文"
+  },
+  "cli.flags.batch.config.description": {
+    "other": "配置文件路径（默认：config.yaml；也支持旧版 JSON）"
+  },
+  "cli.flags.batch.check_only.description": {
+    "other": "仅检查并报告将要下载的内容"
+  },
+  "cli.flags.batch.validate_only.description": {
+    "other": "离线验证配置和选项，不打开账号存储"
+  },
+  "cli.flags.batch.yes.description": {
+    "other": "对所有确认提示自动回答是"
+  },
+  "cli.flags.batch.mode.description": {
+    "other": "下载模式：[auto、comment、direct]（覆盖任务中的 comment 设置）"
+  },
+  "cli.flags.batch.incremental.description": {
+    "other": "强制所有任务使用增量模式"
+  },
+  "cli.flags.batch.state_file.description": {
+    "other": "状态文件路径（默认：<下载目录>/tdl_state.json）"
+  },
+  "cli.flags.batch.overlap_seconds.description": {
+    "other": "增量扫描的回溯窗口秒数"
+  },
+  "cli.flags.batch.retry_skipped.description": {
+    "other": "重试之前记录为不可用的消息"
+  },
+  "cli.flags.batch.dir.description": {
+    "other": "覆盖所有任务的下载目录"
+  },
+  "cli.flags.batch.template.description": {
+    "other": "下载文件名模板"
+  },
+  "cli.flags.batch.include.description": {
+    "other": "仅包含指定扩展名的文件"
+  },
+  "cli.flags.batch.exclude.description": {
+    "other": "排除指定扩展名的文件"
+  },
+  "cli.flags.batch.takeout.description": {
+    "other": "使用限制较宽松的 takeout 会话"
+  },
+  "cli.flags.batch.batch_threads.description": {
+    "other": "单个文件的最大线程数（覆盖配置和 -t）"
+  },
+  "cli.flags.batch.batch_limit.description": {
+    "other": "并发文件的最大数量（覆盖配置和 -l）"
+  },
+  "cli.flags.batch.batch_pool.description": {
+    "other": "连接池大小（覆盖配置和 --pool）"
+  },
+  "cli.flags.batch.init.config.description": {
+    "other": "生成的 YAML 配置文件路径"
+  },
+  "cli.flags.batch.init.force.description": {
+    "other": "替换已有配置文件"
+  },
+  "cli.flags.batch.init.lang.description": {
+    "other": "注释语言：auto、zh 或 en"
+  },
+  "cli.flags.login.type.description": {
+    "other": "登录方式：[code、desktop]"
+  },
+  "cli.flags.login.desktop.description": {
+    "other": "官方桌面客户端路径；留空时自动查找可能的路径"
+  },
+  "cli.flags.login.passcode.description": {
+    "other": "桌面客户端密码；未设置密码时留空"
+  },
+  "cli.flags.login.code.description": {
+    "other": "使用验证码登录，而不是从桌面客户端导入会话"
+  },
+  "cli.flags.download.url.description": {
+    "other": "Telegram 消息链接"
+  },
+  "cli.flags.download.file.description": {
+    "other": "官方客户端导出的文件"
+  },
+  "cli.flags.download.template.description": {
+    "other": "下载文件名模板"
+  },
+  "cli.flags.download.include.description": {
+    "other": "仅按文件名判断并包含指定扩展名，不检查 MIME。例如：-i mp4,mp3"
+  },
+  "cli.flags.download.exclude.description": {
+    "other": "仅按文件名判断并排除指定扩展名，不检查 MIME。例如：-e png,jpg"
+  },
+  "cli.flags.download.dir.description": {
+    "other": "下载目录；目录不存在时会自动创建"
+  },
+  "cli.flags.download.rewrite_ext.description": {
+    "other": "根据文件头 MIME 类型重写扩展名"
+  },
+  "cli.flags.download.skip_same.description": {
+    "other": "跳过名称（不含扩展名）和大小均相同的文件"
+  },
+  "cli.flags.download.desc.description": {
+    "other": "按从新到旧的顺序下载（可能影响断点续传）"
+  },
+  "cli.flags.download.takeout.description": {
+    "other": "使用限制较宽松的 takeout 会话导出账号数据"
+  },
+  "cli.flags.download.group.description": {
+    "other": "自动识别分组消息并下载全部成员"
+  },
+  "cli.flags.download.continue.description": {
+    "other": "直接继续上次下载"
+  },
+  "cli.flags.download.restart.description": {
+    "other": "直接重新开始上次下载"
+  },
+  "cli.flags.download.serve.description": {
+    "other": "使用 HTTP 服务器提供媒体文件，而不是内置下载器"
+  },
+  "cli.flags.download.port.description": {
+    "other": "HTTP 服务器端口"
+  },
+  "cli.flags.forward.from.description": {
+    "other": "待转发消息，可以是链接或导出的 JSON 文件"
+  },
+  "cli.flags.forward.to.description": {
+    "other": "目标会话，可以是 CHAT 或基于表达式引擎的路由"
+  },
+  "cli.flags.forward.edit.description": {
+    "other": "使用表达式引擎编辑消息或说明文字；留空时不编辑"
+  },
+  "cli.flags.forward.mode.description": {
+    "other": "转发模式：[{{.Modes}}]"
+  },
+  "cli.flags.forward.silent.description": {
+    "other": "静默发送消息"
+  },
+  "cli.flags.forward.dry_run.description": {
+    "other": "不实际发送消息，仅显示发送效果"
+  },
+  "cli.flags.forward.single.description": {
+    "other": "不自动识别和转发分组消息"
+  },
+  "cli.flags.forward.desc.description": {
+    "other": "对每个输入会话按逆序转发消息"
+  },
+  "cli.flags.upload.chat.description": {
+    "other": "聊天 ID 或域名；留空表示“已保存的消息”。可与 --topic 一起使用；不能与 --to 同时使用。"
+  },
+  "cli.flags.upload.topic.description": {
+    "other": "指定话题 ID。必须与 --chat 一起使用；不能与 --to 同时使用。"
+  },
+  "cli.flags.upload.to.description": {
+    "other": "目标会话，可以是 CHAT 或基于表达式引擎的路由；不能与 --chat 或 --topic 同时使用。"
+  },
+  "cli.flags.upload.path.description": {
+    "other": "目录或文件"
+  },
+  "cli.flags.upload.include.description": {
+    "other": "仅包含指定扩展名的文件"
+  },
+  "cli.flags.upload.exclude.description": {
+    "other": "排除指定扩展名的文件"
+  },
+  "cli.flags.upload.rm.description": {
+    "other": "上传完成后删除本地文件"
+  },
+  "cli.flags.upload.photo.description": {
+    "other": "将图片作为照片上传，而不是作为文件上传"
+  },
+  "cli.flags.upload.caption.description": {
+    "other": "上传媒体的说明文字"
+  },
+  "cli.flags.chat.download_tag.chat.description": {
+    "other": "Telegram 聊天/话题 URL、用户名或数字聊天 ID"
+  },
+  "cli.flags.chat.download_tag.topic.description": {
+    "other": "仅扫描此论坛话题 ID"
+  },
+  "cli.flags.chat.download_tag.tag.description": {
+    "other": "媒体说明文字中的标签，可带或不带 #"
+  },
+  "cli.flags.chat.download_tag.tags.description": {
+    "other": "多个标签；支持用逗号分隔"
+  },
+  "cli.flags.chat.download_tag.tag_match.description": {
+    "other": "多标签匹配方式：any 或 all"
+  },
+  "cli.flags.chat.download_tag.dir.description": {
+    "other": "归档目录"
+  },
+  "cli.flags.chat.download_tag.check_only.description": {
+    "other": "列出匹配的帖子，不写入文件"
+  },
+  "cli.flags.chat.download_tag.write_metadata.description": {
+    "other": "为每个帖子写入 meta.json 元数据"
+  },
+  "cli.flags.chat.download_tag.takeout.description": {
+    "other": "下载时使用 Telegram takeout 会话"
+  },
+  "cli.flags.chat.download_tag.max_posts.description": {
+    "other": "达到指定匹配帖子数后停止（0 表示扫描全部历史记录）"
+  },
+  "cli.flags.chat.ls.output.description": {
+    "other": "输出格式：[table、json]"
+  },
+  "cli.flags.chat.ls.filter.description": {
+    "other": "使用表达式筛选聊天"
+  },
+  "cli.flags.chat.export.type.description": {
+    "other": "导出类型：[time、id、last]"
+  },
+  "cli.flags.chat.export.chat.description": {
+    "other": "聊天 ID 或域名；未指定时使用“已保存的消息”"
+  },
+  "cli.flags.chat.export.topic.description": {
+    "other": "指定话题 ID"
+  },
+  "cli.flags.chat.export.reply.description": {
+    "other": "指定频道帖子 ID"
+  },
+  "cli.flags.chat.export.input.description": {
+    "other": "输入内容取决于导出类型"
+  },
+  "cli.flags.chat.export.filter.description": {
+    "other": "使用表达式筛选消息，默认匹配全部。指定 '-' 可查看可用字段"
+  },
+  "cli.flags.chat.export.output.description": {
+    "other": "输出 JSON 文件路径"
+  },
+  "cli.flags.chat.export.with_content.description": {
+    "other": "同时导出消息内容"
+  },
+  "cli.flags.chat.export.raw.description": {
+    "other": "导出 Telegram MTProto API 原始消息结构，适用于调试"
+  },
+  "cli.flags.chat.export.all.description": {
+    "other": "导出所有消息，包括非媒体消息；仍受筛选表达式和类型参数影响"
+  },
+  "cli.flags.chat.users.output.description": {
+    "other": "输出 JSON 文件路径"
+  },
+  "cli.flags.chat.users.chat.description": {
+    "other": "域名 ID（频道、超级群组等）"
+  },
+  "cli.flags.chat.users.raw.description": {
+    "other": "导出 Telegram MTProto API 原始消息结构，适用于调试"
+  },
+  "cli.flags.backup.dst.description": {
+    "other": "目标文件路径。默认：<日期>.backup.tdl"
+  },
+  "cli.flags.recover.file.description": {
+    "other": "备份文件路径"
+  },
+  "cli.flags.migrate.to.description": {
+    "other": "目标存储选项，格式：type=driver,key1=value1,key2=value2。可用驱动：[bolt,legacy]"
+  },
+  "cli.flags.gen.doc.dir.description": {
+    "other": "生成文档的目录"
+  },
+  "cli.flags.update.yes.description": {
+    "other": "无需确认提示，直接更新"
+  },
+  "cli.flags.update.dry_run.description": {
+    "other": "仅报告是否有可用更新，不下载文件"
+  },
+  "cli.flags.update.version.description": {
+    "other": "安装指定发行标签，而不是最新版本（例如 v0.20.4）"
+  },
+  "cli.flags.update.force.description": {
+    "other": "即使已是最新版本也重新安装；同时允许降级"
+  },
+  "cli.flags.extension.dry_run.description": {
+    "other": "仅显示将执行的操作，不实际执行"
+  },
+  "cli.flags.extension.install.force.description": {
+    "other": "即使扩展已存在也强制安装"
+  },
+  "cli.command.extension_child.short": {
+    "other": "{{.Name}} 扩展"
+  },
+  "cli.help.default_value": {
+    "other": "默认：{{.Value}}"
+  },
+  "cli.deprecated.flag_warning": {
+    "other": "参数 --{{.Name}} 已弃用：{{.Reason}}"
+  },
+  "cli.deprecated.shorthand_warning": {
+    "other": "参数简写 -{{.Name}} 已弃用：{{.Reason}}"
+  },
+  "cli.deprecated.command_warning": {
+    "other": "命令 {{.Name}} 已弃用：{{.Reason}}"
+  },
+  "cli.flags.root.size.deprecated": {
+    "other": "分片大小现在默认采用最大值；此参数将在未来版本移除。"
+  },
+  "cli.flags.login.code.deprecated": {
+    "other": "请改用 `-T code`。"
+  },
+  "cli.command.completion.bash.long": {
+    "other": "生成 bash 自动补全脚本。\n\n此脚本依赖 bash-completion 软件包。\n如果尚未安装，请通过操作系统的包管理器安装。\n\n在当前 Shell 会话中加载补全：\n\n\tsource <(tdl completion bash)\n\n要在每个新会话中加载补全，请执行一次：\n\n#### Linux:\n\n\ttdl completion bash > /etc/bash_completion.d/tdl\n\n#### macOS:\n\n\ttdl completion bash > $(brew --prefix)/etc/bash_completion.d/tdl\n\n请启动新的 Shell 会话，使配置生效。\n"
+  },
+  "cli.command.completion.bash.short": {
+    "other": "生成 bash 自动补全脚本"
+  },
+  "cli.command.completion.fish.long": {
+    "other": "生成 fish 自动补全脚本。\n\n在当前 Shell 会话中加载补全：\n\n\ttdl completion fish | source\n\n要在每个新会话中加载补全，请执行一次：\n\n\ttdl completion fish > ~/.config/fish/completions/tdl.fish\n\n请启动新的 Shell 会话，使配置生效。\n"
+  },
+  "cli.command.completion.fish.short": {
+    "other": "生成 fish 自动补全脚本"
+  },
+  "cli.command.completion.long": {
+    "other": "为指定 Shell 生成 tdl 自动补全脚本。\n请查看各子命令的帮助，了解如何使用生成的脚本。\n"
+  },
+  "cli.command.completion.powershell.long": {
+    "other": "生成 PowerShell 自动补全脚本。\n\n在当前 Shell 会话中加载补全：\n\n\ttdl completion powershell | Out-String | Invoke-Expression\n\n要在每个新会话中加载补全，请将上述命令的输出\n添加到 PowerShell 配置文件。\n"
+  },
+  "cli.command.completion.powershell.short": {
+    "other": "生成 powershell 自动补全脚本"
+  },
+  "cli.command.completion.short": {
+    "other": "生成指定 Shell 的自动补全脚本"
+  },
+  "cli.command.completion.zsh.long": {
+    "other": "生成 zsh 自动补全脚本。\n\n如果环境尚未启用 Shell 补全，请先启用。执行一次以下命令：\n\n\techo \"autoload -U compinit; compinit\" >> ~/.zshrc\n\n在当前 Shell 会话中加载补全：\n\n\tsource <(tdl completion zsh)\n\n要在每个新会话中加载补全，请执行一次：\n\n#### Linux:\n\n\ttdl completion zsh > \"${fpath[1]}/_tdl\"\n\n#### macOS:\n\n\ttdl completion zsh > $(brew --prefix)/share/zsh/site-functions/_tdl\n\n请启动新的 Shell 会话，使配置生效。\n"
+  },
+  "cli.command.completion.zsh.short": {
+    "other": "生成 zsh 自动补全脚本"
+  },
+  "cli.command.help.long": {
+    "other": "查看任意命令的帮助。\n使用 tdl help [命令路径] 查看完整说明。"
+  },
+  "cli.command.help.short": {
+    "other": "查看命令帮助"
+  },
+  "cli.flags.completion.bash.no_descriptions.description": {
+    "other": "禁用补全说明"
+  },
+  "cli.flags.completion.fish.no_descriptions.description": {
+    "other": "禁用补全说明"
+  },
+  "cli.flags.completion.powershell.no_descriptions.description": {
+    "other": "禁用补全说明"
+  },
+  "cli.flags.completion.zsh.no_descriptions.description": {
+    "other": "禁用补全说明"
+  },
+  "cli.help.unknown_topic": {
+    "other": "未知帮助主题 {{.Topics}}"
+  }
+}

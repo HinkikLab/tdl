@@ -1,0 +1,1103 @@
+{
+  "errors.message.resolve_archive_account_identity_value": {
+    "other": "解析归档账号标识：{{.Arg1}}"
+  },
+  "errors.message.read_archive_owner_value": {
+    "other": "读取归档归属：{{.Arg1}}"
+  },
+  "errors.archive.owner_mismatch": {
+    "other": "现有归档 {{.Arg1}} 属于其他来源、账号或帖子；已保留以供恢复"
+  },
+  "errors.message.incremental_archive_scan_exceeded_100000_messages_keeping_last_key_ts": {
+    "other": "增量归档扫描超过 100000 条消息；保留 last_ts"
+  },
+  "errors.message.scan_chat_history_value": {
+    "other": "扫描聊天历史：{{.Arg1}}"
+  },
+  "errors.message.bot_live_updates_exceed_max_key_bot_key_messages": {
+    "other": "机器人实时消息超过 max_bot_messages"
+  },
+  "errors.message.failed_to_walk_fields_value": {
+    "other": "遍历字段失败：{{.Arg1}}"
+  },
+  "errors.message.failed_to_compile_filter_value": {
+    "other": "编译过滤器失败：{{.Arg1}}"
+  },
+  "errors.message.failed_to_get_peer_value": {
+    "other": "获取聊天对象失败：{{.Arg1}}"
+  },
+  "errors.message.failed_to_get_broadcast_full_raw_value": {
+    "other": "获取频道完整信息失败：{{.Arg1}}"
+  },
+  "errors.message.no_linked_group": {
+    "other": "没有关联的群组"
+  },
+  "errors.message.failed_to_run_filter_value": {
+    "other": "运行过滤器失败：{{.Arg1}}"
+  },
+  "errors.message.failed_to_marshal_message_value": {
+    "other": "编码消息失败：{{.Arg1}}"
+  },
+  "errors.message.value_must_be_between_0_and_value": {
+    "other": "{{.Arg1}} 必须在 0 到 {{.Arg2}} 之间"
+  },
+  "errors.message.bot_key_idle_key_seconds_must_be_less_than_bot_key_timeout_key_seconds": {
+    "other": "bot_idle_seconds 必须小于 bot_timeout_seconds"
+  },
+  "errors.message.poll_key_interval_key_ms_must_be_less_than_bot_key_timeout_key_seconds": {
+    "other": "poll_interval_ms 必须小于 bot_timeout_seconds"
+  },
+  "errors.message.rerequest_key_limit_must_be_between_0_and_10": {
+    "other": "rerequest_limit 必须在 0 到 10 之间"
+  },
+  "errors.message.flood_key_retries_must_be_between_0_and_20": {
+    "other": "flood_retries 必须在 0 到 20 之间"
+  },
+  "errors.bot.flood_wait_limit": {
+    "other": "flood_wait_seconds 不能超过 max_flood_wait_seconds"
+  },
+  "errors.message.resource_link_cycle_at_value": {
+    "other": "资源链接在 {{.Arg1}} 形成循环"
+  },
+  "errors.message.resource_link_depth_exceeds_value": {
+    "other": "资源链接深度超过 {{.Arg1}}"
+  },
+  "errors.message.resource_link_count_exceeds_value": {
+    "other": "资源链接数量超过 {{.Arg1}}"
+  },
+  "errors.message.resolve_value_value": {
+    "other": "解析 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.message.linked_post_comments_value": {
+    "other": "链接帖子评论：{{.Arg1}}"
+  },
+  "errors.message.value_returned_no_files_or_resource_links": {
+    "other": "{{.Arg1}} 未返回文件或资源链接"
+  },
+  "errors.message.no_resource_files_resolved": {
+    "other": "未解析到资源文件"
+  },
+  "errors.message.delete_bot_archive_messages_value_value": {
+    "other": "删除机器人归档消息 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.message.resolve_value_peer_value_value": {
+    "other": "解析 {{.Arg1}} 聊天对象 {{.Arg2}}：{{.Arg3}}"
+  },
+  "errors.message.message_value_does_not_belong_to_linked_forum_topic_value": {
+    "other": "消息 {{.Arg1}} 不属于链接话题 {{.Arg2}}"
+  },
+  "errors.message.message_value_is_unavailable_or_deleted": {
+    "other": "消息 {{.Arg1}} 不可用或已删除"
+  },
+  "errors.message.unexpected_message_result_value": {
+    "other": "消息结果类型异常：{{.Arg1}}"
+  },
+  "errors.message.linked_album_is_unavailable": {
+    "other": "链接相册不可用"
+  },
+  "errors.message.album_message_value_does_not_belong_to_linked_forum_topic_value": {
+    "other": "相册消息 {{.Arg1}} 不属于链接指定的话题 {{.Arg2}}"
+  },
+  "errors.message.discussion_root_is_unavailable": {
+    "other": "讨论根消息不可用"
+  },
+  "errors.message.read_bot_value_response_history_after_value_offset_value_value": {
+    "other": "读取机器人 {{.Arg1}} 在 {{.Arg2}} 之后的响应历史（偏移 {{.Arg3}}）：{{.Arg4}}"
+  },
+  "errors.message.unexpected_bot_history_result": {
+    "other": "机器人历史消息结果异常"
+  },
+  "errors.message.bot_response_exceeds_max_key_bot_key_messages": {
+    "other": "机器人响应超过 max_bot_messages"
+  },
+  "errors.message.bot_history_pagination_did_not_advance": {
+    "other": "机器人历史消息分页未向前推进"
+  },
+  "errors.message.bot_flood_key_retries_exhausted_value": {
+    "other": "已耗尽机器人 flood_retries 重试次数：{{.Arg1}}"
+  },
+  "errors.message.bot_cooldown_exceeds_max_key_flood_key_wait_key_seconds_value": {
+    "other": "机器人冷却时间超过 max_flood_wait_seconds：{{.Arg1}}"
+  },
+  "errors.message.check_bot_value_replies_during_request_interval_value": {
+    "other": "检查机器人 {{.Arg1}} 在请求间隔内的回复：{{.Arg2}}"
+  },
+  "errors.message.read_bot_value_request_watermark_value": {
+    "other": "读取机器人 {{.Arg1}} 的请求水位：{{.Arg2}}"
+  },
+  "errors.message.wait_bot_value_request_interval_value": {
+    "other": "等待机器人 {{.Arg1}} 的请求间隔：{{.Arg2}}"
+  },
+  "errors.message.generate_bot_value_request_id_value": {
+    "other": "生成机器人 {{.Arg1}} 的请求 ID：{{.Arg2}}"
+  },
+  "errors.message.start_bot_value_value": {
+    "other": "启动机器人 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.bot.response_timeout": {
+    "other": "机器人 {{.Arg1}} 的响应未在 {{.Arg2}} 秒内稳定（{{.Arg3}} 条消息）：{{.Arg4}}；最后一条回复（ID {{.Arg5}}）：{{.Arg6}}；请调整 bot_timeout_seconds/bot_idle_seconds：{{.Arg7}}"
+  },
+  "errors.message.linked_archive_requires_a_download_pool": {
+    "other": "链接归档需要下载连接池"
+  },
+  "errors.message.source_must_be_a_main_chat_or_post": {
+    "other": "来源必须为聊天或主帖"
+  },
+  "errors.message.max_key_posts_must_not_be_negative": {
+    "other": "max_posts 不能为负数"
+  },
+  "errors.message.tag_key_match_must_be_any_or_all": {
+    "other": "tag_match 必须为 any 或 all"
+  },
+  "errors.message.post_value_comments_value": {
+    "other": "帖子 {{.Arg1}} 的评论：{{.Arg2}}"
+  },
+  "errors.message.max_key_posts_truncated_the_incremental_archive_window_keeping_last_key_ts": {
+    "other": "max_posts 截断了增量归档窗口；保留 last_ts"
+  },
+  "errors.message.clean_up_bot_messages_value": {
+    "other": "清理机器人消息：{{.Arg1}}"
+  },
+  "errors.message.all_resource_files_excluded_by_extension_filters": {
+    "other": "所有资源文件都被扩展名过滤器排除了"
+  },
+  "errors.message.message_value_has_unsupported_service_action_value": {
+    "other": "消息 {{.Arg1}} 包含不支持的服务操作 {{.Arg2}}"
+  },
+  "errors.message.unexpected_linked_message_type_value": {
+    "other": "链接消息类型异常：{{.Arg1}}"
+  },
+  "errors.message.linked_message_value_peer_mismatch_requested_value_received_value": {
+    "other": "链接消息 {{.Arg1}} 的聊天对象不匹配：请求 {{.Arg2}}，返回 {{.Arg3}}"
+  },
+  "errors.message.topic_creation_message_value_conflicts_with_linked_forum_topic_value": {
+    "other": "话题创建消息 {{.Arg1}} 与链接话题 {{.Arg2}} 冲突"
+  },
+  "errors.message.linked_topic_value_requires_a_forum_channel": {
+    "other": "链接话题 {{.Arg1}} 需要论坛频道"
+  },
+  "errors.message.verify_linked_forum_topic_value_value": {
+    "other": "验证链接话题 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.message.linked_service_message_value_is_not_a_confirmed_accessible_forum_topic": {
+    "other": "链接服务消息 {{.Arg1}} 不是已确认可访问的话题"
+  },
+  "errors.message.max_key_topic_key_messages_must_be_between_1_and_100000": {
+    "other": "max_topic_messages 必须在 1 到 100000 之间"
+  },
+  "errors.message.read_linked_forum_topic_value_value": {
+    "other": "读取链接话题 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.message.unexpected_linked_topic_result_value": {
+    "other": "链接话题结果类型异常：{{.Arg1}}"
+  },
+  "errors.message.linked_topic_value_returned_invalid_message_id_value": {
+    "other": "链接话题 {{.Arg1}} 返回了无效消息 ID {{.Arg2}}"
+  },
+  "errors.message.linked_forum_topic_value_exceeds_max_key_topic_key_messages_value": {
+    "other": "链接话题 {{.Arg1}} 超过 max_topic_messages（{{.Arg2}}）"
+  },
+  "errors.message.linked_forum_topic_value_pagination_did_not_advance": {
+    "other": "链接话题 {{.Arg1}} 的分页未向前推进"
+  },
+  "errors.message.resource_rerequest_key_limit_exhausted": {
+    "other": "资源 rerequest_limit 重试次数已耗尽"
+  },
+  "errors.message.resource_set_changed_after_reissuing_the_chain_rerun_to_archive_the_new_set": {
+    "other": "重新请求链接链路后资源集合发生变化；请重新运行以归档新集合"
+  },
+  "errors.archive.refreshed_file_missing": {
+    "other": "重新请求的资源中没有包含该文件的新引用：{{.Arg1}}"
+  },
+  "errors.message.source_message_no_longer_contains_media": {
+    "other": "源消息已不包含媒体"
+  },
+  "errors.message.marshal_json_value": {
+    "other": "编码 JSON：{{.Arg1}}"
+  },
+  "errors.message.unknown_output_value": {
+    "other": "未知输出类型：{{.Arg1}}"
+  },
+  "errors.context.get_forum_topics": {
+    "other": "获取论坛话题: {{.Reason}}"
+  },
+  "errors.message.max_posts_must_not_be_negative": {
+    "other": "max_posts 不能为负数"
+  },
+  "errors.message.tag_match_mode_must_be_any_or_all": {
+    "other": "标签匹配模式必须为 any 或 all"
+  },
+  "errors.message.resolve_chat_value_value": {
+    "other": "解析聊天 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.message.tag_archive_requires_a_download_pool": {
+    "other": "标签归档需要下载连接池"
+  },
+  "errors.message.tag_is_required": {
+    "other": "需要标签"
+  },
+  "errors.message.invalid_hashtag_value": {
+    "other": "标签 {{.Arg1}} 无效"
+  },
+  "errors.message.at_least_one_tag_is_required": {
+    "other": "至少需要一个标签"
+  },
+  "errors.message.multiple_existing_archives_for_message_value": {
+    "other": "消息 {{.Arg1}} 存在多个归档"
+  },
+  "errors.message.migrate_archive_value_value": {
+    "other": "迁移归档 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.archive.completion_owner_mismatch": {
+    "other": "私有归档的完成状态属于其他来源、账号或帖子；已保留以供恢复"
+  },
+  "errors.message.cannot_record_incomplete_archive_file_value": {
+    "other": "无法记录不完整的归档文件 {{.Arg1}}"
+  },
+  "errors.message.output_path_value_is_not_a_regular_file": {
+    "other": "输出路径 {{.Arg1}} 不是普通文件"
+  },
+  "errors.message.preserve_unverified_archive_file_value": {
+    "other": "保留未验证的归档文件：{{.Arg1}}"
+  },
+  "errors.message.topic_key_id_must_be_positive": {
+    "other": "topic_id 必须为正数"
+  },
+  "errors.message.tag_job_chat_key_url_does_not_support_value_use_a_chat_or_topic_link": {
+    "other": "标签任务的 chat_url 不支持 {{.Arg1}}；请使用聊天或话题链接"
+  },
+  "errors.message.topic_key_id_value_conflicts_with_chat_key_url_topic_value": {
+    "other": "topic_id（{{.Arg1}}）与 chat_url 的话题（{{.Arg2}}）冲突"
+  },
+  "errors.message.verify_forum_topic_value_value": {
+    "other": "验证话题 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.chat.topic_inaccessible": {
+    "other": "chat_url/topic_id 未指向可访问的话题（{{.Arg1}}）；请使用聊天首页链接扫描整个聊天"
+  },
+  "errors.message.discovered_media_value_is_unavailable": {
+    "other": "发现的媒体 {{.Arg1}} 不可用"
+  },
+  "errors.message.missing_domain_id": {
+    "other": "缺少聊天 ID"
+  },
+  "errors.message.invalid_type_of_chat_channels_groups_are_supported_only": {
+    "other": "聊天类型无效，仅支持频道和群组"
+  },
+  "errors.message.failed_to_output_value_value": {
+    "other": "输出 {{.Arg1}} 失败：{{.Arg2}}"
+  },
+  "errors.context.get_total_count": {
+    "other": "获取总数: {{.Reason}}"
+  },
+  "errors.context.marshal_user": {
+    "other": "编码用户: {{.Reason}}"
+  },
+  "errors.download.resume_version": {
+    "other": "不支持的下载恢复版本；旧版位置状态已保留以供恢复"
+  },
+  "errors.context.parse_template": {
+    "other": "解析模板: {{.Reason}}"
+  },
+  "errors.message.you_must_specify_at_least_one_message": {
+    "other": "必须至少指定一条消息"
+  },
+  "errors.context.resolve_from_input_peer": {
+    "other": "解析来源聊天: {{.Reason}}"
+  },
+  "errors.context.resolve_message": {
+    "other": "解析消息: {{.Reason}}"
+  },
+  "errors.context.execute_template": {
+    "other": "执行模板: {{.Reason}}"
+  },
+  "errors.context.resolve_output_path": {
+    "other": "解析输出路径: {{.Reason}}"
+  },
+  "errors.context.create_dir": {
+    "other": "创建目录: {{.Reason}}"
+  },
+  "errors.context.create_file": {
+    "other": "创建文件: {{.Reason}}"
+  },
+  "errors.context.resolve_grouped_message_value_value": {
+    "other": "解析相册消息 {{.Arg1}}/{{.Arg2}}: {{.Reason}}"
+  },
+  "errors.context.progress": {
+    "other": "更新进度: {{.Reason}}"
+  },
+  "errors.context.invalid_message_id": {
+    "other": "消息 ID 无效: {{.Reason}}"
+  },
+  "errors.context.resolve_peer": {
+    "other": "解析聊天: {{.Reason}}"
+  },
+  "errors.context.convitem": {
+    "other": "转换媒体项目: {{.Reason}}"
+  },
+  "errors.message.message_is_not_a_media": {
+    "other": "消息不包含媒体"
+  },
+  "errors.message.document_is_empty": {
+    "other": "文档为空"
+  },
+  "errors.message.list_extensions_failed": {
+    "other": "列出扩展失败"
+  },
+  "errors.context.list_extensions_with_metadata": {
+    "other": "列出扩展及元数据: {{.Reason}}"
+  },
+  "errors.message.no_extensions_installed": {
+    "other": "尚未安装扩展"
+  },
+  "errors.context.list_extensions": {
+    "other": "列出扩展: {{.Reason}}"
+  },
+  "errors.context.collect_dialogs": {
+    "other": "收集聊天: {{.Reason}}"
+  },
+  "errors.context.resolve_dest_peer": {
+    "other": "解析目标聊天: {{.Reason}}"
+  },
+  "errors.context.resolve_edit": {
+    "other": "解析编辑表达式: {{.Reason}}"
+  },
+  "errors.context.parse_from_url": {
+    "other": "解析源链接: {{.Reason}}"
+  },
+  "errors.context.parse_from_file": {
+    "other": "解析源文件: {{.Reason}}"
+  },
+  "errors.context.get_from_peer": {
+    "other": "获取来源聊天: {{.Reason}}"
+  },
+  "errors.context.get_message_value": {
+    "other": "获取消息：{{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.message_routing": {
+    "other": "消息路由: {{.Reason}}"
+  },
+  "errors.context.decode_dest_value": {
+    "other": "解码目标：{{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.message_router_must_return_string_or_dest_value": {
+    "other": "消息路由器必须返回字符串或 dest：{{.Arg1}}"
+  },
+  "errors.context.edit_message": {
+    "other": "编辑消息: {{.Reason}}"
+  },
+  "errors.message.edit_must_return_string_value": {
+    "other": "编辑表达式必须返回字符串：{{.Arg1}}"
+  },
+  "errors.context.parse_edited_message": {
+    "other": "解析编辑后的消息: {{.Reason}}"
+  },
+  "errors.context.resolve_dest_value": {
+    "other": "解析目标：{{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.open_kv": {
+    "other": "打开键值存储: {{.Reason}}"
+  },
+  "errors.context.set_app": {
+    "other": "设置应用: {{.Reason}}"
+  },
+  "errors.message.don_t_support_sign_up_telegram_account": {
+    "other": "不支持注册 Telegram 账号"
+  },
+  "errors.login.desktop_data_missing": {
+    "other": "在候选路径中找不到数据，请使用 -d 指定 Telegram Desktop 目录"
+  },
+  "errors.message.unsupported_login_type_value": {
+    "other": "不支持的登录类型：{{.Arg1}}"
+  },
+  "errors.context.create_client": {
+    "other": "创建客户端: {{.Reason}}"
+  },
+  "errors.context.create_qr": {
+    "other": "创建二维码: {{.Reason}}"
+  },
+  "errors.context.qr_auth": {
+    "other": "二维码授权: {{.Reason}}"
+  },
+  "errors.context.2fa_password": {
+    "other": "双重验证密码: {{.Reason}}"
+  },
+  "errors.context.2fa_auth": {
+    "other": "双重验证授权: {{.Reason}}"
+  },
+  "errors.context.get_self": {
+    "other": "获取当前账号: {{.Reason}}"
+  },
+  "errors.context.read_metadata": {
+    "other": "读取元数据: {{.Reason}}"
+  },
+  "errors.context.create_zstd_encoder": {
+    "other": "创建 Zstandard 编码器: {{.Reason}}"
+  },
+  "errors.context.marshal_metadata": {
+    "other": "编码元数据: {{.Reason}}"
+  },
+  "errors.context.write_metadata": {
+    "other": "写入元数据: {{.Reason}}"
+  },
+  "errors.context.confirm": {
+    "other": "确认: {{.Reason}}"
+  },
+  "errors.context.read_data": {
+    "other": "读取数据: {{.Reason}}"
+  },
+  "errors.context.create_dest_storage": {
+    "other": "创建目标存储: {{.Reason}}"
+  },
+  "errors.context.migrate_from": {
+    "other": "迁移来源: {{.Reason}}"
+  },
+  "errors.context.open_file": {
+    "other": "打开文件: {{.Reason}}"
+  },
+  "errors.context.create_zstd_decoder": {
+    "other": "创建 Zstandard 解码器: {{.Reason}}"
+  },
+  "errors.context.unmarshal_metadata": {
+    "other": "解码元数据: {{.Reason}}"
+  },
+  "errors.context.resolve_file": {
+    "other": "解析文件: {{.Reason}}"
+  },
+  "errors.context.resolve_destination": {
+    "other": "解析目标: {{.Reason}}"
+  },
+  "errors.context.resolve_caption": {
+    "other": "解析说明文本: {{.Reason}}"
+  },
+  "errors.context.resolve_thumbnail": {
+    "other": "解析缩略图: {{.Reason}}"
+  },
+  "errors.context.stat_file": {
+    "other": "读取文件信息: {{.Reason}}"
+  },
+  "errors.context.resolve_chat": {
+    "other": "解析聊天: {{.Reason}}"
+  },
+  "errors.context.parse_expression": {
+    "other": "解析表达式: {{.Reason}}"
+  },
+  "errors.context.parse_caption": {
+    "other": "解析说明文本: {{.Reason}}"
+  },
+  "errors.message.caption_must_return_string_got_value": {
+    "other": "说明文本必须返回字符串，实际为 {{.Arg1}}"
+  },
+  "errors.context.parse_caption_html": {
+    "other": "解析说明文本 HTML: {{.Reason}}"
+  },
+  "errors.context.detect_thumbnail_file_value": {
+    "other": "检测缩略图文件：{{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.invalid_thumbnail_file_value": {
+    "other": "缩略图文件无效：{{.Arg1}}"
+  },
+  "errors.context.open_thumbnail_file": {
+    "other": "打开缩略图文件: {{.Reason}}"
+  },
+  "errors.context.close_file": {
+    "other": "关闭文件: {{.Reason}}"
+  },
+  "errors.context.remove_file": {
+    "other": "移除文件: {{.Reason}}"
+  },
+  "errors.context.close_thumb": {
+    "other": "关闭缩略图: {{.Reason}}"
+  },
+  "errors.context.get_target_peer": {
+    "other": "获取目标聊天: {{.Reason}}"
+  },
+  "errors.context.get_caption": {
+    "other": "获取说明文本: {{.Reason}}"
+  },
+  "errors.context.get_executable_path": {
+    "other": "获取程序路径: {{.Reason}}"
+  },
+  "errors.context.resolve_executable_path": {
+    "other": "解析程序路径: {{.Reason}}"
+  },
+  "errors.context.fetch_release": {
+    "other": "获取版本: {{.Reason}}"
+  },
+  "errors.context.confirm_use_yes_to_skip_the_prompt": {
+    "other": "确认（可使用 --yes 跳过提示）: {{.Reason}}"
+  },
+  "errors.message.no_release_assets_for_platform_value_value_value": {
+    "other": "没有适用于平台 {{.Arg1}}/{{.Arg2}}/{{.Arg3}} 的版本资源"
+  },
+  "errors.context.create_temp_dir": {
+    "other": "创建临时目录: {{.Reason}}"
+  },
+  "errors.context.download_archive": {
+    "other": "下载压缩包: {{.Reason}}"
+  },
+  "errors.context.download_checksums": {
+    "other": "下载校验和: {{.Reason}}"
+  },
+  "errors.context.read_checksums": {
+    "other": "读取校验和: {{.Reason}}"
+  },
+  "errors.context.verify_checksum": {
+    "other": "验证校验和: {{.Reason}}"
+  },
+  "errors.context.extract_binary": {
+    "other": "提取程序: {{.Reason}}"
+  },
+  "errors.context.replace_binary": {
+    "other": "替换程序: {{.Reason}}"
+  },
+  "errors.message.invalid_target_version_value_value": {
+    "other": "目标版本 {{.Arg1}} 无效：{{.Arg2}}"
+  },
+  "errors.context.github_api": {
+    "other": "GitHub API: {{.Reason}}"
+  },
+  "errors.message.release_not_found": {
+    "other": "找不到版本"
+  },
+  "errors.message.asset_value_not_found_in_release_value": {
+    "other": "版本 {{.Arg2}} 中找不到资源 {{.Arg1}}"
+  },
+  "errors.context.create_request": {
+    "other": "创建请求: {{.Reason}}"
+  },
+  "errors.context.do_request": {
+    "other": "执行请求: {{.Reason}}"
+  },
+  "errors.message.unexpected_status_code_value": {
+    "other": "HTTP 状态码异常：{{.Arg1}}"
+  },
+  "errors.context.save_file": {
+    "other": "保存文件: {{.Reason}}"
+  },
+  "errors.message.checksum_for_value_not_found": {
+    "other": "找不到 {{.Arg1}} 的校验和"
+  },
+  "errors.context.hash_file": {
+    "other": "计算文件哈希: {{.Reason}}"
+  },
+  "errors.message.checksum_mismatch_expected_value_got_value": {
+    "other": "校验和不匹配：预期 {{.Arg1}}，实际 {{.Arg2}}"
+  },
+  "errors.message.unsupported_archive_format_value": {
+    "other": "不支持的压缩格式：{{.Arg1}}"
+  },
+  "errors.context.chmod_binary": {
+    "other": "设置程序权限: {{.Reason}}"
+  },
+  "errors.context.open_archive": {
+    "other": "打开压缩包: {{.Reason}}"
+  },
+  "errors.context.gzip_reader": {
+    "other": "读取 Gzip: {{.Reason}}"
+  },
+  "errors.message.value_not_found_in_archive": {
+    "other": "压缩包中找不到 {{.Arg1}}"
+  },
+  "errors.context.tar_next": {
+    "other": "读取下一条 TAR 项目: {{.Reason}}"
+  },
+  "errors.context.create_output_file": {
+    "other": "创建输出文件: {{.Reason}}"
+  },
+  "errors.context.copy_binary": {
+    "other": "复制程序: {{.Reason}}"
+  },
+  "errors.context.zip_open_reader": {
+    "other": "打开 ZIP 读取器: {{.Reason}}"
+  },
+  "errors.context.open_zip_entry": {
+    "other": "打开 ZIP 项目: {{.Reason}}"
+  },
+  "errors.context.close_output_file": {
+    "other": "关闭输出文件: {{.Reason}}"
+  },
+  "errors.update.stage_permission": {
+    "other": "在 {{.Arg1}} 暂存新程序时权限不足（请检查目录归属，或使用包管理器）: {{.Reason}}"
+  },
+  "errors.context.stage_new_binary": {
+    "other": "暂存新程序: {{.Reason}}"
+  },
+  "errors.context.backup_old_binary": {
+    "other": "备份旧程序: {{.Reason}}"
+  },
+  "errors.context.open_source": {
+    "other": "打开来源: {{.Reason}}"
+  },
+  "errors.context.create_destination": {
+    "other": "创建目标: {{.Reason}}"
+  },
+  "errors.context.copy_content": {
+    "other": "复制内容: {{.Reason}}"
+  },
+  "errors.context.sync_destination": {
+    "other": "同步目标: {{.Reason}}"
+  },
+  "errors.message.value_value": {
+    "other": "{{.Arg1}}；{{.Arg2}}"
+  },
+  "errors.message.value_must_not_be_negative": {
+    "other": "--{{.Arg1}} 不能为负数"
+  },
+  "errors.message.overlap_seconds_must_not_be_less_than_1": {
+    "other": "--overlap-seconds 不能小于 -1"
+  },
+  "errors.message.input_data_should_be_2_integers_when_export_type_is_value": {
+    "other": "导出类型为 {{.Arg1}} 时，输入应为两个整数"
+  },
+  "errors.message.input_data_should_be_1_integer_when_export_type_is_value": {
+    "other": "导出类型为 {{.Arg1}} 时，输入应为一个整数"
+  },
+  "errors.message.unknown_export_type_value": {
+    "other": "未知导出类型：{{.Arg1}}"
+  },
+  "errors.message.no_urls_or_files_provided": {
+    "other": "未提供链接或文件"
+  },
+  "errors.context.build_telegram_options": {
+    "other": "创建 Telegram 选项: {{.Reason}}"
+  },
+  "errors.context.get_app": {
+    "other": "获取应用: {{.Reason}}"
+  },
+  "errors.context.load_session": {
+    "other": "加载会话: {{.Reason}}"
+  },
+  "errors.context.create_extension_data_dir": {
+    "other": "创建扩展数据目录: {{.Reason}}"
+  },
+  "errors.message.failed_to_run_extension_value": {
+    "other": "运行扩展失败：{{.Arg1}}"
+  },
+  "errors.context.mkdir": {
+    "other": "创建目录: {{.Reason}}"
+  },
+  "errors.context.gendoc": {
+    "other": "生成文档: {{.Reason}}"
+  },
+  "errors.context.migrate_legacy_to_bolt": {
+    "other": "迁移旧存储到 Bolt: {{.Reason}}"
+  },
+  "errors.context.create_kv_storage": {
+    "other": "创建键值存储: {{.Reason}}"
+  },
+  "errors.context.open_kv_storage": {
+    "other": "打开键值存储: {{.Reason}}"
+  },
+  "errors.context.create_legacy_kv_storage": {
+    "other": "创建旧版键值存储: {{.Reason}}"
+  },
+  "errors.context.create_bolt_kv_storage": {
+    "other": "创建 Bolt 键值存储: {{.Reason}}"
+  },
+  "errors.message.error_flags_chat_should_be_set_when_topic_is_set": {
+    "other": "设置 --topic 时必须同时设置 --chat"
+  },
+  "errors.message.conflicting_flags_chat_and_to_cannot_be_set_at_the_same_time": {
+    "other": "参数冲突：不能同时设置 --chat 和 --to"
+  },
+  "errors.context.read_config": {
+    "other": "读取配置: {{.Reason}}"
+  },
+  "errors.context.parse_config": {
+    "other": "解析配置: {{.Reason}}"
+  },
+  "errors.message.multiple_yaml_documents_are_not_supported": {
+    "other": "不支持多个 YAML 文档"
+  },
+  "errors.message.config_has_no_jobs": {
+    "other": "配置中没有任务"
+  },
+  "errors.message.value_must_be_positive": {
+    "other": "{{.Arg1}} 必须为正数"
+  },
+  "errors.message.pool_must_not_be_negative": {
+    "other": "pool 不能为负数"
+  },
+  "errors.message.overlap_key_seconds_must_not_be_negative": {
+    "other": "overlap_seconds 不能为负数"
+  },
+  "errors.message.chat_key_url_is_required": {
+    "other": "必须设置 chat_url"
+  },
+  "errors.message.comment_must_be_a_boolean_or_integer": {
+    "other": "comment 必须为布尔值或整数"
+  },
+  "errors.message.comment_must_be_a_boolean_or_positive_integer": {
+    "other": "comment 必须为布尔值或正整数"
+  },
+  "errors.message.topic_key_id_and_reply_key_post_key_id_cannot_be_combined": {
+    "other": "不能同时设置 topic_id 和 reply_post_id"
+  },
+  "errors.message.subdir_value_must_stay_inside_download_key_base": {
+    "other": "subdir {{.Arg1}} 必须位于 download_base 内"
+  },
+  "errors.message.start_key_comment_must_be_positive": {
+    "other": "start_comment 必须为正数"
+  },
+  "errors.message.end_key_comment_must_be_positive": {
+    "other": "end_comment 必须为正数"
+  },
+  "errors.batch.link_source_selector": {
+    "other": "follow_links 来源必须为聊天或主帖；不支持评论或话题选择器"
+  },
+  "errors.message.follow_key_links_cannot_combine_a_post_url_and_a_range": {
+    "other": "follow_links 不能同时使用帖子链接和范围"
+  },
+  "errors.message.tag_must_not_be_blank": {
+    "other": "tag 不能为空白"
+  },
+  "errors.message.tags_must_not_contain_blanks": {
+    "other": "tags 不能包含空白标签"
+  },
+  "errors.message.tag_job_cannot_select_comment_mode_or_reply_key_post_key_id": {
+    "other": "标签任务不能选择评论模式或 reply_post_id"
+  },
+  "errors.message.tag_or_tags_is_required": {
+    "other": "必须设置 tag 或 tags"
+  },
+  "errors.batch.selector_requires_incremental": {
+    "other": "消息任务的 topic_id 和 reply_post_id 需要增量模式"
+  },
+  "errors.batch.range_required": {
+    "other": "未启用增量模式时，必须设置 start_comment 和 end_comment"
+  },
+  "errors.message.message_range_exceeds_the_safety_limit_of_value": {
+    "other": "消息范围超过安全上限 {{.Arg1}}"
+  },
+  "errors.message.archive_ranges_require_both_start_key_comment_and_end_key_comment": {
+    "other": "归档范围必须同时设置 start_comment 和 end_comment"
+  },
+  "errors.message.bot_start_links_are_not_a_batch_message_source": {
+    "other": "机器人启动链接不能用作 batch 消息来源"
+  },
+  "errors.context.iterate": {
+    "other": "迭代: {{.Reason}}"
+  },
+  "errors.message.load_configuration_comment_translations_value": {
+    "other": "加载配置注释翻译：{{.Arg1}}"
+  },
+  "errors.message.config_path_must_not_be_empty": {
+    "other": "配置路径不能为空"
+  },
+  "errors.message.create_config_directory_value": {
+    "other": "创建配置目录：{{.Arg1}}"
+  },
+  "errors.config.exists": {
+    "other": "配置 {{.Arg1}} 已存在；请选择其他 --config 路径，或使用 --force 覆盖"
+  },
+  "errors.message.create_config_value_value": {
+    "other": "创建配置 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.message.write_config_value_value": {
+    "other": "写入配置 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.message.close_config_value_value": {
+    "other": "关闭配置 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.message.create_temporary_config_value": {
+    "other": "创建临时配置：{{.Arg1}}"
+  },
+  "errors.message.replace_config_value_value": {
+    "other": "替换配置 {{.Arg1}}：{{.Arg2}}"
+  },
+  "errors.message.empty_translation_id_in_example_config": {
+    "other": "示例配置中的翻译 ID 为空"
+  },
+  "errors.message.missing_translation_value_for_example_config": {
+    "other": "缺少示例配置翻译 {{.Arg1}}"
+  },
+  "errors.message.unsupported_config_language_value_use_auto_zh_or_en": {
+    "other": "不支持的配置语言 {{.Arg1}}；请使用 auto、zh 或 en"
+  },
+  "errors.message.invalid_mode_value": {
+    "other": "模式 {{.Arg1}} 无效"
+  },
+  "errors.context.compile_export_key_filter_value": {
+    "other": "编译 export_filter {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.batch.incremental_scan_limit": {
+    "other": "增量扫描超过 {{.Arg1}} 条消息；保留 last_ts，避免丢失较早的消息"
+  },
+  "errors.context.run_export_key_filter": {
+    "other": "执行导出过滤器: {{.Reason}}"
+  },
+  "errors.context.resolve_topic_root": {
+    "other": "解析话题根消息: {{.Reason}}"
+  },
+  "errors.context.iterate_history": {
+    "other": "遍历历史消息: {{.Reason}}"
+  },
+  "errors.message.value_message_s_still_missing_keeping_last_key_ts": {
+    "other": "仍有 {{.Arg1}} 条消息缺失；保留 last_ts"
+  },
+  "errors.context.save_state": {
+    "other": "保存状态: {{.Reason}}"
+  },
+  "errors.context.resolve_messages": {
+    "other": "解析消息: {{.Reason}}"
+  },
+  "errors.context.resolve_topic_key_id_value": {
+    "other": "解析 topic_id {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.create_download_dir_value": {
+    "other": "创建下载目录 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.performance_overrides_and_delay_must_not_be_negative": {
+    "other": "性能参数覆盖值和延迟不能为负数"
+  },
+  "errors.message.overlap_key_seconds_override_must_not_be_negative": {
+    "other": "overlap_seconds 覆盖值不能为负数"
+  },
+  "errors.message.include_and_exclude_cannot_be_combined": {
+    "other": "不能同时设置 include 和 exclude"
+  },
+  "errors.context.export_key_filter": {
+    "other": "导出过滤器: {{.Reason}}"
+  },
+  "errors.batch.state_path_conflict": {
+    "other": "状态文件 {{.Arg1}} 也被任务 {{.Arg2}} 使用；请为每个任务设置独立的子目录或状态路径"
+  },
+  "errors.context.template": {
+    "other": "模板: {{.Reason}}"
+  },
+  "errors.message.template_output_value_conflicts_with_job_value": {
+    "other": "模板输出 {{.Arg1}} 与任务 {{.Arg2}} 冲突"
+  },
+  "errors.message.template_produces_the_same_output_path_for_multiple_messages": {
+    "other": "模板为多条消息生成了相同的输出路径"
+  },
+  "errors.message.nil_prepared_batch_run": {
+    "other": "已准备的 batch 运行对象为空"
+  },
+  "errors.context.resolve_authorized_batch_account": {
+    "other": "解析已授权的 batch 账号: {{.Reason}}"
+  },
+  "errors.context.job_value_value": {
+    "other": "任务 {{.Arg1}}（{{.Arg2}}）: {{.Reason}}"
+  },
+  "errors.context.job_value_state_ownership": {
+    "other": "任务 {{.Arg1}} 的状态归属: {{.Reason}}"
+  },
+  "errors.context.resolve_chat_value": {
+    "other": "解析聊天 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.chat_value_has_no_comment_section": {
+    "other": "聊天 {{.Arg1}} 没有评论区"
+  },
+  "errors.context.get_channel_full": {
+    "other": "获取频道完整信息: {{.Reason}}"
+  },
+  "errors.message.chat_value_has_no_linked_discussion_group": {
+    "other": "聊天 {{.Arg1}} 没有关联的讨论组"
+  },
+  "errors.context.resolve_discussion_group": {
+    "other": "解析讨论组: {{.Reason}}"
+  },
+  "errors.context.resolve_chat_override_value": {
+    "other": "解析 chat 覆盖值 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.batch.source_mismatch": {
+    "other": "chat 覆盖值 {{.Arg1}} 指向 {{.Arg2}}，而 chat_url/评论模式选择了 {{.Arg3}}；扫描和下载来源必须一致"
+  },
+  "errors.context.read_state_value": {
+    "other": "读取状态 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.parse_state_value": {
+    "other": "解析状态 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.batch.state_scope_mismatch": {
+    "other": "状态 {{.Arg1}} 属于 {{.Arg2}}，而非 {{.Arg3}}；已保留原状：请使用新的状态文件或子目录重新扫描，或在明确重置前先备份"
+  },
+  "errors.batch.legacy_state_scope_missing": {
+    "other": "旧状态 {{.Arg1}} 无法验证来源；已保留原状：请使用新的状态文件或子目录重新扫描，或在明确重置前先备份"
+  },
+  "errors.context.marshal_state": {
+    "other": "编码状态: {{.Reason}}"
+  },
+  "errors.context.create_state_dir_value": {
+    "other": "创建状态目录 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.write_state_value": {
+    "other": "写入状态 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.stat_committed_media": {
+    "other": "读取已完成媒体的信息: {{.Reason}}"
+  },
+  "errors.message.committed_media_value_has_size_value_expected_value": {
+    "other": "已完成的媒体 {{.Arg1}} 大小为 {{.Arg2}}，预期为 {{.Arg3}}"
+  },
+  "errors.message.too_many_ntp_hosts": {
+    "other": "NTP 主机数量过多"
+  },
+  "errors.context.read_manifest_file_value": {
+    "other": "读取清单文件 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.unmarshal_manifest_file_value": {
+    "other": "解码清单文件 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.already_up_to_date": {
+    "other": "已经是最新版本"
+  },
+  "errors.message.only_github_extension_can_be_upgraded_by_tdl": {
+    "other": "tdl 只能升级来自 GitHub 的扩展"
+  },
+  "errors.context.create_temp": {
+    "other": "创建临时文件: {{.Reason}}"
+  },
+  "errors.context.marshal_env": {
+    "other": "编码环境: {{.Reason}}"
+  },
+  "errors.context.write_env_to_temp": {
+    "other": "写入临时环境文件: {{.Reason}}"
+  },
+  "errors.context.close_env_file": {
+    "other": "关闭环境文件: {{.Reason}}"
+  },
+  "errors.context.read_dir_entries": {
+    "other": "读取目录内容: {{.Reason}}"
+  },
+  "errors.context.load_manifest_of_value": {
+    "other": "加载 {{.Arg1}} 的清单: {{.Reason}}"
+  },
+  "errors.context.remove_old_version_extension": {
+    "other": "移除旧版扩展: {{.Reason}}"
+  },
+  "errors.context.install_github_extension_value": {
+    "other": "安装 GitHub 扩展 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.invalid_target_value": {
+    "other": "目标无效：{{.Arg1}}"
+  },
+  "errors.context.source_extension_stat": {
+    "other": "读取扩展源文件信息: {{.Reason}}"
+  },
+  "errors.message.invalid_src_extension_value_only_regular_file_is_allowed": {
+    "other": "扩展源文件无效：{{.Arg1}}，只允许普通文件"
+  },
+  "errors.context.create_target_dir_value_for_extension_value": {
+    "other": "创建目标目录 {{.Arg1}}，用于扩展 {{.Arg2}}: {{.Reason}}"
+  },
+  "errors.context.install_local_extension_value": {
+    "other": "安装本地扩展：{{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.invalid_repo_name_value_should_start_with_value": {
+    "other": "仓库名称无效：{{.Arg1}}，必须以 {{.Arg2}} 开头"
+  },
+  "errors.context.get_latest_release_of_value_value": {
+    "other": "获取 {{.Arg1}}/{{.Arg2}} 的最新版本: {{.Reason}}"
+  },
+  "errors.message.no_matched_binary_value_found_in_the_release_value": {
+    "other": "版本（{{.Arg2}}）中没有匹配的可执行文件（{{.Arg1}}）"
+  },
+  "errors.context.create_target_dir_value_for_extension_value_value": {
+    "other": "创建目标目录 {{.Arg1}}，用于扩展 {{.Arg2}}/{{.Arg3}}: {{.Reason}}"
+  },
+  "errors.context.download_github_asset_value": {
+    "other": "下载 GitHub 资源 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.marshal_manifest": {
+    "other": "编码清单: {{.Reason}}"
+  },
+  "errors.context.write_manifest_to_value": {
+    "other": "写入清单到 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.extension_already_exists_please_remove_it_first": {
+    "other": "扩展已存在，请先移除"
+  },
+  "errors.context.remove_existing_extension_value": {
+    "other": "移除现有扩展 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.message.no_extension_found_value": {
+    "other": "找不到扩展：{{.Arg1}}"
+  },
+  "errors.context.download_release_asset_value": {
+    "other": "下载版本资源 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.open_file_value": {
+    "other": "打开文件 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.copy_http_body_to_value": {
+    "other": "保存 HTTP 响应到 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.open_src_value": {
+    "other": "打开来源 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.stat_file_value": {
+    "other": "获取文件 {{.Arg1}} 的信息: {{.Reason}}"
+  },
+  "errors.message.invalid_source_file_value_only_regular_file_is_allowed": {
+    "other": "源文件无效：{{.Arg1}}，只允许普通文件"
+  },
+  "errors.context.open_dst_value": {
+    "other": "打开目标 {{.Arg1}}: {{.Reason}}"
+  },
+  "errors.context.copy_file_value_to_value": {
+    "other": "复制文件 {{.Arg1}} 到 {{.Arg2}}: {{.Reason}}"
+  },
+  "errors.context.decode_options": {
+    "other": "解码选项: {{.Reason}}"
+  },
+  "errors.context.validate_options": {
+    "other": "校验选项: {{.Reason}}"
+  },
+  "errors.context.open": {
+    "other": "打开: {{.Reason}}"
+  },
+  "errors.context.walk": {
+    "other": "遍历: {{.Reason}}"
+  },
+  "errors.context.create_bucket": {
+    "other": "创建存储桶: {{.Reason}}"
+  },
+  "errors.context.put": {
+    "other": "写入: {{.Reason}}"
+  },
+  "errors.context.update": {
+    "other": "更新: {{.Reason}}"
+  },
+  "errors.message.namespace_is_required": {
+    "other": "需要账号命名空间"
+  },
+  "errors.context.open_db": {
+    "other": "打开数据库: {{.Reason}}"
+  },
+  "errors.context.create_file_directory": {
+    "other": "创建文件目录: {{.Reason}}"
+  },
+  "errors.context.read": {
+    "other": "读取: {{.Reason}}"
+  },
+  "errors.context.open_namespace": {
+    "other": "打开账号命名空间: {{.Reason}}"
+  },
+  "errors.message.unsupported_driver_value": {
+    "other": "不支持的驱动：{{.Arg1}}"
+  },
+  "errors.context.parse_driver": {
+    "other": "解析驱动: {{.Reason}}"
+  },
+  "errors.context.iterate_buckets": {
+    "other": "遍历存储桶: {{.Reason}}"
+  },
+  "errors.context.iterate_namespaces": {
+    "other": "遍历账号命名空间: {{.Reason}}"
+  },
+  "errors.message.can_t_find_app_value_please_try_re_login": {
+    "other": "找不到应用：{{.Arg1}}，请重新登录"
+  },
+  "errors.message.please_input_a_struct": {
+    "other": "请输入结构体"
+  },
+  "errors.message.can_t_get_chat_type_or_chat_id": {
+    "other": "无法获取聊天类型或 ID"
+  },
+  "errors.message.valid_values_are_value": {
+    "other": "有效值为 {{.Arg1}}"
+  }
+}

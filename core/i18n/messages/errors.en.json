@@ -1,0 +1,116 @@
+{
+  "errors.config.invalid": {
+    "other": "invalid batch configuration"
+  },
+  "errors.config.invalid_path": {
+    "other": "config \"{{.Path}}\" is invalid"
+  },
+  "errors.config.job": {
+    "other": "Job: {{.Job}}"
+  },
+  "errors.config.chat": {
+    "other": "Chat: {{.Chat}}"
+  },
+  "errors.config.reason": {
+    "other": "Reason"
+  },
+  "errors.config.invalid_range": {
+    "other": "Invalid message range: start ID {{.Start}} must be less than end ID {{.End}}."
+  },
+  "errors.batch.jobs_failed": {
+    "other": "{{.Count}} batch job(s) failed."
+  },
+  "errors.batch.messages_missing": {
+    "other": "{{.Count}} message(s) are still missing."
+  },
+  "errors.batch.invalid_timestamp_window": {
+    "other": "Invalid archive timestamp window: start {{.Start}} must not exceed end {{.End}}."
+  },
+  "errors.cli.invalid_language": {
+    "other": "Unsupported language {{.Language}}; use auto, zh or en."
+  },
+  "errors.storage.in_use": {
+    "other": "Current database is used by another process, please terminate it first."
+  },
+  "errors.interrupted": {
+    "other": "Interrupted."
+  },
+  "errors.os.not_found": {
+    "other": "File or path not found: {{.Reason}}"
+  },
+  "errors.os.permission": {
+    "other": "Permission denied: {{.Reason}}"
+  },
+  "errors.os.exists": {
+    "other": "File or path already exists: {{.Reason}}"
+  },
+  "errors.telegram.flood_wait": {
+    "other": "Telegram rate limit reached; retry after {{.Seconds}} seconds."
+  },
+  "errors.telegram.private_channel": {
+    "other": "This Telegram channel or chat is private or unavailable to this account."
+  },
+  "errors.telegram.admin_required": {
+    "other": "This Telegram action requires additional chat permissions."
+  },
+  "errors.telegram.username_invalid": {
+    "other": "The Telegram username or bot is invalid or unavailable."
+  },
+  "errors.telegram.session_expired": {
+    "other": "The Telegram session is no longer valid; log in again."
+  },
+  "errors.cli.language_required": {
+    "other": "--language requires a value."
+  },
+  "errors.cli.invalid_flags": {
+    "other": "Invalid command-line arguments: {{.Reason}}"
+  },
+  "errors.cli.invalid_flags_generic": {
+    "other": "Invalid command-line flags."
+  },
+  "errors.cli.invalid_arguments": {
+    "other": "Invalid command arguments: {{.Reason}}"
+  },
+  "errors.cli.invalid_arguments_generic": {
+    "other": "Invalid command arguments."
+  },
+  "console.error.prefix": {
+    "other": "Error: "
+  },
+  "console.error.debug_details": {
+    "other": "Debug details:"
+  },
+  "errors.cli.unknown_flag": {
+    "other": "Unknown flag: {{.Flag}}"
+  },
+  "errors.cli.value_required": {
+    "other": "Flag {{.Flag}} requires a value."
+  },
+  "errors.cli.invalid_value": {
+    "other": "Invalid value \"{{.Value}}\" for {{.Flag}} (expected {{.Type}})."
+  },
+  "errors.cli.invalid_syntax": {
+    "other": "Invalid flag syntax: {{.Flag}}"
+  },
+  "errors.cli.no_arguments": {
+    "other": "Command {{.Command}} accepts no arguments (received: {{.Arguments}})."
+  },
+  "errors.cli.required_flags": {
+    "other": "Required flags are missing: {{.Flags}}."
+  },
+  "errors.cli.exclusive_flags": {
+    "other": "Flags cannot be combined: {{.Flags}}."
+  },
+  "errors.cli.minimum_arguments": {
+    "other": "Command {{.Command}} requires at least {{.Minimum}} argument(s), received {{.Actual}}."
+  },
+  "errors.context.canceled": {
+    "other": "context canceled"
+  },
+  "errors.context.deadline": {
+    "other": "context deadline exceeded"
+  },
+  "errors.cli.unknown_command": {
+    "other": "Unknown command \"{{.Argument}}\" for \"{{.Command}}\".{{if .Suggestions}} Did you mean: {{.Suggestions}}?{{end}}"
+  }
+}

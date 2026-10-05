@@ -18,9 +18,13 @@ import (
 	"github.com/jedib0t/go-pretty/v6/progress"
 	"go.uber.org/multierr"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/storage"
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/tutil"
+	"github.com/iyear/tdl/pkg/console"
+	uimessages "github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/prog"
 	"github.com/iyear/tdl/pkg/texpr"
 )
@@ -60,16 +64,16 @@ func Export(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts E
 
 		fields, err := fg.Walk(&texpr.EnvMessage{})
 		if err != nil {
-			return fmt.Errorf("failed to walk fields: %w", err)
+			return diagnostic.Describe(fmt.Errorf("failed to walk fields: %w", err), corei18n.Message{ID: "errors.message.failed_to_walk_fields_value", Args: map[string]any{"Arg1": err}})
 		}
 
-		fmt.Print(fg.Sprint(fields, true))
+		fmt.Print(fg.SprintContext(ctx, fields, true))
 		return nil
 	}
 
 	filter, err := expr.Compile(opts.Filter, expr.AsBool())
 	if err != nil {
-		return fmt.Errorf("failed to compile filter: %w", err)
+		return diagnostic.Describe(fmt.Errorf("failed to compile filter: %w", err), corei18n.Message{ID: "errors.message.failed_to_compile_filter_value", Args: map[string]any{"Arg1": err}})
 	}
 
 	var peer peers.Peer
@@ -81,16 +85,16 @@ func Export(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts E
 		peer, err = tutil.GetInputPeer(ctx, manager, opts.Chat)
 	}
 	if err != nil {
-		return fmt.Errorf("failed to get peer: %w", err)
+		return diagnostic.Describe(fmt.Errorf("failed to get peer: %w", err), corei18n.Message{ID: "errors.message.failed_to_get_peer_value", Args: map[string]any{"Arg1": err}})
 	}
 
-	color.Yellow("WARN: Export only generates minimal JSON for tdl download, not for backup.")
-	color.Cyan("Occasional suspensions are due to Telegram rate limitations, please wait a moment.")
+	color.Yellow("%s", console.Translate(ctx, uimessages.ChatExportWarning()))
+	color.Cyan("%s", console.Translate(ctx, uimessages.ChatRateLimitNote()))
 	fmt.Println()
 
-	color.Blue("Type: %s | Input: %v", opts.Type, opts.Input)
+	color.Blue("%s", console.Translate(ctx, uimessages.ChatExportMode(opts.Type.String(), fmt.Sprint(opts.Input))))
 
-	pw := prog.New(progress.FormatNumber)
+	pw := prog.NewContext(ctx, progress.FormatNumber)
 	pw.SetUpdateFrequency(200 * time.Millisecond)
 	pw.Style().Visibility.TrackerOverall = false
 	pw.Style().Visibility.ETA = false
@@ -134,11 +138,11 @@ func Export(ctx context.Context, c *telegram.Client, kvd storage.Storage, opts E
 		bc, _ := p.ToBroadcast()
 		raw, err := bc.FullRaw(ctx)
 		if err != nil {
-			return fmt.Errorf("failed to get broadcast full raw: %w", err)
+			return diagnostic.Describe(fmt.Errorf("failed to get broadcast full raw: %w", err), corei18n.Message{ID: "errors.message.failed_to_get_broadcast_full_raw_value", Args: map[string]any{"Arg1": err}})
 		}
 
 		if id, ok = raw.GetLinkedChatID(); !ok {
-			return fmt.Errorf("no linked group")
+			return diagnostic.Describe(fmt.Errorf("no linked group"), corei18n.Message{ID: "errors.message.no_linked_group"})
 		}
 	}
 
@@ -182,7 +186,7 @@ loop:
 
 		b, err := texpr.Run(filter, texpr.ConvertEnvMessage(m))
 		if err != nil {
-			return fmt.Errorf("failed to run filter: %w", err)
+			return diagnostic.Describe(fmt.Errorf("failed to run filter: %w", err), corei18n.Message{ID: "errors.message.failed_to_run_filter_value", Args: map[string]any{"Arg1": err}})
 		}
 		if !b.(bool) { // filtered
 			continue
@@ -207,7 +211,7 @@ loop:
 
 		mb, err := json.Marshal(t)
 		if err != nil {
-			return fmt.Errorf("failed to marshal message: %w", err)
+			return diagnostic.Describe(fmt.Errorf("failed to marshal message: %w", err), corei18n.Message{ID: "errors.message.failed_to_marshal_message_value", Args: map[string]any{"Arg1": err}})
 		}
 		enc.Raw(mb)
 

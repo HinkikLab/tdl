@@ -8,6 +8,8 @@ import (
 	"github.com/gotd/td/telegram/query/messages"
 	"github.com/gotd/td/tg"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/util/tgref"
 )
 
@@ -23,7 +25,7 @@ type TagTarget struct {
 func ParseTagTarget(raw string, topicID int) (TagTarget, error) {
 	var target TagTarget
 	if topicID < 0 {
-		return target, fmt.Errorf("topic_id must be positive")
+		return target, diagnostic.Describe(fmt.Errorf("topic_id must be positive"), corei18n.Message{ID: "errors.message.topic_key_id_must_be_positive"})
 	}
 	ref, err := tgref.Parse(raw, tgref.Options{AllowBare: true})
 	if err != nil {
@@ -31,7 +33,7 @@ func ParseTagTarget(raw string, topicID int) (TagTarget, error) {
 	}
 	for key := range ref.Query {
 		if key != "thread" {
-			return target, fmt.Errorf("tag job chat_url does not support %q; use a chat or topic link", key)
+			return target, diagnostic.Describe(fmt.Errorf("tag job chat_url does not support %q; use a chat or topic link", key), corei18n.Message{ID: "errors.message.tag_job_chat_key_url_does_not_support_value_use_a_chat_or_topic_link", Args: map[string]any{"Arg1": fmt.Sprintf("%q", key)}})
 		}
 	}
 	target.Chat, target.TopicID = ref.Chat, ref.TopicID
@@ -40,7 +42,7 @@ func ParseTagTarget(raw string, topicID int) (TagTarget, error) {
 	}
 	if topicID > 0 {
 		if target.TopicID != 0 && target.TopicID != topicID {
-			return target, fmt.Errorf("topic_id (%d) conflicts with chat_url topic (%d)", topicID, target.TopicID)
+			return target, diagnostic.Describe(fmt.Errorf("topic_id (%d) conflicts with chat_url topic (%d)", topicID, target.TopicID), corei18n.Message{ID: "errors.message.topic_key_id_value_conflicts_with_chat_key_url_topic_value", Args: map[string]any{"Arg1": topicID, "Arg2": target.TopicID}})
 		}
 		target.TopicID = topicID
 	}
@@ -65,12 +67,12 @@ func ResolveForumTopic(ctx context.Context, api *tg.Client, peer tg.InputPeerCla
 		Peer: peer, Topics: []int{topicID},
 	})
 	if err != nil {
-		return nil, fmt.Errorf("verify forum topic %d: %w", topicID, err)
+		return nil, diagnostic.Describe(fmt.Errorf("verify forum topic %d: %w", topicID, err), corei18n.Message{ID: "errors.message.verify_forum_topic_value_value", Args: map[string]any{"Arg1": topicID, "Arg2": err}})
 	}
 	for _, value := range topics.Topics {
 		if topic, ok := value.(*tg.ForumTopic); ok && topic.ID == topicID {
 			return topic, nil
 		}
 	}
-	return nil, fmt.Errorf("chat_url/topic_id does not identify an accessible forum topic (%d); use the chat home URL to scan the whole chat", topicID)
+	return nil, diagnostic.Describe(fmt.Errorf("chat_url/topic_id does not identify an accessible forum topic (%d); use the chat home URL to scan the whole chat", topicID), corei18n.Message{ID: "errors.chat.topic_inaccessible", Args: map[string]any{"Arg1": topicID}})
 }

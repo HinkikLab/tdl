@@ -11,7 +11,11 @@ import (
 	"github.com/spf13/cobra"
 	"github.com/spf13/cobra/doc"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/util/fsutil"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 func NewGen() *cobra.Command {
@@ -46,7 +50,7 @@ bookHidden: true
 
 			if !fsutil.PathExists(dir) {
 				if err := os.MkdirAll(dir, os.ModePerm); err != nil {
-					return errors.Wrap(err, "mkdir")
+					return diagnostic.Describe(errors.Wrap(err, "mkdir"), corei18n.Message{ID: "errors.context.mkdir", Args: map[string]any{"Reason": err}})
 				}
 			}
 
@@ -61,12 +65,12 @@ bookHidden: true
 				return "/more/cli/" + strings.ToLower(base) + "/"
 			}
 
-			fmt.Println("Generating command-line documentation in", dir, "...")
+			fmt.Println(console.Translate(cmd.Context(), messages.GenerateDocsStart(dir)))
 			err := doc.GenMarkdownTreeCustom(cmd.Root(), dir, prepender, linkHandler)
 			if err != nil {
-				return errors.Wrap(err, "gendoc")
+				return diagnostic.Describe(errors.Wrap(err, "gendoc"), corei18n.Message{ID: "errors.context.gendoc", Args: map[string]any{"Reason": err}})
 			}
-			fmt.Println("Done.")
+			fmt.Println(console.Translate(cmd.Context(), messages.GenerateDocsDone()))
 
 			return nil
 		},

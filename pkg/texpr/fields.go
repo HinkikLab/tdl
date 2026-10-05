@@ -1,11 +1,15 @@
 package texpr
 
 import (
+	"context"
 	"fmt"
 	"reflect"
 	"strings"
 
 	"github.com/fatih/color"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 type FieldsGetter struct {
@@ -13,9 +17,10 @@ type FieldsGetter struct {
 }
 
 type Field struct {
-	Path    []string
-	Type    reflect.Type
-	Comment string
+	Path      []string
+	Type      reflect.Type
+	Comment   string
+	CommentID string
 }
 
 type Options struct {
@@ -37,6 +42,10 @@ func NewFieldsGetter(opts *Options) *FieldsGetter {
 }
 
 func (f *FieldsGetter) Sprint(fields []*Field, colorable bool) string {
+	return f.SprintContext(context.Background(), fields, colorable)
+}
+
+func (f *FieldsGetter) SprintContext(ctx context.Context, fields []*Field, colorable bool) string {
 	b := &strings.Builder{}
 
 	for _, field := range fields {
@@ -50,7 +59,11 @@ func (f *FieldsGetter) Sprint(fields []*Field, colorable bool) string {
 			typ = color.GreenString(typ)
 		}
 
-		comment := "# " + field.Comment
+		translator := corei18n.FromContext(ctx)
+		if translator == nil {
+			translator = corei18n.EnglishTranslator()
+		}
+		comment := "# " + translator.Translate(corei18n.Message{ID: field.CommentID, Default: field.Comment})
 		if colorable {
 			comment = color.MagentaString(comment)
 		}
@@ -64,7 +77,7 @@ func (f *FieldsGetter) Sprint(fields []*Field, colorable bool) string {
 func (f *FieldsGetter) Walk(v any) ([]*Field, error) {
 	value := reflect.TypeOf(v)
 	if value.Kind() != reflect.Struct && value.Elem().Kind() != reflect.Struct {
-		return nil, fmt.Errorf("please input a struct")
+		return nil, diagnostic.Describe(fmt.Errorf("please input a struct"), corei18n.Message{ID: "errors.message.please_input_a_struct"})
 	}
 
 	fields := make([]*Field, 0)
@@ -90,8 +103,9 @@ func (f *FieldsGetter) walk(v reflect.Type, field *Field, fields *[]*Field) {
 			}
 
 			f.walk(fd.Type, &Field{
-				Path:    append(field.Path, fd.Name),
-				Comment: fd.Tag.Get(f.opts.tagName),
+				Path:      append(field.Path, fd.Name),
+				Comment:   fd.Tag.Get(f.opts.tagName),
+				CommentID: fd.Tag.Get("comment_id"),
 			}, fields)
 		}
 	case reflect.Array, reflect.Slice:

@@ -7,6 +7,9 @@ import (
 
 	"github.com/gotd/td/telegram/query/messages"
 	"github.com/gotd/td/tg"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 // ArchiveWindow selects source messages before applying tags or following links.
@@ -19,10 +22,10 @@ type ArchiveWindow struct {
 
 func (w ArchiveWindow) Validate() error {
 	if w.StartID < 0 || w.EndID < 0 || (w.EndID > 0 && w.EndID <= w.StartID) {
-		return fmt.Errorf("invalid archive message range")
+		return diagnostic.InvalidRange(w.StartID, w.EndID)
 	}
 	if w.Since < 0 || w.Until < 0 || (w.Until > 0 && w.Until < w.Since) {
-		return fmt.Errorf("invalid archive timestamp window")
+		return diagnostic.New("errors.batch.invalid_timestamp_window", map[string]any{"Start": w.Since, "End": w.Until})
 	}
 	return nil
 }
@@ -44,7 +47,8 @@ func (w ArchiveWindow) matches(album []*tg.Message) bool {
 // scanArchiveHistory groups before filtering so boundaries never split albums.
 // A false callback result means a preview limit left the window incomplete.
 func scanArchiveHistory(ctx context.Context, history messages.Query, window ArchiveWindow,
-	visit func([]*tg.Message) (bool, error)) (complete bool, err error) {
+	visit func([]*tg.Message) (bool, error),
+) (complete bool, err error) {
 	if err := window.Validate(); err != nil {
 		return false, err
 	}
@@ -81,7 +85,7 @@ func scanArchiveHistory(ctx context.Context, history messages.Query, window Arch
 		}
 		scanned++
 		if window.Until > 0 && scanned > 100000 {
-			return false, fmt.Errorf("incremental archive scan exceeded 100000 messages; keeping last_ts")
+			return false, diagnostic.Describe(fmt.Errorf("incremental archive scan exceeded 100000 messages; keeping last_ts"), corei18n.Message{ID: "errors.message.incremental_archive_scan_exceeded_100000_messages_keeping_last_key_ts"})
 		}
 		pending = append(pending, m)
 		if m.GroupedID == 0 {
@@ -91,7 +95,7 @@ func scanArchiveHistory(ctx context.Context, history messages.Query, window Arch
 		}
 	}
 	if err := it.Err(); err != nil {
-		return false, fmt.Errorf("scan chat history: %w", err)
+		return false, diagnostic.Describe(fmt.Errorf("scan chat history: %w", err), corei18n.Message{ID: "errors.message.scan_chat_history_value", Args: map[string]any{"Arg1": err}})
 	}
 	if err := ctx.Err(); err != nil {
 		return false, err

@@ -8,6 +8,9 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
 type Options struct {
@@ -34,12 +37,12 @@ func Parse(raw string, opts Options) (Ref, error) {
 	var ref Ref
 	s := strings.TrimSpace(raw)
 	if s == "" {
-		return ref, fmt.Errorf("empty Telegram reference")
+		return ref, diagnostic.Describe(fmt.Errorf("empty Telegram reference"), corei18n.Message{ID: "errors.message.empty_telegram_reference"})
 	}
 	if opts.AllowBare && !strings.ContainsAny(s, "/.:") {
 		ref.Chat = strings.TrimPrefix(s, "@")
 		if !username.MatchString(ref.Chat) {
-			return ref, fmt.Errorf("invalid chat name or ID %q", ref.Chat)
+			return ref, diagnostic.Describe(fmt.Errorf("invalid chat name or ID %q", ref.Chat), corei18n.Message{ID: "errors.message.invalid_chat_name_or_id_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", ref.Chat)}})
 		}
 		return ref, nil
 	}
@@ -48,26 +51,27 @@ func Parse(raw string, opts Options) (Ref, error) {
 	}
 	u, err := url.Parse(s)
 	if err != nil {
-		return ref, fmt.Errorf("invalid Telegram URL: %w", err)
+		return ref, diagnostic.Describe(fmt.Errorf("invalid Telegram URL: %w", err), corei18n.Message{ID: "errors.message.invalid_telegram_url_value", Args: map[string]any{"Arg1": err}})
 	}
 	if u.User != nil || u.Port() != "" || u.Fragment != "" || strings.HasSuffix(u.Host, ":") {
-		return ref, fmt.Errorf("invalid Telegram host or fragment")
+		return ref, diagnostic.Describe(fmt.Errorf("invalid Telegram host or fragment"), corei18n.Message{ID: "errors.message.invalid_telegram_host_or_fragment"})
 	}
 	q, err := url.ParseQuery(u.RawQuery)
 	if err != nil {
-		return ref, fmt.Errorf("invalid Telegram URL query: %w", err)
+		return ref, diagnostic.Describe(fmt.Errorf("invalid Telegram URL query: %w", err), corei18n.Message{ID: "errors.message.invalid_telegram_url_query_value", Args: map[string]any{"Arg1": err}})
 	}
 	ref.Query = q
 	for _, key := range []string{"domain", "channel", "post", "thread", "comment", "start", "single"} {
 		if len(q[key]) > 1 {
-			return ref, fmt.Errorf("Telegram URL must contain only one %s value", key)
+			//nolint:staticcheck // Telegram is a proper name in the preserved diagnostic.
+			return ref, diagnostic.Describe(fmt.Errorf("Telegram URL must contain only one %s value", key), corei18n.Message{ID: "errors.message.telegram_url_must_contain_only_one_value_value", Args: map[string]any{"Arg1": key}})
 		}
 	}
 	private := false
 	switch strings.ToLower(u.Scheme) {
 	case "tg":
 		if !opts.AllowTG || (u.Path != "" && u.Path != "/") {
-			return ref, fmt.Errorf("unsupported Telegram action")
+			return ref, diagnostic.Describe(fmt.Errorf("unsupported Telegram action"), corei18n.Message{ID: "errors.message.unsupported_telegram_action"})
 		}
 		switch strings.ToLower(u.Host) {
 		case "resolve":
@@ -75,7 +79,7 @@ func Parse(raw string, opts Options) (Ref, error) {
 		case "privatepost":
 			ref.Chat, private = q.Get("channel"), true
 		default:
-			return ref, fmt.Errorf("unsupported Telegram action")
+			return ref, diagnostic.Describe(fmt.Errorf("unsupported Telegram action"), corei18n.Message{ID: "errors.message.unsupported_telegram_action"})
 		}
 		if q.Has("post") {
 			ref.MessageID, err = positiveID(q.Get("post"), "post ID")
@@ -87,7 +91,10 @@ func Parse(raw string, opts Options) (Ref, error) {
 		switch strings.ToLower(u.Hostname()) {
 		case "t.me", "telegram.me", "telegram.dog":
 		default:
-			return ref, fmt.Errorf("unsupported link host %q (expected t.me)", u.Hostname())
+			return ref, func() error {
+				messageArg1 := u.Hostname()
+				return diagnostic.Describe(fmt.Errorf("unsupported link host %q (expected t.me)", messageArg1), corei18n.Message{ID: "errors.message.unsupported_link_host_value_expected_t_me", Args: map[string]any{"Arg1": fmt.Sprintf("%q", messageArg1)}})
+			}()
 		}
 		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 		if len(parts) > 0 && strings.EqualFold(parts[0], "s") {
@@ -97,7 +104,7 @@ func Parse(raw string, opts Options) (Ref, error) {
 			parts, private = parts[1:], true
 		}
 		if len(parts) == 0 || parts[0] == "" || len(parts) > 3 {
-			return ref, fmt.Errorf("invalid Telegram chat/message link")
+			return ref, diagnostic.Describe(fmt.Errorf("invalid Telegram chat/message link"), corei18n.Message{ID: "errors.message.invalid_telegram_chat_message_link"})
 		}
 		ref.Chat = parts[0]
 		for i, part := range parts[1:] {
@@ -111,14 +118,15 @@ func Parse(raw string, opts Options) (Ref, error) {
 			}
 		}
 	default:
-		return ref, fmt.Errorf("Telegram link must use http(s)")
+		//nolint:staticcheck // Telegram is a proper name in the preserved diagnostic.
+		return ref, diagnostic.Describe(fmt.Errorf("Telegram link must use http(s)"), corei18n.Message{ID: "errors.message.telegram_link_must_use_http_s"})
 	}
 	if !username.MatchString(ref.Chat) {
-		return ref, fmt.Errorf("invalid chat name or ID %q", ref.Chat)
+		return ref, diagnostic.Describe(fmt.Errorf("invalid chat name or ID %q", ref.Chat), corei18n.Message{ID: "errors.message.invalid_chat_name_or_id_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", ref.Chat)}})
 	}
 	if private {
 		if id, e := strconv.ParseInt(ref.Chat, 10, 64); e != nil || id <= 0 {
-			return ref, fmt.Errorf("private chat ID must be a positive integer")
+			return ref, diagnostic.Describe(fmt.Errorf("private chat ID must be a positive integer"), corei18n.Message{ID: "errors.message.private_chat_id_must_be_a_positive_integer"})
 		}
 	}
 	if q.Has("thread") {
@@ -127,7 +135,7 @@ func Parse(raw string, opts Options) (Ref, error) {
 			return ref, e
 		}
 		if ref.TopicID != 0 && ref.TopicID != id {
-			return ref, fmt.Errorf("thread ID conflicts with the topic ID in chat_url")
+			return ref, diagnostic.Describe(fmt.Errorf("thread ID conflicts with the topic ID in chat_url"), corei18n.Message{ID: "errors.message.thread_id_conflicts_with_the_topic_id_in_chat_key_url"})
 		}
 		ref.TopicID = id
 	}
@@ -137,12 +145,12 @@ func Parse(raw string, opts Options) (Ref, error) {
 			return ref, err
 		}
 		if ref.MessageID == 0 {
-			return ref, fmt.Errorf("comment link requires a post ID")
+			return ref, diagnostic.Describe(fmt.Errorf("comment link requires a post ID"), corei18n.Message{ID: "errors.message.comment_link_requires_a_post_id"})
 		}
 	}
 	ref.Bot, ref.Start, ref.Single = q.Has("start"), q.Get("start"), q.Has("single")
 	if ref.Bot && (ref.MessageID != 0 || ref.CommentID != 0 || ref.TopicID != 0 || private) {
-		return ref, fmt.Errorf("invalid bot link")
+		return ref, diagnostic.Describe(fmt.Errorf("invalid bot link"), corei18n.Message{ID: "errors.message.invalid_bot_link"})
 	}
 	return ref, nil
 }
@@ -150,7 +158,7 @@ func Parse(raw string, opts Options) (Ref, error) {
 func positiveID(s, name string) (int, error) {
 	id, err := strconv.Atoi(s)
 	if err != nil || id <= 0 {
-		return 0, fmt.Errorf("%s must be a positive integer", name)
+		return 0, diagnostic.Describe(fmt.Errorf("%s must be a positive integer", name), corei18n.Message{ID: "errors.message.value_must_be_a_positive_integer", Args: map[string]any{"Arg1": name}})
 	}
 	return id, nil
 }

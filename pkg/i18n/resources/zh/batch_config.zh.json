@@ -1,0 +1,422 @@
+{
+  "batch.config.examples.comment_range.discussion_scope": {
+    "other": "此模式按讨论组消息 ID 选择评论，范围不限于某个主帖。"
+  },
+  "batch.config.examples.comment_range.summary": {
+    "other": "02. 下载关联讨论组中 ID 为 900 至 909 的评论。"
+  },
+  "batch.config.examples.direct_range.single_message": {
+    "other": "只下载消息 100 时，将 end_comment 设为 101。"
+  },
+  "batch.config.examples.direct_range.summary": {
+    "other": "01. 直接下载频道或群组消息，范围 [100, 110)，包含消息 100 至 109。"
+  },
+  "batch.config.examples.incremental_chat.lookback": {
+    "other": "后续从上次完成时间回看 3600 秒；export_filter 支持 expr 表达式。"
+  },
+  "batch.config.examples.incremental_chat.summary": {
+    "other": "03. 增量扫描整个对话；首次最多扫描 100000 条历史消息。"
+  },
+  "batch.config.examples.incremental_comments.reply_id": {
+    "other": "reply_post_id=900 是讨论组的转发根消息 ID，填写此 ID 而非频道帖子 100。"
+  },
+  "batch.config.examples.incremental_comments.same_group": {
+    "other": "chat 与实际下载来源须指向同一个讨论组。"
+  },
+  "batch.config.examples.incremental_comments.summary": {
+    "other": "05. 增量扫描关联讨论组中某篇主帖的评论。"
+  },
+  "batch.config.examples.incremental_topic.explicit_topic": {
+    "other": "URL 中出现话题 ID 不会自动开启此增量话题筛选；须显式设置 topic_id。"
+  },
+  "batch.config.examples.incremental_topic.summary": {
+    "other": "04. 增量扫描论坛话题 200；话题 ID 是话题根消息的 ID。"
+  },
+  "batch.config.examples.linked_comments.post_limit": {
+    "other": "max_posts=0 处理完整窗口；确认失效的机器人或群组在本轮运行中跳过。"
+  },
+  "batch.config.examples.linked_comments.summary": {
+    "other": "10. 增量归档预览帖的链接资源；从评论中查找入口。"
+  },
+  "batch.config.examples.linked_filtered.bot_interval": {
+    "other": "同一机器人最后回复 30 秒后才能再次请求；下载耗时计入间隔。"
+  },
+  "batch.config.examples.linked_filtered.bot_timing": {
+    "other": "机器人分批回复较慢时增大空闲与超时等待；空闲时间须小于超时时间。"
+  },
+  "batch.config.examples.linked_filtered.summary": {
+    "other": "11. 归档 [100, 110) 内命中任一说明标签的主帖链接资源。"
+  },
+  "batch.config.examples.linked_single.link_options.defaults": {
+    "other": "默认保留预览、扫描评论、清理本次机器人请求和回复，"
+  },
+  "batch.config.examples.linked_single.link_options.disable_retries": {
+    "other": "rerequest_limit 或 flood_retries 设为 0 可禁用对应重试。"
+  },
+  "batch.config.examples.linked_single.link_options.request_interval": {
+    "other": "bot_request_interval_seconds 从机器人最后回复时间开始计算；0 不限制。"
+  },
+  "batch.config.examples.linked_single.link_options.retry_limits": {
+    "other": "文件失效最多重新请求 3 次，文本限流最多重试 5 次。"
+  },
+  "batch.config.examples.linked_single.multi_hop": {
+    "other": "支持多层跳转；输出目录按主帖说明命名。"
+  },
+  "batch.config.examples.linked_single.source_url": {
+    "other": "chat_url 填写主帖 URL；机器人 start 链接由主帖内容解析。"
+  },
+  "batch.config.examples.linked_single.summary": {
+    "other": "09. 归档单个主帖链接的资源，包括隐藏链接和 URL 按钮。"
+  },
+  "batch.config.examples.tag_single.album_match": {
+    "other": "相册任意成员命中即保留整组；max_posts=1 先检查一组。"
+  },
+  "batch.config.examples.tag_single.history_limit": {
+    "other": "max_posts=0 扫描全部历史。"
+  },
+  "batch.config.examples.tag_single.summary": {
+    "other": "06. 归档图片或视频说明中包含完整标签 #教程 的帖子。"
+  },
+  "batch.config.examples.tags_all.summary": {
+    "other": "08. 增量归档：同一帖子或相册说明须包含全部标签。"
+  },
+  "batch.config.examples.tags_all.timestamp_window": {
+    "other": "处理完整窗口后才推进 last_ts；使用 max_posts=0 避免截断窗口。"
+  },
+  "batch.config.examples.tags_any.metadata": {
+    "other": "write_metadata=false 关闭可见元数据，仍保留内部续传记录。"
+  },
+  "batch.config.examples.tags_any.summary": {
+    "other": "07. 归档 [100, 110) 内命中任一标签的帖子或相册。"
+  },
+  "batch.config.global.download_base": {
+    "other": "下载根目录；相对路径以命令执行目录为基准"
+  },
+  "batch.config.global.incremental": {
+    "other": "按时间戳增量扫描；任务设置覆盖全局默认值"
+  },
+  "batch.config.global.jobs": {
+    "other": "按顺序执行任务；仅保留需要的示例"
+  },
+  "batch.config.global.limit": {
+    "other": "同时下载的文件数；须大于 0；命令行参数优先"
+  },
+  "batch.config.global.namespace": {
+    "other": "账号命名空间；显式 -n/--ns 优先"
+  },
+  "batch.config.global.overlap_seconds": {
+    "other": "增量回看秒数；0 表示不回看"
+  },
+  "batch.config.global.pool": {
+    "other": "连接池大小；0 不限制；命令行参数优先"
+  },
+  "batch.config.global.threads": {
+    "other": "单文件下载线程数；须大于 0；命令行参数优先"
+  },
+  "batch.config.global.write_metadata": {
+    "other": "输出归档 meta.json；任务设置覆盖全局默认值"
+  },
+  "batch.config.jobs.comment_range.chat_url": {
+    "other": "来源群组或帖子链接；链接归档填写主帖来源"
+  },
+  "batch.config.jobs.comment_range.comment": {
+    "other": "true 下载关联讨论组评论；false 下载对话消息"
+  },
+  "batch.config.jobs.comment_range.end_comment": {
+    "other": "结束消息 ID，不包含此条；单条下载填起始 ID + 1"
+  },
+  "batch.config.jobs.comment_range.start_comment": {
+    "other": "起始消息 ID，包含此条；评论模式使用讨论组消息 ID"
+  },
+  "batch.config.jobs.comment_range.subdir": {
+    "other": "相对子目录；每个任务使用独立路径保存文件和续传状态"
+  },
+  "batch.config.jobs.direct_range.chat_url": {
+    "other": "来源群组或帖子链接；链接归档填写主帖来源"
+  },
+  "batch.config.jobs.direct_range.comment": {
+    "other": "true 下载关联讨论组评论；false 下载对话消息"
+  },
+  "batch.config.jobs.direct_range.end_comment": {
+    "other": "结束消息 ID，不包含此条；单条下载填起始 ID + 1"
+  },
+  "batch.config.jobs.direct_range.start_comment": {
+    "other": "起始消息 ID，包含此条；评论模式使用讨论组消息 ID"
+  },
+  "batch.config.jobs.direct_range.subdir": {
+    "other": "相对子目录；每个任务使用独立路径保存文件和续传状态"
+  },
+  "batch.config.jobs.incremental_chat.chat_url": {
+    "other": "来源群组或帖子链接；链接归档填写主帖来源"
+  },
+  "batch.config.jobs.incremental_chat.comment": {
+    "other": "true 下载关联讨论组评论；false 下载对话消息"
+  },
+  "batch.config.jobs.incremental_chat.export_all": {
+    "other": "增量导出是否包含无媒体消息；false 仅导出媒体消息"
+  },
+  "batch.config.jobs.incremental_chat.export_filter": {
+    "other": "增量模式 expr 筛选表达式；空字符串不额外筛选"
+  },
+  "batch.config.jobs.incremental_chat.incremental": {
+    "other": "按时间戳增量扫描；任务设置覆盖全局默认值"
+  },
+  "batch.config.jobs.incremental_chat.overlap_seconds": {
+    "other": "增量回看秒数；0 表示不回看"
+  },
+  "batch.config.jobs.incremental_chat.subdir": {
+    "other": "相对子目录；每个任务使用独立路径保存文件和续传状态"
+  },
+  "batch.config.jobs.incremental_chat.with_content": {
+    "other": "在增量导出 JSON 中附带日期和文本"
+  },
+  "batch.config.jobs.incremental_comments.chat": {
+    "other": "显式导出来源；须与解析后的对话或讨论组一致"
+  },
+  "batch.config.jobs.incremental_comments.chat_url": {
+    "other": "来源群组或帖子链接；链接归档填写主帖来源"
+  },
+  "batch.config.jobs.incremental_comments.comment": {
+    "other": "true 下载关联讨论组评论；false 下载对话消息"
+  },
+  "batch.config.jobs.incremental_comments.incremental": {
+    "other": "按时间戳增量扫描；任务设置覆盖全局默认值"
+  },
+  "batch.config.jobs.incremental_comments.reply_post_id": {
+    "other": "讨论组中转发根消息的 ID，填写讨论组 ID 而非频道帖子 ID"
+  },
+  "batch.config.jobs.incremental_comments.subdir": {
+    "other": "相对子目录；每个任务使用独立路径保存文件和续传状态"
+  },
+  "batch.config.jobs.incremental_comments.with_content": {
+    "other": "在增量导出 JSON 中附带日期和文本"
+  },
+  "batch.config.jobs.incremental_topic.chat_url": {
+    "other": "来源群组或帖子链接；链接归档填写主帖来源"
+  },
+  "batch.config.jobs.incremental_topic.comment": {
+    "other": "true 下载关联讨论组评论；false 下载对话消息"
+  },
+  "batch.config.jobs.incremental_topic.incremental": {
+    "other": "按时间戳增量扫描；任务设置覆盖全局默认值"
+  },
+  "batch.config.jobs.incremental_topic.subdir": {
+    "other": "相对子目录；每个任务使用独立路径保存文件和续传状态"
+  },
+  "batch.config.jobs.incremental_topic.topic_id": {
+    "other": "论坛话题根消息 ID；将增量扫描限制在该话题"
+  },
+  "batch.config.jobs.incremental_topic.with_content": {
+    "other": "在增量导出 JSON 中附带日期和文本"
+  },
+  "batch.config.jobs.linked_comments.chat_url": {
+    "other": "来源群组或帖子链接；链接归档填写主帖来源"
+  },
+  "batch.config.jobs.linked_comments.follow_links": {
+    "other": "解析主帖或评论中的链接，经机器人和群组获取资源"
+  },
+  "batch.config.jobs.linked_comments.incremental": {
+    "other": "按时间戳增量扫描；任务设置覆盖全局默认值"
+  },
+  "batch.config.jobs.linked_comments.link_options": {
+    "other": "链接资源解析设置；仅在 follow_links 开启时使用"
+  },
+  "batch.config.jobs.linked_comments.link_options.cleanup_bot_messages": {
+    "other": "处理后删除本次机器人请求及收集到的回复；默认 true"
+  },
+  "batch.config.jobs.linked_comments.link_options.scan_comments": {
+    "other": "在关联讨论组评论中查找资源链接；默认 true"
+  },
+  "batch.config.jobs.linked_comments.max_posts": {
+    "other": "归档帖子组上限；0 处理完整窗口；增量任务应填 0"
+  },
+  "batch.config.jobs.linked_comments.subdir": {
+    "other": "相对子目录；每个任务使用独立路径保存文件和续传状态"
+  },
+  "batch.config.jobs.linked_filtered.chat_url": {
+    "other": "来源群组或帖子链接；链接归档填写主帖来源"
+  },
+  "batch.config.jobs.linked_filtered.end_comment": {
+    "other": "结束消息 ID，不包含此条；单条下载填起始 ID + 1"
+  },
+  "batch.config.jobs.linked_filtered.follow_links": {
+    "other": "解析主帖或评论中的链接，经机器人和群组获取资源"
+  },
+  "batch.config.jobs.linked_filtered.incremental": {
+    "other": "按时间戳增量扫描；任务设置覆盖全局默认值"
+  },
+  "batch.config.jobs.linked_filtered.link_options": {
+    "other": "链接资源解析设置；仅在 follow_links 开启时使用"
+  },
+  "batch.config.jobs.linked_filtered.link_options.bot_idle_seconds": {
+    "other": "收到回复后连续空闲此秒数则结束收集"
+  },
+  "batch.config.jobs.linked_filtered.link_options.bot_request_interval_seconds": {
+    "other": "同一机器人最后回复到下次请求的间隔秒数；0 不限制"
+  },
+  "batch.config.jobs.linked_filtered.link_options.bot_timeout_seconds": {
+    "other": "每次机器人请求的最长等待秒数；须大于空闲等待时间"
+  },
+  "batch.config.jobs.linked_filtered.link_options.cleanup_bot_messages": {
+    "other": "处理后删除本次机器人请求及收集到的回复；默认 true"
+  },
+  "batch.config.jobs.linked_filtered.link_options.flood_retries": {
+    "other": "机器人文本请求限流重试次数；默认 5；0 禁用"
+  },
+  "batch.config.jobs.linked_filtered.link_options.max_depth": {
+    "other": "链接递归深度上限；默认 8，最大 32"
+  },
+  "batch.config.jobs.linked_filtered.link_options.rerequest_limit": {
+    "other": "资源文件失效或删除后的重新请求次数；默认 3；0 禁用"
+  },
+  "batch.config.jobs.linked_filtered.max_posts": {
+    "other": "归档帖子组上限；0 处理完整窗口；增量任务应填 0"
+  },
+  "batch.config.jobs.linked_filtered.start_comment": {
+    "other": "起始消息 ID，包含此条；评论模式使用讨论组消息 ID"
+  },
+  "batch.config.jobs.linked_filtered.subdir": {
+    "other": "相对子目录；每个任务使用独立路径保存文件和续传状态"
+  },
+  "batch.config.jobs.linked_filtered.tag_match": {
+    "other": "any 命中任一标签；all 要求帖子或相册包含全部标签"
+  },
+  "batch.config.jobs.linked_filtered.tags": {
+    "other": "说明标签列表；链接任务筛选主帖；带 # 的值须加引号"
+  },
+  "batch.config.jobs.linked_single.chat_url": {
+    "other": "来源群组或帖子链接；链接归档填写主帖来源"
+  },
+  "batch.config.jobs.linked_single.follow_links": {
+    "other": "解析主帖或评论中的链接，经机器人和群组获取资源"
+  },
+  "batch.config.jobs.linked_single.incremental": {
+    "other": "按时间戳增量扫描；任务设置覆盖全局默认值"
+  },
+  "batch.config.jobs.linked_single.link_options": {
+    "other": "链接资源解析设置；仅在 follow_links 开启时使用"
+  },
+  "batch.config.jobs.linked_single.link_options.bot_idle_seconds": {
+    "other": "收到回复后连续空闲此秒数则结束收集"
+  },
+  "batch.config.jobs.linked_single.link_options.bot_request_interval_seconds": {
+    "other": "同一机器人最后回复到下次请求的间隔秒数；0 不限制"
+  },
+  "batch.config.jobs.linked_single.link_options.bot_timeout_seconds": {
+    "other": "每次机器人请求的最长等待秒数；须大于空闲等待时间"
+  },
+  "batch.config.jobs.linked_single.link_options.cleanup_bot_messages": {
+    "other": "处理后删除本次机器人请求及收集到的回复；默认 true"
+  },
+  "batch.config.jobs.linked_single.link_options.comment_limit": {
+    "other": "每个主帖最多扫描的评论条数；默认 100"
+  },
+  "batch.config.jobs.linked_single.link_options.flood_retries": {
+    "other": "机器人文本请求限流重试次数；默认 5；0 禁用"
+  },
+  "batch.config.jobs.linked_single.link_options.flood_wait_seconds": {
+    "other": "限流未提供等待时长时的回退秒数；默认 30"
+  },
+  "batch.config.jobs.linked_single.link_options.include_previews": {
+    "other": "同时下载主帖预览媒体；默认 true"
+  },
+  "batch.config.jobs.linked_single.link_options.max_bot_messages": {
+    "other": "每次机器人请求最多收集的回复条数；默认 500"
+  },
+  "batch.config.jobs.linked_single.link_options.max_depth": {
+    "other": "链接递归深度上限；默认 8，最大 32"
+  },
+  "batch.config.jobs.linked_single.link_options.max_flood_wait_seconds": {
+    "other": "允许的机器人文本限流等待秒数上限；默认 3600"
+  },
+  "batch.config.jobs.linked_single.link_options.max_links": {
+    "other": "每个主帖最多解析的链接数；默认 100，最大 1000"
+  },
+  "batch.config.jobs.linked_single.link_options.max_topic_messages": {
+    "other": "每个链接话题最多扫描的消息条数；默认 1000"
+  },
+  "batch.config.jobs.linked_single.link_options.poll_interval_ms": {
+    "other": "机器人回复轮询间隔，单位毫秒；默认 500"
+  },
+  "batch.config.jobs.linked_single.link_options.rerequest_limit": {
+    "other": "资源文件失效或删除后的重新请求次数；默认 3；0 禁用"
+  },
+  "batch.config.jobs.linked_single.link_options.scan_comments": {
+    "other": "在关联讨论组评论中查找资源链接；默认 true"
+  },
+  "batch.config.jobs.linked_single.subdir": {
+    "other": "相对子目录；每个任务使用独立路径保存文件和续传状态"
+  },
+  "batch.config.jobs.tag_single.chat_url": {
+    "other": "来源群组或帖子链接；链接归档填写主帖来源"
+  },
+  "batch.config.jobs.tag_single.max_posts": {
+    "other": "归档帖子组上限；0 处理完整窗口；增量任务应填 0"
+  },
+  "batch.config.jobs.tag_single.subdir": {
+    "other": "相对子目录；每个任务使用独立路径保存文件和续传状态"
+  },
+  "batch.config.jobs.tag_single.tag": {
+    "other": "说明中的完整标签；以 # 开头的值须加引号"
+  },
+  "batch.config.jobs.tags_all.chat_url": {
+    "other": "来源群组或帖子链接；链接归档填写主帖来源"
+  },
+  "batch.config.jobs.tags_all.incremental": {
+    "other": "按时间戳增量扫描；任务设置覆盖全局默认值"
+  },
+  "batch.config.jobs.tags_all.max_posts": {
+    "other": "归档帖子组上限；0 处理完整窗口；增量任务应填 0"
+  },
+  "batch.config.jobs.tags_all.subdir": {
+    "other": "相对子目录；每个任务使用独立路径保存文件和续传状态"
+  },
+  "batch.config.jobs.tags_all.tag_match": {
+    "other": "any 命中任一标签；all 要求帖子或相册包含全部标签"
+  },
+  "batch.config.jobs.tags_all.tags": {
+    "other": "说明标签列表；链接任务筛选主帖；带 # 的值须加引号"
+  },
+  "batch.config.jobs.tags_any.chat_url": {
+    "other": "来源群组或帖子链接；链接归档填写主帖来源"
+  },
+  "batch.config.jobs.tags_any.end_comment": {
+    "other": "结束消息 ID，不包含此条；单条下载填起始 ID + 1"
+  },
+  "batch.config.jobs.tags_any.max_posts": {
+    "other": "归档帖子组上限；0 处理完整窗口；增量任务应填 0"
+  },
+  "batch.config.jobs.tags_any.start_comment": {
+    "other": "起始消息 ID，包含此条；评论模式使用讨论组消息 ID"
+  },
+  "batch.config.jobs.tags_any.subdir": {
+    "other": "相对子目录；每个任务使用独立路径保存文件和续传状态"
+  },
+  "batch.config.jobs.tags_any.tag_match": {
+    "other": "any 命中任一标签；all 要求帖子或相册包含全部标签"
+  },
+  "batch.config.jobs.tags_any.tags": {
+    "other": "说明标签列表；链接任务筛选主帖；带 # 的值须加引号"
+  },
+  "batch.config.jobs.tags_any.write_metadata": {
+    "other": "输出归档 meta.json；任务设置覆盖全局默认值"
+  },
+  "batch.config.overview.check_only": {
+    "other": "下载前先运行 `tdl batch -c config.yaml --check-only` 检查。"
+  },
+  "batch.config.overview.defaults": {
+    "other": "默认值：pool=16，threads=8，limit=4，overlap_seconds=3600。"
+  },
+  "batch.config.overview.forum_home": {
+    "other": "私有论坛主页链接不带话题选择器时扫描全部话题。"
+  },
+  "batch.config.overview.metadata": {
+    "other": "归档元数据默认输出 meta.json；write_metadata=false 关闭可见元数据。"
+  },
+  "batch.config.overview.overview": {
+    "other": "批量下载示例：保留需要的任务，替换示例群组、消息 ID 和标签。"
+  },
+  "batch.config.overview.paths": {
+    "other": "相对路径以命令执行目录为基准；每个任务使用独立 subdir。"
+  }
+}

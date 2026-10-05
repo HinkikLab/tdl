@@ -24,7 +24,9 @@ import (
 	"go.uber.org/zap"
 
 	"github.com/iyear/tdl/core/dcpool"
+	"github.com/iyear/tdl/core/diagnostic"
 	"github.com/iyear/tdl/core/downloader"
+	corei18n "github.com/iyear/tdl/core/i18n"
 	"github.com/iyear/tdl/core/logctx"
 	"github.com/iyear/tdl/core/tmedia"
 	"github.com/iyear/tdl/core/util/fsutil"
@@ -87,13 +89,13 @@ func newIter(pool dcpool.Pool, manager *peers.Manager, dialog [][]*tmessage.Dial
 		Funcs(tplfunc.FuncMap(tplfunc.All...)).
 		Parse(opts.Template)
 	if err != nil {
-		return nil, errors.Wrap(err, "parse template")
+		return nil, diagnostic.Describe(errors.Wrap(err, "parse template"), corei18n.Message{ID: "errors.context.parse_template", Args: map[string]any{"Reason": err}})
 	}
 
 	dialogs := flatDialogs(dialog)
 	// if msgs is empty, return error to avoid range out of index
 	if len(dialogs) == 0 {
-		return nil, errors.Errorf("you must specify at least one message")
+		return nil, diagnostic.Describe(errors.Errorf("you must specify at least one message"), corei18n.Message{ID: "errors.message.you_must_specify_at_least_one_message"})
 	}
 
 	// include and exclude
@@ -201,7 +203,7 @@ func (i *iter) process(ctx context.Context) (ret bool, skip bool) {
 
 	from, err := i.manager.FromInputPeer(ctx, peer)
 	if err != nil {
-		i.err = errors.Wrap(err, "resolve from input peer")
+		i.err = diagnostic.Describe(errors.Wrap(err, "resolve from input peer"), corei18n.Message{ID: "errors.context.resolve_from_input_peer", Args: map[string]any{"Reason": err}})
 		return false, false
 	}
 	message, err := tutil.GetSingleMessage(ctx, i.pool.Default(ctx), peer, msg)
@@ -217,7 +219,7 @@ func (i *iter) process(ctx context.Context) (ret bool, skip bool) {
 			i.logicalPos++                                                                             // increment logical position for skipped message
 			return false, true
 		}
-		i.err = errors.Wrap(err, "resolve message")
+		i.err = diagnostic.Describe(errors.Wrap(err, "resolve message"), corei18n.Message{ID: "errors.context.resolve_message", Args: map[string]any{"Reason": err}})
 		return false, false
 	}
 
@@ -262,12 +264,12 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 		DownloadDate: time.Now().Unix(),
 	})
 	if err != nil {
-		i.err = errors.Wrap(err, "execute template")
+		i.err = diagnostic.Describe(errors.Wrap(err, "execute template"), corei18n.Message{ID: "errors.context.execute_template", Args: map[string]any{"Reason": err}})
 		return false, false
 	}
 	finalPath, err := fsutil.JoinWithin(i.opts.Dir, toName.String())
 	if err != nil {
-		i.err = errors.Wrap(err, "resolve output path")
+		i.err = diagnostic.Describe(errors.Wrap(err, "resolve output path"), corei18n.Message{ID: "errors.context.resolve_output_path", Args: map[string]any{"Reason": err}})
 		return false, false
 	}
 	identity, err := downloader.FileIdentityOf(mediaDownloadFile{item})
@@ -316,13 +318,13 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 
 	// #113. If path contains dirs, create it. So now we support nested dirs.
 	if err = os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		i.err = errors.Wrap(err, "create dir")
+		i.err = diagnostic.Describe(errors.Wrap(err, "create dir"), corei18n.Message{ID: "errors.context.create_dir", Args: map[string]any{"Reason": err}})
 		return false, false
 	}
 
 	to, parts, err := downloader.OpenPartialFile(path, mediaDownloadFile{item})
 	if err != nil {
-		i.err = errors.Wrap(err, "create file")
+		i.err = diagnostic.Describe(errors.Wrap(err, "create file"), corei18n.Message{ID: "errors.context.create_file", Args: map[string]any{"Reason": err}})
 		return false, false
 	}
 	for _, recoveryPath := range parts.RecoveryPaths() {
@@ -350,7 +352,10 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 func (i *iter) processGrouped(ctx context.Context, message *tg.Message, from peers.Peer, startLogicalPos int) (bool, bool) {
 	grouped, err := tutil.GetGroupedMessages(ctx, i.pool.Default(ctx), from.InputPeer(), message)
 	if err != nil {
-		i.err = errors.Wrapf(err, "resolve grouped message %d/%d", from.ID(), message.ID)
+		i.err = func() error {
+			messageArg2 := from.ID()
+			return diagnostic.Describe(errors.Wrapf(err, "resolve grouped message %d/%d", messageArg2, message.ID), corei18n.Message{ID: "errors.context.resolve_grouped_message_value_value", Args: map[string]any{"Arg1": messageArg2, "Arg2": message.ID, "Reason": err}})
+		}()
 		return false, false
 	}
 
@@ -451,11 +456,13 @@ func (i *iter) Complete(e *iterElem) {
 		}
 	}
 }
+
 func (i *iter) Completed() map[string]completion {
 	i.mu.Lock()
 	defer i.mu.Unlock()
 	return maps.Clone(i.completed)
 }
+
 func downloadFingerprint(dialogs []*tmessage.Dialog, opts Options) string {
 	type source struct {
 		Kind     string

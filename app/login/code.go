@@ -11,20 +11,25 @@ import (
 	"github.com/gotd/td/tg"
 	"github.com/spf13/viper"
 
+	"github.com/iyear/tdl/core/diagnostic"
+	corei18n "github.com/iyear/tdl/core/i18n"
+	"github.com/iyear/tdl/pkg/console"
+	localizedprompt "github.com/iyear/tdl/pkg/console/prompt"
 	"github.com/iyear/tdl/pkg/consts"
 	"github.com/iyear/tdl/pkg/key"
 	"github.com/iyear/tdl/pkg/kv"
+	"github.com/iyear/tdl/pkg/messages"
 	"github.com/iyear/tdl/pkg/tclient"
 )
 
 func Code(ctx context.Context) error {
 	kvd, err := kv.From(ctx).Open(viper.GetString(consts.FlagNamespace))
 	if err != nil {
-		return errors.Wrap(err, "open kv")
+		return diagnostic.Describe(errors.Wrap(err, "open kv"), corei18n.Message{ID: "errors.context.open_kv", Args: map[string]any{"Reason": err}})
 	}
 
 	if err = kvd.Set(ctx, key.App(), []byte(tclient.AppDesktop)); err != nil {
-		return errors.Wrap(err, "set app")
+		return diagnostic.Describe(errors.Wrap(err, "set app"), corei18n.Message{ID: "errors.context.set_app", Args: map[string]any{"Reason": err}})
 	}
 
 	c, err := tclient.New(ctx, tclient.Options{
@@ -53,7 +58,7 @@ func Code(ctx context.Context) error {
 			return err
 		}
 
-		color.Green("Login successfully! ID: %d, Username: %s", user.ID, user.Username)
+		color.Green("%s", console.Translate(ctx, messages.LoginSuccess(user.ID, user.Username)))
 
 		return nil
 	})
@@ -63,7 +68,7 @@ func Code(ctx context.Context) error {
 type noSignUp struct{}
 
 func (c noSignUp) SignUp(_ context.Context) (auth.UserInfo, error) {
-	return auth.UserInfo{}, errors.New("don't support sign up Telegram account")
+	return auth.UserInfo{}, diagnostic.Describe(errors.New("don't support sign up Telegram account"), corei18n.Message{ID: "errors.message.don_t_support_sign_up_telegram_account"})
 }
 
 func (c noSignUp) AcceptTermsOfService(_ context.Context, tos tg.HelpTermsOfService) error {
@@ -75,41 +80,41 @@ type termAuth struct {
 	noSignUp
 }
 
-func (a termAuth) Phone(_ context.Context) (string, error) {
+func (a termAuth) Phone(ctx context.Context) (string, error) {
 	phone := ""
-	prompt := &survey.Input{
-		Message: "Enter your phone number:",
+	prompt := &localizedprompt.Input{
+		Message: console.Translate(ctx, messages.LoginPhonePrompt()),
 		Default: "+86 12345678900",
 	}
 
-	if err := survey.AskOne(prompt, &phone, survey.WithValidator(survey.Required)); err != nil {
+	if err := localizedprompt.AskOne(ctx, prompt, &phone, survey.WithValidator(localizedprompt.Required)); err != nil {
 		return "", err
 	}
 
-	color.Blue("Sending Code...")
+	color.Blue("%s", console.Translate(ctx, messages.LoginSendCode()))
 	return strings.TrimSpace(phone), nil
 }
 
-func (a termAuth) Password(_ context.Context) (string, error) {
+func (a termAuth) Password(ctx context.Context) (string, error) {
 	pwd := ""
-	prompt := &survey.Password{
-		Message: "Enter 2FA Password:",
+	prompt := &localizedprompt.Password{
+		Message: console.Translate(ctx, messages.LoginPasswordPrompt()),
 	}
 
-	if err := survey.AskOne(prompt, &pwd, survey.WithValidator(survey.Required)); err != nil {
+	if err := localizedprompt.AskOne(ctx, prompt, &pwd, survey.WithValidator(localizedprompt.Required)); err != nil {
 		return "", err
 	}
 
 	return strings.TrimSpace(pwd), nil
 }
 
-func (a termAuth) Code(_ context.Context, _ *tg.AuthSentCode) (string, error) {
+func (a termAuth) Code(ctx context.Context, _ *tg.AuthSentCode) (string, error) {
 	code := ""
-	prompt := &survey.Input{
-		Message: "Enter Code:",
+	prompt := &localizedprompt.Input{
+		Message: console.Translate(ctx, messages.LoginCodePrompt()),
 	}
 
-	if err := survey.AskOne(prompt, &code, survey.WithValidator(survey.Required)); err != nil {
+	if err := localizedprompt.AskOne(ctx, prompt, &code, survey.WithValidator(localizedprompt.Required)); err != nil {
 		return "", err
 	}
 

@@ -1,0 +1,44 @@
+{
+  "prompt.error_prefix": {
+    "other": "Sorry, your reply was invalid: "
+  },
+  "prompt.select_instructions": {
+    "other": "Use arrows to move, type to filter"
+  },
+  "prompt.input_instructions": {
+    "other": "Use arrows to move, enter to select, type to continue"
+  },
+  "prompt.more_help": {
+    "other": "for more help"
+  },
+  "prompt.help": {
+    "other": "for help"
+  },
+  "prompt.suggestions": {
+    "other": "for suggestions"
+  },
+  "prompt.yes": {
+    "other": "Yes"
+  },
+  "prompt.no": {
+    "other": "No"
+  },
+  "prompt.invalid_answer": {
+    "other": "{{.Value}} is not a valid answer, please try again."
+  },
+  "prompt.required": {
+    "other": "Value is required"
+  },
+  "prompt.select_empty": {
+    "other": "please provide options to select from"
+  },
+  "prompt.select_default_missing": {
+    "other": "default value {{.Value}} not found in options"
+  },
+  "prompt.select_default_index": {
+    "other": "default index {{.Index}} exceeds the number of options"
+  },
+  "prompt.select_default_type": {
+    "other": "default value of select must be an int or string"
+  }
+}

@@ -1,5 +1,5 @@
-Version: {{ .Version }}
-Commit: {{ .Commit }}
-Date: {{ .Date }}
+{{ .VersionLabel }}: {{ .Version }}
+{{ .CommitLabel }}: {{ .Commit }}
+{{ .DateLabel }}: {{ .Date }}
 
 {{ .GoVersion }} {{ .GOOS }}/{{ .GOARCH }}

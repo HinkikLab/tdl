@@ -5,10 +5,12 @@ import (
 	"fmt"
 
 	"github.com/fatih/color"
-	"github.com/go-faster/errors"
 	"go.uber.org/zap"
 
+	"github.com/iyear/tdl/core/diagnostic"
 	"github.com/iyear/tdl/core/logctx"
+	"github.com/iyear/tdl/pkg/console"
+	"github.com/iyear/tdl/pkg/messages"
 )
 
 func countMissingRange(state *State, start, end int) int {
@@ -52,29 +54,29 @@ func (r *Runner) runRangeWindow(ctx context.Context, job *Job, link Link, dir st
 	start, end := num(job.StartComment), num(job.EndComment)
 	r.setTargets(end - start)
 	count := countPendingRange(state, start, end)
-	color.Cyan("Target range: %d-%d (%d)", start, end-1, end-start)
-	color.Cyan("Recorded as finished: %d, to validate/download: %d", state.Len(), count)
+	color.Cyan("%s", console.Translate(ctx, messages.BatchTargetRange(fmt.Sprintf("%d-%d (%d)", start, end-1, end-start))))
+	color.Cyan("%s", console.Translate(ctx, messages.BatchRecorded(state.Len(), count)))
 	logctx.From(ctx).Info("Plan", zap.Int("targets", end-start), zap.Int("missing", count))
 	if r.opts.CheckOnly {
-		color.Yellow("Check only: skipping the download step")
+		color.Yellow("%s", console.Translate(ctx, messages.BatchCheckOnly()))
 		return nil
 	}
 	if count == 0 {
-		color.Green("Everything is already downloaded")
+		color.Green("%s", console.Translate(ctx, messages.BatchEverythingDownloaded()))
 		return nil
 	}
 	if err := r.downloadSelection(ctx, job, link, dir, nil, start, end, store, state, threads, limit); err != nil {
 		return err
 	}
 	if left := countMissingRange(state, start, end); left > 0 {
-		if !r.confirm(ctx, fmt.Sprintf("Retry the %d missing message(s) now?", left), true) {
-			return errors.Errorf("%d message(s) still missing", left)
+		if !r.confirm(ctx, console.Translate(ctx, messages.BatchRetryPrompt(left)), true) {
+			return diagnostic.New("errors.batch.messages_missing", map[string]any{"Count": left})
 		}
 		if err := r.downloadSelection(ctx, job, link, dir, nil, start, end, store, state, threads, limit); err != nil {
 			return err
 		}
 		if left = countMissingRange(state, start, end); left > 0 {
-			return errors.Errorf("%d message(s) still missing", left)
+			return diagnostic.New("errors.batch.messages_missing", map[string]any{"Count": left})
 		}
 	}
 	return nil

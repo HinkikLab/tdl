@@ -775,9 +775,11 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 	b.rememberBotMessages(requestID)
 	seen := map[int]*tg.Message{}
 	fingerprints := map[int]string{}
+	liveFingerprints := map[int]string{}
+	historyFingerprints := map[int]string{}
 	lastChange := time.Now()
 	generation := int64(0)
-	collect := func(msgs []*tg.Message) error {
+	collect := func(msgs []*tg.Message, sourceFingerprints map[int]string) error {
 		for _, m := range msgs {
 			if m.ID <= watermark || tutil.GetPeerID(m.PeerID) != bot.ID() {
 				continue
@@ -793,8 +795,19 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 			}
 			b.rememberBotMessages(m.ID)
 			data, _ := json.Marshal(m)
-			if fingerprints[m.ID] != string(data) {
-				seen[m.ID], fingerprints[m.ID] = m, string(data)
+			// Snapshots retain old live updates. Consume each source version once
+			// so it cannot overwrite newer history metadata on every poll.
+			if sourceFingerprints[m.ID] == string(data) {
+				continue
+			}
+			sourceFingerprints[m.ID] = string(data)
+			if previous := seen[m.ID]; previous != nil && m.EditDate < previous.EditDate {
+				continue
+			}
+			fingerprint := botMessageFingerprint(m)
+			seen[m.ID] = m // keep fresh download references even without a content change
+			if fingerprints[m.ID] != fingerprint {
+				fingerprints[m.ID] = fingerprint
 				lastChange = time.Now()
 				generation++
 			}
@@ -804,8 +817,18 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 		}
 		return nil
 	}
-	if err := collect(updateMessages(updates)); err != nil {
+	if err := collect(updateMessages(updates), liveFingerprints); err != nil {
 		return nil, err
+	}
+	collectLive := func() error {
+		if b.updates == nil {
+			return nil
+		}
+		msgs, err := b.updates.Snapshot(bot.ID(), watermark)
+		if collectErr := collect(msgs, liveFingerprints); collectErr != nil {
+			return collectErr
+		}
+		return err
 	}
 	tick := time.NewTicker(time.Duration(b.opts.PollInterval) * time.Millisecond)
 	defer tick.Stop()
@@ -836,18 +859,12 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 	}
 	for {
 		cycleGeneration := generation
-		if b.updates != nil {
-			msgs, err := b.updates.Snapshot(bot.ID(), watermark)
-			if collectErr := collect(msgs); collectErr != nil {
-				return nil, collectErr
-			}
-			if err != nil {
-				return nil, err
-			}
-			if generation != cycleGeneration {
-				historyInterval = historyBase
-				nextHistory = time.Time{}
-			}
+		if err := collectLive(); err != nil {
+			return nil, err
+		}
+		if generation != cycleGeneration {
+			historyInterval = historyBase
+			nextHistory = time.Time{}
 		}
 		// Poll live updates at the configured frequency, but back off history RPCs
 		// when nothing changes. A final history read proves the idle boundary.
@@ -856,7 +873,12 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 		readHistory := !time.Now().Before(nextHistory) || idle
 		if readHistory {
 			msgs, err := b.historySince(responseCtx, bot.InputPeer(), watermark)
-			if collectErr := collect(msgs); collectErr != nil {
+			if collectErr := collect(msgs, historyFingerprints); collectErr != nil {
+				return nil, collectErr
+			}
+			// Replies can arrive (and self-delete) while the history RPC is in
+			// flight. Include them before accepting the final idle boundary.
+			if collectErr := collectLive(); collectErr != nil {
 				return nil, collectErr
 			}
 			if err != nil {
@@ -868,6 +890,9 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 				historyInterval = min(historyMaximum, 2*historyInterval)
 			}
 			nextHistory = time.Now().Add(historyInterval)
+		}
+		if err := responseCtx.Err(); err != nil {
+			return nil, responseError(err)
 		}
 		actionable = botMessagesActionable(seen)
 		if !actionable {
@@ -888,6 +913,36 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 	}
 }
 
+// Compare the reply content used by the resolver. Read flags, preview metadata
+// and refreshed file references may differ across updates and history reads;
+// none of those differences means the bot is still sending its response.
+func botMessageFingerprint(m *tg.Message) string {
+	content := struct {
+		Text       string
+		EditDate   int
+		GroupedID  int64
+		MediaType  string
+		ResourceID string
+		FileName   string
+		Size       int64
+		DC         int
+		Links      []string
+	}{Text: m.Message, EditDate: m.EditDate, GroupedID: m.GroupedID}
+	if m.Media != nil {
+		content.MediaType = m.Media.TypeName()
+	}
+	if media, ok := tmedia.GetMedia(m); ok {
+		content.ResourceID = resourceIdentity(media)
+		content.FileName, content.Size, content.DC = media.Name, media.Size, media.DC
+	}
+	for _, link := range messageResourceLinks(m) {
+		content.Links = append(content.Links, link.key())
+	}
+	sort.Strings(content.Links)
+	data, _ := json.Marshal(content)
+	return string(data)
+}
+
 func botMessagesActionable(messages map[int]*tg.Message) bool {
 	for _, m := range messages {
 		if _, ok := tmedia.GetMedia(m); ok || len(messageResourceLinks(m)) > 0 {
@@ -905,12 +960,13 @@ func botResponseTimeout(botID int64, seconds int, messages map[int]*tg.Message) 
 	lastID := 0
 	summary := ""
 	for id, m := range messages {
-		if _, ok := tmedia.GetMedia(m); ok || len(messageResourceLinks(m)) > 0 || id < lastID {
+		if id <= lastID {
 			continue
 		}
-		text := strings.Join(strings.Fields(m.Message), " ")
-		if text != "" {
-			lastID, summary = id, text
+		lastID = id
+		summary = strings.Join(strings.Fields(m.Message), " ")
+		if summary == "" && m.Media != nil {
+			summary = m.Media.TypeName()
 		}
 	}
 	runes := []rune(summary)
@@ -918,7 +974,7 @@ func botResponseTimeout(botID int64, seconds int, messages map[int]*tg.Message) 
 		summary = string(runes[:159]) + "…"
 	}
 	if summary == "" {
-		summary = "no text reply"
+		summary = "no reply content"
 	}
-	return fmt.Errorf("bot %d response did not settle within %d seconds (%d messages): %s; last non-resource reply: %q; adjust bot_timeout_seconds/bot_idle_seconds: %w", botID, seconds, len(messages), reason, summary, context.DeadlineExceeded)
+	return fmt.Errorf("bot %d response did not settle within %d seconds (%d messages): %s; last reply (ID %d): %q; adjust bot_timeout_seconds/bot_idle_seconds: %w", botID, seconds, len(messages), reason, lastID, summary, context.DeadlineExceeded)
 }

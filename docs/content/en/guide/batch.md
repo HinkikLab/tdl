@@ -393,7 +393,11 @@ Idle and polling intervals must be shorter than the timeout, and
 English/Chinese rate-limit messages with seconds, minutes or hours trigger a
 cancellation-aware wait followed by a fresh request. Progress notifications
 keep waiting on the current request. This bot-specific backoff does not apply
-to group message links. Expired references first refresh the original message,
+to group message links. Multiple replies are collected together, including
+status text, videos, photos and trailing link text. Read-state changes and
+file-reference refreshes do not reset the idle interval. Timeout errors show
+the actual last reply's ID and content summary.
+Expired references first refresh the original message,
 then reissue the full chain if necessary. Identity, size and DC must match
 before the downloader uses a replacement reference. Failed posts remain
 incomplete. Reruns validate every complete resource by size before skipping

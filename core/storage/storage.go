@@ -10,6 +10,7 @@ import (
 )
 
 type Storage interface {
+	// Get returns an independent byte slice that remains valid after writes or Close.
 	Get(ctx context.Context, key string) ([]byte, error)
 	Set(ctx context.Context, key string, value []byte) error
 	Delete(ctx context.Context, key string) error

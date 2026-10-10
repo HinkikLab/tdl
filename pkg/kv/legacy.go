@@ -1,6 +1,7 @@
 package kv
 
 import (
+	"bytes"
 	"context"
 	"os"
 	"time"
@@ -65,7 +66,7 @@ func (l *legacy) MigrateTo() (Meta, error) {
 			ns := string(name)
 			meta[ns] = make(map[string][]byte)
 			return b.ForEach(func(k, v []byte) error {
-				meta[ns][string(k)] = v
+				meta[ns][string(k)] = bytes.Clone(v)
 				return nil
 			})
 		})
@@ -137,7 +138,8 @@ func (l *legacyKV) Get(_ context.Context, key string) ([]byte, error) {
 	var val []byte
 
 	if err := l.db.View(func(tx *bbolt.Tx) error {
-		val = tx.Bucket(l.ns).Get([]byte(key))
+		// Bolt values must be copied before the transaction releases its mmap lock.
+		val = bytes.Clone(tx.Bucket(l.ns).Get([]byte(key)))
 		return nil
 	}); err != nil {
 		return nil, err

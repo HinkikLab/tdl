@@ -33,10 +33,8 @@ type enumValue struct {
 
 func (e *enumValue) Set(value string) error {
 	if !isIncluded(value, e.options) {
-		return func() error {
-			messageArg1 := formatValuesForUsageDocs(e.options)
-			return diagnostic.Describe(fmt.Errorf("valid values are %s", messageArg1), corei18n.Message{ID: "errors.message.valid_values_are_value", Args: map[string]any{"Arg1": messageArg1}})
-		}()
+		valid := formatValuesForUsageDocs(e.options)
+		return diagnostic.Describe(fmt.Errorf("valid values are %s", valid), corei18n.Message{ID: "errors.message.valid_values_are_value", Args: map[string]any{"Arg1": valid}})
 	}
 	*e.string = value
 	return nil

@@ -91,10 +91,7 @@ func Parse(raw string, opts Options) (Ref, error) {
 		switch strings.ToLower(u.Hostname()) {
 		case "t.me", "telegram.me", "telegram.dog":
 		default:
-			return ref, func() error {
-				messageArg1 := u.Hostname()
-				return diagnostic.Describe(fmt.Errorf("unsupported link host %q (expected t.me)", messageArg1), corei18n.Message{ID: "errors.message.unsupported_link_host_value_expected_t_me", Args: map[string]any{"Arg1": fmt.Sprintf("%q", messageArg1)}})
-			}()
+			return ref, diagnostic.Describe(fmt.Errorf("unsupported link host %q (expected t.me)", u.Hostname()), corei18n.Message{ID: "errors.message.unsupported_link_host_value_expected_t_me", Args: map[string]any{"Arg1": fmt.Sprintf("%q", u.Hostname())}})
 		}
 		parts := strings.Split(strings.Trim(u.Path, "/"), "/")
 		if len(parts) > 0 && strings.EqualFold(parts[0], "s") {

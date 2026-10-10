@@ -352,10 +352,7 @@ func (i *iter) processSingle(ctx context.Context, message *tg.Message, from peer
 func (i *iter) processGrouped(ctx context.Context, message *tg.Message, from peers.Peer, startLogicalPos int) (bool, bool) {
 	grouped, err := tutil.GetGroupedMessages(ctx, i.pool.Default(ctx), from.InputPeer(), message)
 	if err != nil {
-		i.err = func() error {
-			messageArg2 := from.ID()
-			return diagnostic.Describe(errors.Wrapf(err, "resolve grouped message %d/%d", messageArg2, message.ID), corei18n.Message{ID: "errors.context.resolve_grouped_message_value_value", Args: map[string]any{"Arg1": messageArg2, "Arg2": message.ID, "Reason": err}})
-		}()
+		i.err = diagnostic.Describe(errors.Wrapf(err, "resolve grouped message %d/%d", from.ID(), message.ID), corei18n.Message{ID: "errors.context.resolve_grouped_message_value_value", Args: map[string]any{"Arg1": from.ID(), "Arg2": message.ID, "Reason": err}})
 		return false, false
 	}
 

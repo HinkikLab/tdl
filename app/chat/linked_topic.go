@@ -45,11 +45,7 @@ func validateLinkedPeer(peer tg.InputPeerClass, raw tg.MessageClass) error {
 		match = ok && a.UserID == p.UserID
 	}
 	if !match {
-		return func() error {
-			messageArg1 := raw.GetID()
-			messageArg2 := archiveSource(peer)
-			return diagnostic.Describe(fmt.Errorf("linked message %d peer mismatch: requested %s, received %T", messageArg1, messageArg2, actual), corei18n.Message{ID: "errors.message.linked_message_value_peer_mismatch_requested_value_received_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": messageArg2, "Arg3": fmt.Sprintf("%T", actual)}})
-		}()
+		return diagnostic.Describe(fmt.Errorf("linked message %d peer mismatch: requested %s, received %T", raw.GetID(), archiveSource(peer), actual), corei18n.Message{ID: "errors.message.linked_message_value_peer_mismatch_requested_value_received_value", Args: map[string]any{"Arg1": raw.GetID(), "Arg2": archiveSource(peer), "Arg3": fmt.Sprintf("%T", actual)}})
 	}
 	return nil
 }

@@ -245,10 +245,7 @@ func findAsset(release *github.RepositoryRelease, name string) (*github.ReleaseA
 			return a, nil
 		}
 	}
-	return nil, func() error {
-		messageArg2 := release.GetTagName()
-		return diagnostic.Describe(fmt.Errorf("asset %q not found in release %s", name, messageArg2), corei18n.Message{ID: "errors.message.asset_value_not_found_in_release_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", name), "Arg2": messageArg2}})
-	}()
+	return nil, diagnostic.Describe(fmt.Errorf("asset %q not found in release %s", name, release.GetTagName()), corei18n.Message{ID: "errors.message.asset_value_not_found_in_release_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", name), "Arg2": release.GetTagName()}})
 }
 
 // goARM returns the GOARM value used to build the binary ("7" as fallback),

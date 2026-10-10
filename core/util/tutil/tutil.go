@@ -143,10 +143,7 @@ func GetSingleMessage(ctx context.Context, c *tg.Client, peer tg.InputPeerClass,
 		BatchSize(1).Iter()
 
 	if !it.Next(ctx) {
-		return nil, func() error {
-			messageArg0 := it.Err()
-			return diagnostic.Describe(errors.Wrap(messageArg0, "get single message"), corei18n.Message{ID: "errors.context.get_single_message", Args: map[string]any{"Reason": messageArg0}})
-		}()
+		return nil, diagnostic.Describe(errors.Wrap(it.Err(), "get single message"), corei18n.Message{ID: "errors.context.get_single_message", Args: map[string]any{"Reason": it.Err()}})
 	}
 
 	m, ok := it.Value().Msg.(*tg.Message)
@@ -156,10 +153,7 @@ func GetSingleMessage(ctx context.Context, c *tg.Client, peer tg.InputPeerClass,
 
 	// check if message is deleted
 	if m.GetID() != msg {
-		return nil, func() error {
-			messageArg1 := GetInputPeerID(peer)
-			return diagnostic.Describe(fmt.Errorf("the message %d/%d: %w", messageArg1, msg, ErrMessageDeleted), corei18n.Message{ID: "errors.message.the_message_value_value_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": msg, "Arg3": ErrMessageDeleted}})
-		}()
+		return nil, diagnostic.Describe(fmt.Errorf("the message %d/%d: %w", GetInputPeerID(peer), msg, ErrMessageDeleted), corei18n.Message{ID: "errors.message.the_message_value_value_value", Args: map[string]any{"Arg1": GetInputPeerID(peer), "Arg2": msg, "Arg3": ErrMessageDeleted}})
 	}
 
 	return m, nil
@@ -237,10 +231,7 @@ func GetMessages(ctx context.Context, c *tg.Client, peer tg.InputPeerClass, msgs
 			continue
 		}
 		if msg.PeerID != nil && !messagePeerMatches(peer, msg.PeerID) {
-			return nil, nil, func() error {
-				messageArg3 := GetInputPeerID(peer)
-				return diagnostic.Describe(errors.Errorf("message %d belongs to a different peer than %T/%d", msg.ID, peer, messageArg3), corei18n.Message{ID: "errors.message.message_value_belongs_to_a_different_peer_than_value_value", Args: map[string]any{"Arg1": msg.ID, "Arg2": fmt.Sprintf("%T", peer), "Arg3": messageArg3}})
-			}()
+			return nil, nil, diagnostic.Describe(errors.Errorf("message %d belongs to a different peer than %T/%d", msg.ID, peer, GetInputPeerID(peer)), corei18n.Message{ID: "errors.message.message_value_belongs_to_a_different_peer_than_value_value", Args: map[string]any{"Arg1": msg.ID, "Arg2": fmt.Sprintf("%T", peer), "Arg3": GetInputPeerID(peer)}})
 		}
 		found[msg.ID] = msg
 	}

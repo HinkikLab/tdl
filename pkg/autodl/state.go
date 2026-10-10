@@ -257,10 +257,7 @@ func (s *State) CompleteMedia(id int, identity downloader.FileIdentity, path str
 		return diagnostic.Describe(errors.Wrap(err, "stat committed media"), corei18n.Message{ID: "errors.context.stat_committed_media", Args: map[string]any{"Reason": err}})
 	}
 	if !info.Mode().IsRegular() || info.Size() != identity.Size {
-		return func() error {
-			messageArg2 := info.Size()
-			return diagnostic.Describe(errors.Errorf("committed media %s has size %d, expected %d", path, messageArg2, identity.Size), corei18n.Message{ID: "errors.message.committed_media_value_has_size_value_expected_value", Args: map[string]any{"Arg1": path, "Arg2": messageArg2, "Arg3": identity.Size}})
-		}()
+		return diagnostic.Describe(errors.Errorf("committed media %s has size %d, expected %d", path, info.Size(), identity.Size), corei18n.Message{ID: "errors.message.committed_media_value_has_size_value_expected_value", Args: map[string]any{"Arg1": path, "Arg2": info.Size(), "Arg3": identity.Size}})
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

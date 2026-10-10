@@ -184,10 +184,7 @@ func runPrepared(ctx context.Context, c *telegram.Client, kvd storage.Storage, c
 		color.Cyan("%s", formatJobSummaryLocalized(jobCtx, result))
 		if err != nil {
 			failed++
-			multierr.AppendInto(&failures, func() error {
-				messageArg2 := idx + 1
-				return diagnostic.Describe(errors.Wrapf(err, "job %d (%s)", messageArg2, job.ChatURL), corei18n.Message{ID: "errors.context.job_value_value", Args: map[string]any{"Arg1": messageArg2, "Arg2": job.ChatURL, "Reason": err}})
-			}())
+			multierr.AppendInto(&failures, diagnostic.Describe(errors.Wrapf(err, "job %d (%s)", idx+1, job.ChatURL), corei18n.Message{ID: "errors.context.job_value_value", Args: map[string]any{"Arg1": idx + 1, "Arg2": job.ChatURL, "Reason": err}}))
 			log.Error("batch.job.failed", zap.String("event_id", "batch.job.failed"), zap.Int("job", idx+1), zap.Error(err))
 			color.Red("%s", console.Translate(jobCtx, messages.BatchJobFailed(idx+1, console.FormatError(err, corei18n.FromContext(jobCtx)))))
 		}
@@ -234,10 +231,7 @@ func (r *Runner) reserveStates() error {
 			}
 		}
 		if err := r.reservations.ReserveState(r.statePath(job), fmt.Sprintf("job %d state", i+1)); err != nil {
-			return func() error {
-				messageArg2 := i + 1
-				return diagnostic.Describe(errors.Wrapf(err, "job %d state ownership", messageArg2), corei18n.Message{ID: "errors.context.job_value_state_ownership", Args: map[string]any{"Arg1": messageArg2, "Reason": err}})
-			}()
+			return diagnostic.Describe(errors.Wrapf(err, "job %d state ownership", i+1), corei18n.Message{ID: "errors.context.job_value_state_ownership", Args: map[string]any{"Arg1": i + 1, "Reason": err}})
 		}
 	}
 	return nil

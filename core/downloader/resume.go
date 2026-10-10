@@ -110,10 +110,7 @@ func (d *Downloader) parallelIgnore(ctx context.Context, client *tg.Client, elem
 					return err
 				}
 				if int64(len(data)) != min(int64(MaxPartSize), size-offset) {
-					return func() error {
-						messageArg3 := len(data)
-						return diagnostic.Describe(errors.Wrapf(io.ErrUnexpectedEOF, "part %d: got %d bytes", index, messageArg3), corei18n.Message{ID: "errors.context.part_value_got_value_bytes", Args: map[string]any{"Arg1": index, "Arg2": messageArg3, "Reason": io.ErrUnexpectedEOF}})
-					}()
+					return diagnostic.Describe(errors.Wrapf(io.ErrUnexpectedEOF, "part %d: got %d bytes", index, len(data)), corei18n.Message{ID: "errors.context.part_value_got_value_bytes", Args: map[string]any{"Arg1": index, "Arg2": len(data), "Reason": io.ErrUnexpectedEOF}})
 				}
 				if _, err := w.WriteAt(data, offset); err != nil {
 					return diagnostic.Describe(errors.Wrap(err, "write output"), corei18n.Message{ID: "errors.context.write_output", Args: map[string]any{"Reason": err}})

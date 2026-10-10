@@ -141,10 +141,7 @@ func (m *Manager) Upgrade(ctx context.Context, ext Extension) error {
 
 		mf, err := e.loadManifest()
 		if err != nil {
-			return func() error {
-				messageArg2 := e.Name()
-				return diagnostic.Describe(errors.Wrapf(err, "load manifest of %q", messageArg2), corei18n.Message{ID: "errors.context.load_manifest_of_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", messageArg2), "Reason": err}})
-			}()
+			return diagnostic.Describe(errors.Wrapf(err, "load manifest of %q", e.Name()), corei18n.Message{ID: "errors.context.load_manifest_of_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", e.Name()), "Reason": err}})
 		}
 
 		if !m.dryRun {
@@ -152,10 +149,7 @@ func (m *Manager) Upgrade(ctx context.Context, ext Extension) error {
 				return diagnostic.Describe(errors.Wrapf(err, "remove old version extension"), corei18n.Message{ID: "errors.context.remove_old_version_extension", Args: map[string]any{"Reason": err}})
 			}
 			if err = m.installGitHub(ctx, mf.Owner, mf.Repo, false); err != nil {
-				return func() error {
-					messageArg2 := e.Name()
-					return diagnostic.Describe(errors.Wrapf(err, "install GitHub extension %q", messageArg2), corei18n.Message{ID: "errors.context.install_github_extension_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", messageArg2), "Reason": err}})
-				}()
+				return diagnostic.Describe(errors.Wrapf(err, "install GitHub extension %q", e.Name()), corei18n.Message{ID: "errors.context.install_github_extension_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", e.Name()), "Reason": err}})
 			}
 		}
 
@@ -245,11 +239,7 @@ func (m *Manager) installGitHub(ctx context.Context, owner, repo string, force b
 	}
 
 	if asset == nil {
-		return func() error {
-			messageArg1 := platform + ext
-			messageArg2 := release.GetHTMLURL()
-			return diagnostic.Describe(errors.Errorf("no matched binary(%s) found in the release(%s)", messageArg1, messageArg2), corei18n.Message{ID: "errors.message.no_matched_binary_value_found_in_the_release_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": messageArg2}})
-		}()
+		return diagnostic.Describe(errors.Errorf("no matched binary(%s) found in the release(%s)", platform+ext, release.GetHTMLURL()), corei18n.Message{ID: "errors.message.no_matched_binary_value_found_in_the_release_value", Args: map[string]any{"Arg1": platform + ext, "Arg2": release.GetHTMLURL()}})
 	}
 
 	if !m.dryRun {
@@ -258,10 +248,7 @@ func (m *Manager) installGitHub(ctx context.Context, owner, repo string, force b
 		}
 
 		if err = m.downloadGitHubAsset(ctx, owner, repo, asset, binPath); err != nil {
-			return func() error {
-				messageArg2 := asset.GetBrowserDownloadURL()
-				return diagnostic.Describe(errors.Wrapf(err, "download github asset %s", messageArg2), corei18n.Message{ID: "errors.context.download_github_asset_value", Args: map[string]any{"Arg1": messageArg2, "Reason": err}})
-			}()
+			return diagnostic.Describe(errors.Wrapf(err, "download github asset %s", asset.GetBrowserDownloadURL()), corei18n.Message{ID: "errors.context.download_github_asset_value", Args: map[string]any{"Arg1": asset.GetBrowserDownloadURL(), "Reason": err}})
 		}
 	}
 
@@ -337,10 +324,7 @@ func (m *Manager) populateLatestVersions(ctx context.Context, exts []Extension) 
 func (m *Manager) downloadGitHubAsset(ctx context.Context, owner, repo string, asset *github.ReleaseAsset, dst string) (rerr error) {
 	readCloser, _, err := m.github.Repositories.DownloadReleaseAsset(ctx, owner, repo, asset.GetID(), m.http)
 	if err != nil {
-		return func() error {
-			messageArg2 := asset.GetName()
-			return diagnostic.Describe(errors.Wrapf(err, "download release asset %s", messageArg2), corei18n.Message{ID: "errors.context.download_release_asset_value", Args: map[string]any{"Arg1": messageArg2, "Reason": err}})
-		}()
+		return diagnostic.Describe(errors.Wrapf(err, "download release asset %s", asset.GetName()), corei18n.Message{ID: "errors.context.download_release_asset_value", Args: map[string]any{"Arg1": asset.GetName(), "Reason": err}})
 	}
 	defer multierr.AppendInvoke(&rerr, multierr.Close(readCloser))
 

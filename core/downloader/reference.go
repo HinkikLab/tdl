@@ -103,10 +103,8 @@ func (r *referenceInvoker) Invoke(ctx context.Context, input bin.Encoder, output
 			return err
 		}
 		if refreshErr := r.refresh(ctx, generation); refreshErr != nil {
-			return func() error {
-				messageArg0 := multierr.Append(err, refreshErr)
-				return diagnostic.Describe(errors.Wrap(messageArg0, "refresh file reference"), corei18n.Message{ID: "errors.context.refresh_file_reference", Args: map[string]any{"Reason": messageArg0}})
-			}()
+			combined := multierr.Append(err, refreshErr)
+			return diagnostic.Describe(errors.Wrap(combined, "refresh file reference"), corei18n.Message{ID: "errors.context.refresh_file_reference", Args: map[string]any{"Reason": combined}})
 		}
 	}
 }

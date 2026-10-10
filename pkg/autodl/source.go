@@ -114,11 +114,7 @@ func (r *Runner) scanPeer(ctx context.Context, job *Job, link Link) (peers.Peer,
 		return nil, diagnostic.Describe(errors.Wrapf(err, "resolve chat override %q", job.Chat), corei18n.Message{ID: "errors.context.resolve_chat_override_value", Args: map[string]any{"Arg1": fmt.Sprintf("%q", job.Chat), "Reason": err}})
 	}
 	if peerKey(explicit) != peerKey(expected) {
-		return nil, func() error {
-			messageArg2 := peerKey(explicit)
-			messageArg3 := peerKey(expected)
-			return diagnostic.Describe(errors.Errorf("chat override %q resolves to %s, but chat_url/comment mode selects %s; scan and download sources must match", job.Chat, messageArg2, messageArg3), corei18n.Message{ID: "errors.batch.source_mismatch", Args: map[string]any{"Arg1": fmt.Sprintf("%q", job.Chat), "Arg2": messageArg2, "Arg3": messageArg3}})
-		}()
+		return nil, diagnostic.Describe(errors.Errorf("chat override %q resolves to %s, but chat_url/comment mode selects %s; scan and download sources must match", job.Chat, peerKey(explicit), peerKey(expected)), corei18n.Message{ID: "errors.batch.source_mismatch", Args: map[string]any{"Arg1": fmt.Sprintf("%q", job.Chat), "Arg2": peerKey(explicit), "Arg3": peerKey(expected)}})
 	}
 	return expected, nil
 }

@@ -399,10 +399,7 @@ func (f *Forwarder) forwardMessage(ctx context.Context, elem Elem, grouped ...*t
 		return nil
 	}
 
-	return func() error {
-		messageArg1 := elem.Mode()
-		return diagnostic.Describe(errors.Errorf("unsupported mode %v", messageArg1), corei18n.Message{ID: "errors.message.unsupported_mode_value", Args: map[string]any{"Arg1": messageArg1}})
-	}()
+	return diagnostic.Describe(errors.Errorf("unsupported mode %v", elem.Mode()), corei18n.Message{ID: "errors.message.unsupported_mode_value", Args: map[string]any{"Arg1": elem.Mode()}})
 }
 
 func (f *Forwarder) tuple(peer peers.Peer, msg *tg.Message) tuple {

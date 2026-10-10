@@ -290,10 +290,7 @@ func (r *Runner) advanceIncremental(ctx context.Context, job *Job, store *stateS
 		log.Warn("Incremental window still incomplete, keeping last_ts",
 			zap.Int("missing", len(missing)))
 
-		return func() error {
-			messageArg1 := len(missing)
-			return diagnostic.Describe(errors.Errorf("%d message(s) still missing; keeping last_ts", messageArg1), corei18n.Message{ID: "errors.message.value_message_s_still_missing_keeping_last_key_ts", Args: map[string]any{"Arg1": messageArg1}})
-		}()
+		return diagnostic.Describe(errors.Errorf("%d message(s) still missing; keeping last_ts", len(missing)), corei18n.Message{ID: "errors.message.value_message_s_still_missing_keeping_last_key_ts", Args: map[string]any{"Arg1": len(missing)}})
 	}
 
 	if endTS <= state.GetLastTS() {

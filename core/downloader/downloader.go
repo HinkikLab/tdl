@@ -152,10 +152,8 @@ func (d *Downloader) download(ctx context.Context, elem Elem) error {
 		return diagnostic.Describe(errors.Wrap(err, "download"), corei18n.Message{ID: "errors.context.download", Args: map[string]any{"Reason": err}})
 	}
 	if size := elem.File().Size(); size > 0 && w.downloaded.Load() != size {
-		return func() error {
-			messageArg1 := w.downloaded.Load()
-			return diagnostic.Describe(errors.Errorf("incomplete download: got %d bytes, expected %d", messageArg1, size), corei18n.Message{ID: "errors.message.incomplete_download_got_value_bytes_expected_value", Args: map[string]any{"Arg1": messageArg1, "Arg2": size}})
-		}()
+		downloaded := w.downloaded.Load()
+		return diagnostic.Describe(errors.Errorf("incomplete download: got %d bytes, expected %d", downloaded, size), corei18n.Message{ID: "errors.message.incomplete_download_got_value_bytes_expected_value", Args: map[string]any{"Arg1": downloaded, "Arg2": size}})
 	}
 
 	return nil

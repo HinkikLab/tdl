@@ -202,11 +202,12 @@ func (c *Config) Normalize() error {
 	if c.DownloadBase == "" {
 		c.DownloadBase = DefaultDownloadBase
 	}
-	for name, value := range map[string]*int{
-		"threads": c.Threads, "limit": c.Limit,
-	} {
-		if value != nil && *value <= 0 {
-			return diagnostic.Describe(errors.Errorf("%s must be positive", name), corei18n.Message{ID: "errors.message.value_must_be_positive", Args: map[string]any{"Arg1": name}})
+	for _, field := range []struct {
+		name  string
+		value *int
+	}{{"threads", c.Threads}, {"limit", c.Limit}} {
+		if field.value != nil && *field.value <= 0 {
+			return diagnostic.Describe(errors.Errorf("%s must be positive", field.name), corei18n.Message{ID: "errors.message.value_must_be_positive", Args: map[string]any{"Arg1": field.name}})
 		}
 	}
 	if c.Pool != nil && *c.Pool < 0 {
@@ -239,9 +240,12 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 			}
 		}
 	}
-	for field, value := range map[string]*int{"topic_id": j.TopicID, "reply_post_id": j.ReplyPostID} {
-		if value != nil && *value <= 0 {
-			return diagnostic.Describe(errors.Errorf("%s must be positive", field), corei18n.Message{ID: "errors.message.value_must_be_positive", Args: map[string]any{"Arg1": field}})
+	for _, field := range []struct {
+		name  string
+		value *int
+	}{{"topic_id", j.TopicID}, {"reply_post_id", j.ReplyPostID}} {
+		if field.value != nil && *field.value <= 0 {
+			return diagnostic.Describe(errors.Errorf("%s must be positive", field.name), corei18n.Message{ID: "errors.message.value_must_be_positive", Args: map[string]any{"Arg1": field.name}})
 		}
 	}
 	if j.TopicID != nil && j.ReplyPostID != nil {
@@ -290,30 +294,13 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 		if !j.UsesIncremental(globalIncremental) && link.MessageID > 0 && j.StartComment != nil {
 			return diagnostic.Describe(errors.New("follow_links cannot combine a post URL and a range"), corei18n.Message{ID: "errors.message.follow_key_links_cannot_combine_a_post_url_and_a_range"})
 		}
-		if j.MaxPosts < 0 {
-			return diagnostic.Describe(errors.New("max_posts must not be negative"), corei18n.Message{ID: "errors.message.max_key_posts_must_not_be_negative"})
-		}
-		if j.TagMatch != "" && j.TagMatch != "any" && j.TagMatch != "all" {
-			return diagnostic.Describe(errors.New("tag_match must be any or all"), corei18n.Message{ID: "errors.message.tag_key_match_must_be_any_or_all"})
-		}
-		if j.Tag != "" && strings.TrimSpace(j.Tag) == "" {
-			return diagnostic.Describe(errors.New("tag must not be blank"), corei18n.Message{ID: "errors.message.tag_must_not_be_blank"})
-		}
-		for _, tag := range j.Tags {
-			if strings.TrimSpace(tag) == "" {
-				return diagnostic.Describe(errors.New("tags must not contain blanks"), corei18n.Message{ID: "errors.message.tags_must_not_contain_blanks"})
-			}
+		if err := j.validateArchiveSelection(); err != nil {
+			return err
 		}
 		return j.LinkOptions.Normalize()
 	}
 
 	if j.IsTagJob() {
-		if j.Tag != "" && strings.TrimSpace(j.Tag) == "" {
-			return diagnostic.Describe(errors.New("tag must not be blank"), corei18n.Message{ID: "errors.message.tag_must_not_be_blank"})
-		}
-		if j.TopicID != nil && *j.TopicID <= 0 {
-			return diagnostic.Describe(errors.New("topic_id must be positive"), corei18n.Message{ID: "errors.message.topic_key_id_must_be_positive"})
-		}
 		if _, err := chat.ParseTagTarget(j.ChatURL, num(j.TopicID)); err != nil {
 			return err
 		}
@@ -323,21 +310,7 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 		if err := j.validateArchiveRange(globalIncremental); err != nil {
 			return err
 		}
-		if j.MaxPosts < 0 {
-			return diagnostic.Describe(errors.New("max_posts must not be negative"), corei18n.Message{ID: "errors.message.max_key_posts_must_not_be_negative"})
-		}
-		if j.TagMatch != "" && j.TagMatch != "any" && j.TagMatch != "all" {
-			return diagnostic.Describe(errors.New("tag_match must be any or all"), corei18n.Message{ID: "errors.message.tag_key_match_must_be_any_or_all"})
-		}
-		if j.Tag == "" && len(j.Tags) == 0 {
-			return diagnostic.Describe(errors.New("tag or tags is required"), corei18n.Message{ID: "errors.message.tag_or_tags_is_required"})
-		}
-		for _, tag := range j.Tags {
-			if strings.TrimSpace(tag) == "" {
-				return diagnostic.Describe(errors.New("tags must not contain blanks"), corei18n.Message{ID: "errors.message.tags_must_not_contain_blanks"})
-			}
-		}
-		return nil
+		return j.validateArchiveSelection()
 	}
 
 	if !j.UsesIncremental(globalIncremental) {
@@ -358,6 +331,26 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 		}
 	}
 
+	return nil
+}
+
+// validateArchiveSelection checks the post selectors shared by tag and
+// follow_links jobs. Tags are optional for follow_links jobs.
+func (j *Job) validateArchiveSelection() error {
+	if j.MaxPosts < 0 {
+		return diagnostic.Describe(errors.New("max_posts must not be negative"), corei18n.Message{ID: "errors.message.max_key_posts_must_not_be_negative"})
+	}
+	if _, err := chat.ParseTagMatch(j.TagMatch); err != nil {
+		return err
+	}
+	if j.Tag != "" && strings.TrimSpace(j.Tag) == "" {
+		return diagnostic.Describe(errors.New("tag must not be blank"), corei18n.Message{ID: "errors.message.tag_must_not_be_blank"})
+	}
+	for _, tag := range j.Tags {
+		if strings.TrimSpace(tag) == "" {
+			return diagnostic.Describe(errors.New("tags must not contain blanks"), corei18n.Message{ID: "errors.message.tags_must_not_contain_blanks"})
+		}
+	}
 	return nil
 }
 

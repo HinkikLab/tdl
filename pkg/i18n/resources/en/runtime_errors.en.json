@@ -224,9 +224,6 @@
   "errors.message.max_posts_must_not_be_negative": {
     "other": "max posts must not be negative"
   },
-  "errors.message.tag_match_mode_must_be_any_or_all": {
-    "other": "tag match mode must be any or all"
-  },
   "errors.message.resolve_chat_value_value": {
     "other": "resolve chat {{.Arg1}}: {{.Arg2}}"
   },
@@ -757,9 +754,6 @@
   },
   "errors.message.tag_job_cannot_select_comment_mode_or_reply_key_post_key_id": {
     "other": "tag job cannot select comment mode or reply_post_id"
-  },
-  "errors.message.tag_or_tags_is_required": {
-    "other": "tag or tags is required"
   },
   "errors.batch.selector_requires_incremental": {
     "other": "topic_id and reply_post_id require incremental mode for message jobs"

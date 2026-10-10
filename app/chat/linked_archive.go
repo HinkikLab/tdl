@@ -140,12 +140,9 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 			return err
 		}
 	}
-	mode := opts.TagMatch
-	if mode == "" {
-		mode = "any"
-	}
-	if mode != "any" && mode != "all" {
-		return diagnostic.Describe(fmt.Errorf("tag_match must be any or all"), corei18n.Message{ID: "errors.message.tag_key_match_must_be_any_or_all"})
+	mode, err := ParseTagMatch(opts.TagMatch)
+	if err != nil {
+		return err
 	}
 	root := filepath.Join(opts.Dir, strconv.FormatInt(peer.ID(), 10))
 	selected, skipped := 0, 0
@@ -425,14 +422,6 @@ func archiveLinkedPost(ctx context.Context, root string, post tagPost, album []*
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
-	}
-	if opts.Reservations == nil {
-		opts.Reservations = &transfer.Reservations{}
-	}
-	if defaultOn(opts.WriteMetadata) {
-		if _, err := opts.Reservations.Reserve(filepath.Join(dir, "meta.json"), fmt.Sprintf("linked-metadata:%d:%d", post.ChatID, post.MessageID)); err != nil {
-			return err
-		}
 	}
 	meta := linkedPost{tagPost: post, Version: 1, LinkHash: hash, Hops: hops}
 	for _, l := range roots {

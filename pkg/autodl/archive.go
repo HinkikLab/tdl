@@ -103,9 +103,9 @@ func (r *Runner) archiveStateScopeForSource(job *Job, dir, source string) (strin
 		identityRunner.opts.Include = nil
 		identityRunner.opts.Exclude = nil
 	}
-	match := job.TagMatch
-	if match == "" {
-		match = "any"
+	match, err := chat.ParseTagMatch(job.TagMatch)
+	if err != nil {
+		return "", err
 	}
 	// Include selection and output semantics so changing tags or link options
 	// cannot inherit a timestamp that would hide previously unselected posts.

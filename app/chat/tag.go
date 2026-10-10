@@ -114,12 +114,9 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 	if err != nil {
 		return err
 	}
-	mode := strings.ToLower(strings.TrimSpace(opts.TagMatch))
-	if mode == "" {
-		mode = "any"
-	}
-	if mode != "any" && mode != "all" {
-		return diagnostic.Describe(fmt.Errorf("tag match mode must be any or all"), corei18n.Message{ID: "errors.message.tag_match_mode_must_be_any_or_all"})
+	mode, err := ParseTagMatch(opts.TagMatch)
+	if err != nil {
+		return err
 	}
 	manager := opts.Manager
 	if manager == nil {
@@ -228,6 +225,24 @@ func downloadTag(ctx context.Context, api *tg.Client, c *telegram.Client, kvd st
 	return nil
 }
 
+// Tag match modes for posts selected by multiple tags.
+const (
+	TagMatchAny = "any"
+	TagMatchAll = "all"
+)
+
+// ParseTagMatch normalizes a tag match mode; empty selects TagMatchAny.
+func ParseTagMatch(raw string) (string, error) {
+	switch mode := strings.ToLower(strings.TrimSpace(raw)); mode {
+	case "":
+		return TagMatchAny, nil
+	case TagMatchAny, TagMatchAll:
+		return mode, nil
+	default:
+		return "", diagnostic.Describe(fmt.Errorf("tag_match must be any or all"), corei18n.Message{ID: "errors.message.tag_key_match_must_be_any_or_all"})
+	}
+}
+
 func matchAlbumIfMedia(pending []tagMedia, tags []string, mode string, id int64, chat string) (tagPost, bool) {
 	if len(pending) == 0 {
 		return tagPost{}, false
@@ -319,7 +334,7 @@ func matchAlbum(pending []tagMedia, tags []string, mode string, chatID int64, ch
 			matched = append(matched, tag)
 		}
 	}
-	if len(matched) == 0 || (mode == "all" && len(matched) != len(tags)) {
+	if len(matched) == 0 || (mode == TagMatchAll && len(matched) != len(tags)) {
 		return tagPost{}, false
 	}
 	media := make([]tagMedia, len(pending))

@@ -224,9 +224,6 @@
   "errors.message.max_posts_must_not_be_negative": {
     "other": "max_posts 不能为负数"
   },
-  "errors.message.tag_match_mode_must_be_any_or_all": {
-    "other": "标签匹配模式必须为 any 或 all"
-  },
   "errors.message.resolve_chat_value_value": {
     "other": "解析聊天 {{.Arg1}}：{{.Arg2}}"
   },
@@ -757,9 +754,6 @@
   },
   "errors.message.tag_job_cannot_select_comment_mode_or_reply_key_post_key_id": {
     "other": "标签任务不能选择评论模式或 reply_post_id"
-  },
-  "errors.message.tag_or_tags_is_required": {
-    "other": "必须设置 tag 或 tags"
   },
   "errors.batch.selector_requires_incremental": {
     "other": "消息任务的 topic_id 和 reply_post_id 需要增量模式"

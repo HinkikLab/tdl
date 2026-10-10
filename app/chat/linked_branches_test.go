@@ -71,8 +71,85 @@ func TestLinkedResolutionKeepsMediaAcrossEightBotLayers(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, files, 3)
 	require.Equal(t, []string{"document_2", "photo_5_x", "document_8"}, []string{resourceIdentity(files[0].Media), resourceIdentity(files[1].Media), resourceIdentity(files[2].Media)})
-	require.Len(t, visited, 10, "each distinct bot start link is visited once; group invites are not fetched")
-	require.Len(t, hops, 10)
+	require.Len(t, visited, 8, "promotion links are deferred and not requested once files exist; group invites are not fetched")
+	require.Len(t, hops, 10, "the two deferred promotion links remain visible as skipped hops")
+	for _, hop := range hops[8:] {
+		require.Contains(t, hop.URL, "AnYunBot")
+		require.Contains(t, hop.Skipped, "promotion link not requested")
+	}
+}
+
+func TestLinkedResolutionDefersLabeledPromotions(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		sourceFiles   bool
+		disabled      bool
+		files         int
+		promoRequests int
+	}{
+		{name: "files found elsewhere", sourceFiles: true, files: 1, promoRequests: 0},
+		{name: "fallback requests every deferred link", sourceFiles: false, files: 2, promoRequests: 2},
+		{name: "deferral disabled", sourceFiles: true, disabled: true, files: 3, promoRequests: 2},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			opts := LinkOptions{}
+			if tc.disabled {
+				no := false
+				opts.DeferPromotions = &no
+			}
+			require.NoError(t, opts.Normalize())
+			root := resourceLink{Kind: "bot", Chat: "source_bot", Start: "files"}
+			promoRequests := 0
+			r := &linkResolver{opts: opts, backend: linkedFakeBackend{fetch: func(_ context.Context, l resourceLink) ([]resourceMessage, error) {
+				if l.Chat == "source_bot" {
+					msgs := []resourceMessage{{Message: linkedPromotionMessage(2)}}
+					if tc.sourceFiles {
+						msgs = append(msgs, resourceMessage{Peer: &tg.InputPeerUser{UserID: 100}, Message: linkedDocument(1, 1, "ref", []byte("first"))})
+					}
+					return msgs, nil
+				}
+				promoRequests++
+				id := int64(2)
+				if l.Start == "ad" {
+					id = 3
+				}
+				return []resourceMessage{{Peer: &tg.InputPeerUser{UserID: 200}, Message: linkedDocument(3, id, "ref", []byte("more"))}}, nil
+			}}}
+			files, _, err := r.Resolve(t.Context(), []resourceLink{root})
+			require.NoError(t, err)
+			require.Len(t, files, tc.files)
+			require.Equal(t, tc.promoRequests, promoRequests)
+		})
+	}
+}
+
+func TestLinkedResolutionStopsAdChainsOnceFallbackFindsFiles(t *testing.T) {
+	opts := LinkOptions{}
+	require.NoError(t, opts.Normalize())
+	ad := func(chat string) *tg.Message {
+		m := &tg.Message{ID: 2, Message: "x"}
+		m.SetReplyMarkup(&tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonURL{Text: "广告", URL: "https://t.me/" + chat + "?start=1"}}}}})
+		return m
+	}
+	var visited []string
+	r := &linkResolver{opts: opts, backend: linkedFakeBackend{fetch: func(_ context.Context, l resourceLink) ([]resourceMessage, error) {
+		visited = append(visited, l.Chat)
+		switch l.Chat {
+		case "source_bot":
+			return []resourceMessage{{Message: ad("first_ad_bot")}}, nil
+		case "first_ad_bot":
+			return []resourceMessage{
+				{Peer: &tg.InputPeerUser{UserID: 200}, Message: linkedDocument(3, 3, "ref", []byte("file"))},
+				{Message: ad("second_ad_bot")},
+			}, nil
+		}
+		return nil, fmt.Errorf("unexpected request to %s", l.Chat)
+	}}}
+	files, hops, err := r.Resolve(t.Context(), []resourceLink{{Kind: "bot", Chat: "source_bot", Start: "files"}})
+	require.NoError(t, err)
+	require.Len(t, files, 1)
+	require.Equal(t, []string{"source_bot", "first_ad_bot"}, visited)
+	require.Contains(t, hops[len(hops)-1].Skipped, "promotion link not requested")
 }
 
 func TestLinkedResolutionDoesNotGuessPromotionFromBotNameOrPayload(t *testing.T) {
@@ -83,18 +160,71 @@ func TestLinkedResolutionDoesNotGuessPromotionFromBotNameOrPayload(t *testing.T)
 		if l.Chat == "source_bot" {
 			return []resourceMessage{
 				{Peer: &tg.InputPeerUser{UserID: 100}, Message: linkedDocument(1, 1, "ref", []byte("first"))},
-				{Message: linkedPromotionMessage(2)},
+				{Message: &tg.Message{ID: 2, Message: "https://t.me/AdYunBot?start=ad https://t.me/ad_bot?start=1"}},
 			}, nil
 		}
-		id := int64(2)
-		if l.Start == "ad" {
-			id = 3
-		}
-		return []resourceMessage{{Peer: &tg.InputPeerUser{UserID: 200}, Message: linkedDocument(3, id, "ref", []byte("more"))}}, nil
+		return []resourceMessage{{Peer: &tg.InputPeerUser{UserID: 200}, Message: linkedDocument(3, int64(len(l.Chat)), "ref", []byte("more"))}}, nil
 	}}}
 	files, _, err := r.Resolve(t.Context(), []resourceLink{root})
 	require.NoError(t, err)
-	require.Len(t, files, 3, "media from every visited bot is retained even with a short or ad-like payload")
+	require.Len(t, files, 3, "unlabeled links are requested even with an ad-like bot name or payload")
+}
+
+func TestPromotionLabels(t *testing.T) {
+	opts := LinkOptions{PromotionKeywords: []string{" VPN "}}
+	require.NoError(t, opts.Normalize())
+	text := strings.Join([]string{
+		"资源下载：https://t.me/files_bot?start=abc 广告：https://t.me/ad_bot?start=x",
+		"赞助商👇",
+		"https://t.me/sponsor_bot?start=1",
+		"https://t.me/vpn_bot?start=2 best VPN",
+		"https://t.me/group/5 (AD)",
+	}, "\n")
+	links := messageResourceLinks(&tg.Message{Message: text}, opts.promotion)
+	promo := map[string]bool{}
+	for _, l := range links {
+		promo[l.Chat] = l.Promo
+	}
+	require.Equal(t, map[string]bool{"files_bot": false, "ad_bot": true, "sponsor_bot": true, "vpn_bot": true, "group": true}, promo)
+
+	m := linkedPromotionMessage(1)
+	for _, l := range messageResourceLinks(m, opts.promotion) {
+		require.True(t, l.Promo, "a promotion button marks every link to that bot in the message: %s", l.URL())
+	}
+	no := false
+	opts.DeferPromotions = &no
+	for _, l := range messageResourceLinks(m, opts.promotion) {
+		require.False(t, l.Promo)
+	}
+	require.False(t, (&LinkOptions{}).promotion("Download"), "word boundaries keep 'ad' inside words unlabeled")
+}
+
+func TestPromotionBannerDroppedOnlyWhenOtherFilesExist(t *testing.T) {
+	opts := LinkOptions{}
+	require.NoError(t, opts.Normalize())
+	banner := botMultipleReplies("ref")[3]
+	banner.ID = 9
+	banner.SetReplyMarkup(&tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonURL{Text: "广告", URL: "https://t.me/ad_bot?start=x"}}}}})
+	for _, withFile := range []bool{true, false} {
+		r := &linkResolver{opts: opts, backend: linkedFakeBackend{fetch: func(_ context.Context, l resourceLink) ([]resourceMessage, error) {
+			if l.Chat == "ad_bot" {
+				return nil, botResponseTimeout(200, 10, nil)
+			}
+			msgs := []resourceMessage{{Peer: &tg.InputPeerUser{UserID: 100}, Message: banner}}
+			if withFile {
+				msgs = append(msgs, resourceMessage{Peer: &tg.InputPeerUser{UserID: 100}, Message: linkedDocument(1, 1, "ref", []byte("file"))})
+			}
+			return msgs, nil
+		}}}
+		files, _, err := r.Resolve(t.Context(), []resourceLink{{Kind: "bot", Chat: "source_bot", Start: "files"}})
+		require.NoError(t, err)
+		require.Len(t, files, 1)
+		if withFile {
+			require.Equal(t, "document_1", resourceIdentity(files[0].Media))
+		} else {
+			require.Equal(t, resourceIdentity(files[0].Media), "photo_100_x", "a banner is kept when it is the only media")
+		}
+	}
 }
 
 func TestLinkedResolutionMediaSurvivesDeadEndsInAnyOrder(t *testing.T) {
@@ -289,7 +419,7 @@ func TestLinkedArchiveBotRepliesWithPromotionLinksAndCachedDeadRoot(t *testing.T
 		Links: LinkOptions{BotTimeout: 2, BotIdle: 1, PollInterval: 10, ScanComments: &no, CleanupBotMessages: &no},
 	}
 	require.NoError(t, downloadLinked(t.Context(), api, &archiveMemory{}, opts))
-	require.Equal(t, map[string]int{"100:files": 1, "200:ad": 1, "200:1": 1}, requests)
+	require.Equal(t, map[string]int{"100:files": 1}, requests, "labeled promotion links are not requested once files exist")
 	entries, err := os.ReadDir(filepath.Join(opts.Dir, "50"))
 	require.NoError(t, err)
 	require.Len(t, entries, 1)

@@ -23,5 +23,7 @@
   "chat.linked.partial": {"other": "已保留未经验证的部分下载：{{.Path}}"},
   "chat.archive.preserved": {"other": "已保留未经验证的归档文件：{{.Path}}"},
   "chat.linked.bot_rate_limit": {"other": "机器人 {{.Bot}} 触发速率限制；等待 {{.Seconds}} 秒后进行第 {{.Retry}}/{{.Retries}} 次重试"},
-  "chat.linked.bot_interval": {"other": "机器人 {{.Bot}}：距离上次回复后等待 {{.Seconds}} 秒再发送请求"}
+  "chat.linked.bot_interval": {"other": "机器人 {{.Bot}}：距离上次回复后等待 {{.Seconds}} 秒再发送请求"},
+  "chat.linked.series": {"other": "消息 {{.ID}}：已追加同一发送者随后发送的 {{.Count}} 条媒体消息"},
+  "chat.linked.promotion_media_skipped": {"other": "已跳过 {{.Count}} 张附带推广链接的广告图片"}
 }

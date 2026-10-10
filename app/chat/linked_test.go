@@ -72,7 +72,7 @@ func TestResourceLinkEntitiesAndButtons(t *testing.T) {
 		&tg.MessageEntityTextURL{Offset: 0, Length: 2, URL: "https://t.me/course_files/12"},
 	})
 	m.SetReplyMarkup(&tg.ReplyInlineMarkup{Rows: []tg.KeyboardButtonRow{{Buttons: []tg.KeyboardButtonClass{&tg.KeyboardButtonURL{Text: "files", URL: "tg://resolve?domain=other_bot&start=next"}, &tg.KeyboardButtonURL{Text: "web", URL: "https://example.com/"}}}}})
-	links := messageResourceLinks(m)
+	links := messageResourceLinks(m, nil)
 	require.Len(t, links, 3)
 	require.Equal(t, "message", links[0].Kind)
 	require.Equal(t, 12, links[0].ID)
@@ -89,7 +89,7 @@ func TestResourceLinkParsing(t *testing.T) {
 		require.Equal(t, "2255983776", l.Chat)
 		require.Zero(t, l.ID)
 	}
-	require.Empty(t, messageResourceLinks(&tg.Message{Message: "https://t.me/c/2255983776/"}), "home links remain non-actionable resource entries")
+	require.Empty(t, messageResourceLinks(&tg.Message{Message: "https://t.me/c/2255983776/"}, nil), "home links remain non-actionable resource entries")
 	for _, raw := range []string{"t.me/files/13", "https://telegram.me/s/files/4/13", "tg://resolve?domain=files&post=13", "https://t.me/c/42/2/13?single", "tg://privatepost?channel=42&post=13&single"} {
 		l, err := parseResourceLink(raw)
 		require.NoError(t, err)
@@ -354,7 +354,7 @@ func TestCommentLinkUsesDiscussionRootAndReturnedAccessHash(t *testing.T) {
 	result, err := b.Comments(context.Background(), &tg.InputPeerChannel{ChannelID: 1}, m, 1)
 	require.NoError(t, err)
 	require.Len(t, result, 1)
-	require.Equal(t, "resources", messageResourceLinks(result[0].Message)[0].Chat)
+	require.Equal(t, "resources", messageResourceLinks(result[0].Message, nil)[0].Chat)
 }
 
 func TestLinkedMetadataAndNaming(t *testing.T) {

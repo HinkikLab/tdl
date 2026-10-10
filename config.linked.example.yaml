@@ -29,3 +29,8 @@ jobs: # Tasks execute in order; keep only the examples you need
       flood_retries: 5 # Retries for bot text flood limits; default 5; 0 disables
       flood_wait_seconds: 30 # Fallback wait when no flood duration is supplied, in seconds; default 30
       max_flood_wait_seconds: 3600 # Maximum accepted bot text flood wait in seconds; default 3600
+      bot_text_idle_seconds: 10 # Treat a bot as a dead end after text-only replies and this many quiet seconds; progress notices wait for the timeout
+      follow_series: true # Also collect the albums the same sender posts right after a linked group message; default true
+      series_gap_seconds: 120 # Maximum seconds between consecutive albums of one resource; default 120
+      defer_promotions: true # Request links labeled as ads only when no other branch returns files; default true
+      promotion_keywords: [] # Extra label keywords that mark promotion links, added to the built-in list

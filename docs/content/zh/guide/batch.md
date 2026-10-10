@@ -316,12 +316,38 @@ namespace: default
 `hops[].skipped`。例如八层中三层返回媒体，会下载这三层的全部资源。
 未解析到任何资源时仍报告失败或跳过失效目标；网络/RPC 错误、限流重试耗尽、
 有资源但回复未稳定的超时以及主动取消仍报告失败。
-无法可靠判断链接是否用于推广，所以不会按机器人名称、`start=1` 或 `start=ad` 屏蔽链接；
-推广入口也可能被请求并等待配置的 timeout，其返回的媒体同样会保留。
+
+推广链接只按“标注”识别，不按机器人名称或 `start=1`、`start=ad` 之类的参数判断。
+标注指按钮文字、超链接的锚文本、同一行中普通 URL 旁边的文字，或单独成行的 URL
+上一行的文字。标注含有 推广、广告、赞助、金主、商务、合作、互推、招商、投放、
+sponsor、promo、advert、独立单词 AD/ADS，或 `promotion_keywords` 中的关键词时，
+同一条消息内指向该目标的所有链接都视为推广。`defer_promotions: true`（默认）时，
+这些链接要等其他所有分支处理完毕后再处理：其他分支已得到文件时直接跳过，并记录在
+`hops[].skipped`；否则照旧请求全部推广链接，而这些推广回复中再出现的推广链接（广告链）
+只在仍未得到任何文件时才继续请求。
+只带推广链接的单张图片（广告横幅）仅在没有其他文件时才下载；文档、视频和相册成员
+始终保留，因为机器人常把广告按钮直接附在资源消息上。
+
+机器人只回复文字（没有文件也没有资源链接）时，连续 `bot_text_idle_seconds` 秒
+无新回复即视为无资源分支，不再等满 `bot_timeout_seconds`。含有处理或发送提示的回复
+（如“正在”“请稍候”“检测到…共 N 个”“自动删除”、processing、please wait）
+仍等待至超时；机器人完全没有回复时同样等待至超时。
+
+带 `?start=` 的链接若实际指向群组、频道或普通用户，会以注明实际目标类型的原因跳过，
+不再把整个会话标记为失效，因此同一群组的消息链接仍可正常解析。
+
+频道和超级群组中的资源消息还会收集同一发送者紧接着发送的后续相册
+（`follow_series`，默认 `true`），因为 Telegram 每个相册最多 10 项。
+中间可以夹杂其他成员的消息、服务消息或其他论坛话题的消息。遇到同一发送者的
+无文件消息、带资源链接的消息、说明文字指向另一个帖子（仅比较文字中的字母，
+因此 `合集 (1/3)` 与 `合集 (2/3)` 视为相同），或间隔超过 `series_gap_seconds`
+时停止。`?single` 链接和机器人回复不做扩展；最多向后扫描 300 条消息。
+
 资源链接若指向已由 Telegram 确认的论坛话题根，会按 `max_topic_messages`
 有界扫描该话题，保留跨页完整相册，并继续解析其中的后续链接。
-普通资源消息仍按单条消息或完整相册处理；主帖来源的 topic/reply 选择限制不变。
+主帖来源的 topic/reply 选择限制不变。
 资源链接中的显式话题路径或 `thread` 参数会校验消息与相册归属。
+修改上述选项不会重新解析已完整归档的帖子；如需重新解析，删除该帖的 `meta.json`。
 主帖和资源说明不会混用：输出保持为
 `<download_base>/<subdir>/<主群ID>/<主帖说明 [主帖ID]>/`，
 其中保存实际资源、整组预览媒体（默认开启），并可输出包含主帖原始说明、入口、
@@ -347,10 +373,16 @@ namespace: default
 | `flood_retries` | `5` | 机器人文本限流后重新请求次数；`0` 禁用 |
 | `flood_wait_seconds` | `30` | 明确限流提示没有时长时的等待秒数 |
 | `max_flood_wait_seconds` | `3600` | 机器人文本限流的最大自动等待秒数，超出时报告失败 |
+| `bot_text_idle_seconds` | `10` | 机器人只回复文字后连续静默多久视为无资源；不小于 `bot_timeout_seconds` 时等同于关闭 |
+| `follow_series` | `true` | 收集链接消息之后同一发送者连续发送的相册 |
+| `series_gap_seconds` | `120` | 同一资源相邻相册之间允许的最大间隔秒数 |
+| `defer_promotions` | `true` | 标注为推广的链接仅在其他分支都没有文件时才请求 |
+| `promotion_keywords` | `[]` | 额外的推广标注关键词，不区分大小写 |
 
 数值 `0` 在大多数 `link_options` 字段中表示使用默认值；只有
 `rerequest_limit` / `flood_retries` 的 `0` 表示禁用对应重试，`bot_request_interval_seconds: 0` 禁用请求间隔。
-`scan_comments`、`include_previews`、`cleanup_bot_messages` 均可显式设为 `false`。
+`scan_comments`、`include_previews`、`cleanup_bot_messages`、`follow_series`、
+`defer_promotions` 均可显式设为 `false`。文字静默时间与相册间隔上限均为 `3600` 秒。
 其他上限为：timeout `3600` 秒、idle `300` 秒、poll `60000` 毫秒、
 bot messages / comment limit `10000`、topic messages `100000`、rerequest `10` 次、flood retries `20` 次、
 fallback wait `3600` 秒、maximum wait `86400` 秒。

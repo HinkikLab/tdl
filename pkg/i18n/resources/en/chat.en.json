@@ -23,5 +23,7 @@
   "chat.linked.partial": {"other": "Preserved unverified partial download: {{.Path}}"},
   "chat.archive.preserved": {"other": "Preserved unverified archive file: {{.Path}}"},
   "chat.linked.bot_rate_limit": {"other": "Bot {{.Bot}} rate limited; waiting {{.Seconds}} seconds before retry {{.Retry}}/{{.Retries}}"},
-  "chat.linked.bot_interval": {"other": "Bot {{.Bot}}: waiting {{.Seconds}} seconds after its last reply before requesting again"}
+  "chat.linked.bot_interval": {"other": "Bot {{.Bot}}: waiting {{.Seconds}} seconds after its last reply before requesting again"},
+  "chat.linked.series": {"other": "Message {{.ID}}: added {{.Count}} follow-up media message(s) posted by the same sender"},
+  "chat.linked.promotion_media_skipped": {"other": "Skipped {{.Count}} promotional image(s) attached to ad links"}
 }

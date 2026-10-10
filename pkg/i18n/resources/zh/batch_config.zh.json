@@ -418,5 +418,20 @@
   },
   "batch.config.overview.paths": {
     "other": "相对路径以命令执行目录为基准；每个任务使用独立 subdir。"
+  },
+  "batch.config.jobs.linked_single.link_options.bot_text_idle_seconds": {
+    "other": "机器人只回复文字（无文件或链接）且静默此秒数后视为无资源；“正在处理”类提示仍等待至超时"
+  },
+  "batch.config.jobs.linked_single.link_options.follow_series": {
+    "other": "同时收集链接消息之后同一发送者连续发送的相册；默认 true"
+  },
+  "batch.config.jobs.linked_single.link_options.series_gap_seconds": {
+    "other": "同一资源连续相册之间允许的最大间隔秒数；默认 120"
+  },
+  "batch.config.jobs.linked_single.link_options.defer_promotions": {
+    "other": "标注为广告/推广的链接仅在其他分支都没有文件时才请求；默认 true"
+  },
+  "batch.config.jobs.linked_single.link_options.promotion_keywords": {
+    "other": "额外的推广标记关键词，与内置列表合并"
   }
 }

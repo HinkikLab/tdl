@@ -36,8 +36,18 @@ func (e *unavailableResourceError) Unwrap() error { return e.err }
 func (c *UnavailableLinks) lookup(l resourceLink) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.targets[strings.ToLower(l.Chat)]
+	if err := c.targets[strings.ToLower(l.Chat)]; err != nil {
+		return err
+	}
+	if l.Kind == linkKindBot {
+		return c.targets[botOnlyKey(l.Chat)]
+	}
+	return nil
 }
+
+// BOT_INVALID only says the target cannot serve bot requests. Keep it from
+// hiding message links into the same chat.
+func botOnlyKey(chat string) string { return "bot:" + strings.ToLower(chat) }
 
 func (c *UnavailableLinks) remember(l resourceLink, err error) error {
 	return c.rememberContext(context.Background(), l, err)
@@ -55,6 +65,9 @@ func (c *UnavailableLinks) rememberContext(ctx context.Context, l resourceLink, 
 		c.targets = map[string]error{}
 	}
 	key := strings.ToLower(l.Chat)
+	if tgerr.Is(err, "BOT_INVALID") {
+		key = botOnlyKey(l.Chat)
+	}
 	if saved := c.targets[key]; saved != nil {
 		return saved
 	}

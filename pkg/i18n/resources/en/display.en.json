@@ -136,5 +136,14 @@
   },
   "progress.eta": {
     "other": "~ETA"
+  },
+  "linked.target.user": {
+    "other": "user"
+  },
+  "linked.target.channel": {
+    "other": "channel"
+  },
+  "linked.target.group": {
+    "other": "group"
   }
 }

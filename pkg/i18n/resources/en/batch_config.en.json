@@ -418,5 +418,20 @@
   },
   "batch.config.overview.paths": {
     "other": "Paths are relative to the command's working directory. Give each job its own subdir."
+  },
+  "batch.config.jobs.linked_single.link_options.bot_text_idle_seconds": {
+    "other": "Treat a bot as a dead end after text-only replies and this many quiet seconds; progress notices wait for the timeout"
+  },
+  "batch.config.jobs.linked_single.link_options.follow_series": {
+    "other": "Also collect the albums the same sender posts right after a linked group message; default true"
+  },
+  "batch.config.jobs.linked_single.link_options.series_gap_seconds": {
+    "other": "Maximum seconds between consecutive albums of one resource; default 120"
+  },
+  "batch.config.jobs.linked_single.link_options.defer_promotions": {
+    "other": "Request links labeled as ads only when no other branch returns files; default true"
+  },
+  "batch.config.jobs.linked_single.link_options.promotion_keywords": {
+    "other": "Extra label keywords that mark promotion links, added to the built-in list"
   }
 }

@@ -301,6 +301,9 @@ func TestLinkedTopicExpiryReissuesFullChainAndRetainsParts(t *testing.T) {
 		case *tg.ChannelsGetMessagesRequest:
 			id := req.ID[0].(*tg.InputMessageID).ID
 			if req.Channel.(*tg.InputChannel).ChannelID == 60 {
+				if id != 20 {
+					return linkedReply(&tg.MessagesMessages{}, out) // follow-up series lookup
+				}
 				chainGets++
 				return linkedReply(&tg.MessagesMessages{Messages: []tg.MessageClass{&tg.Message{ID: 20, PeerID: &tg.PeerChannel{ChannelID: 60}, Message: "https://t.me/c/50/10"}}}, out)
 			}

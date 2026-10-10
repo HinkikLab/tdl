@@ -98,6 +98,14 @@ func LinkedBranchSkipped(url string, count int, reason string) corei18n.Message 
 	return corei18n.Message{ID: "chat.linked.branch_skipped", Default: "Resource branch {{.URL}} skipped; keeping {{.Count}} resolved file(s): {{.Reason}}", Args: map[string]any{"URL": url, "Count": count, "Reason": reason}}
 }
 
+func LinkedSeries(id, count int) corei18n.Message {
+	return corei18n.Message{ID: "chat.linked.series", Default: "Message {{.ID}}: added {{.Count}} follow-up media message(s) posted by the same sender", Args: map[string]any{"ID": id, "Count": count}}
+}
+
+func LinkedPromotionMediaSkipped(count int) corei18n.Message {
+	return corei18n.Message{ID: "chat.linked.promotion_media_skipped", Default: "Skipped {{.Count}} promotional image(s) attached to ad links", Args: map[string]any{"Count": count}}
+}
+
 func LinkedRerequest(request, limit int) corei18n.Message {
 	return corei18n.Message{ID: "chat.linked.rerequest", Default: "Source message expired; requesting resource links again ({{.Request}}/{{.Limit}})", Args: map[string]any{"Request": request, "Limit": limit}}
 }

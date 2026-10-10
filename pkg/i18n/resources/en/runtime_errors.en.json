@@ -1093,5 +1093,17 @@
   },
   "errors.message.valid_values_are_value": {
     "other": "valid values are {{.Arg1}}"
+  },
+  "errors.linked.not_bot": {
+    "other": "{{.Arg1}} points to {{.Arg2}} {{.Arg3}} (ID {{.Arg4}}), not a bot; start parameter {{.Arg5}} ignored"
+  },
+  "errors.linked.promotion_not_requested": {
+    "other": "promotion link not requested: resources were found in other branches"
+  },
+  "errors.linked.series_read": {
+    "other": "read messages after linked message {{.Arg1}}: {{.Arg2}}"
+  },
+  "errors.bot.text_only": {
+    "other": "bot {{.Arg1}} replied without files or resource links and stayed idle for {{.Arg2}} seconds ({{.Arg3}} messages); last reply (ID {{.Arg4}}): {{.Arg5}}; adjust bot_text_idle_seconds"
   }
 }

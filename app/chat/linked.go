@@ -14,6 +14,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 	"unicode/utf16"
 
 	"github.com/gotd/td/telegram/peers"
@@ -50,6 +51,12 @@ type LinkOptions struct {
 	FloodRetries       *int  `json:"flood_retries" yaml:"flood_retries"`
 	FloodWait          int   `json:"flood_wait_seconds" yaml:"flood_wait_seconds"`
 	MaxFloodWait       int   `json:"max_flood_wait_seconds" yaml:"max_flood_wait_seconds"`
+	BotTextIdle        int   `json:"bot_text_idle_seconds" yaml:"bot_text_idle_seconds"`
+	FollowSeries       *bool `json:"follow_series" yaml:"follow_series"`
+	SeriesGap          int   `json:"series_gap_seconds" yaml:"series_gap_seconds"`
+	DeferPromotions    *bool `json:"defer_promotions" yaml:"defer_promotions"`
+	// Additional case-insensitive substrings that mark a link label as promotion.
+	PromotionKeywords []string `json:"promotion_keywords" yaml:"promotion_keywords"`
 }
 
 func (o *LinkOptions) Normalize() error {
@@ -69,6 +76,8 @@ func (o *LinkOptions) Normalize() error {
 		{"comment_limit", &o.CommentLimit, 100, 10000},
 		{"flood_wait_seconds", &o.FloodWait, 30, 3600},
 		{"max_flood_wait_seconds", &o.MaxFloodWait, 3600, 86400},
+		{"bot_text_idle_seconds", &o.BotTextIdle, 10, 3600},
+		{"series_gap_seconds", &o.SeriesGap, 120, 3600},
 	} {
 		if *field.value < 0 || *field.value > field.max {
 			return diagnostic.Describe(fmt.Errorf("%s must be between 0 and %d", field.name, field.max), corei18n.Message{ID: "errors.message.value_must_be_between_0_and_value", Args: map[string]any{"Arg1": field.name, "Arg2": field.max}})
@@ -100,7 +109,36 @@ func (o *LinkOptions) Normalize() error {
 	if o.FloodWait > o.MaxFloodWait {
 		return diagnostic.Describe(fmt.Errorf("flood_wait_seconds must not exceed max_flood_wait_seconds"), corei18n.Message{ID: "errors.bot.flood_wait_limit"})
 	}
+	keywords := make([]string, 0, len(o.PromotionKeywords))
+	for _, k := range o.PromotionKeywords {
+		if k = strings.ToLower(strings.TrimSpace(k)); k != "" {
+			keywords = append(keywords, k)
+		}
+	}
+	o.PromotionKeywords = keywords
 	return nil
+}
+
+// Labels are button texts, link anchor texts and the caption text around plain
+// URLs. Bot names and start parameters are never used as promotion evidence.
+var promotionLabel = regexp.MustCompile(`(?i)推广|广告|赞助|金主|商务|合作|互推|招商|投放|sponsor|promo|advert|\bads?\b`)
+
+// promotion reports whether a link label marks a promotion. It returns false
+// when deferral is disabled, so every link is then resolved in order.
+func (o LinkOptions) promotion(label string) bool {
+	if !defaultOn(o.DeferPromotions) || strings.TrimSpace(label) == "" {
+		return false
+	}
+	if promotionLabel.MatchString(label) {
+		return true
+	}
+	label = strings.ToLower(label)
+	for _, k := range o.PromotionKeywords {
+		if strings.Contains(label, k) {
+			return true
+		}
+	}
+	return false
 }
 
 func defaultOn(v *bool) bool { return v == nil || *v }
@@ -120,6 +158,8 @@ type resourceLink struct {
 	Start   string
 	Comment int
 	Single  bool
+	// Promo is resolution scheduling only; it is not part of key().
+	Promo bool
 }
 
 func (l resourceLink) key() string {
@@ -180,35 +220,134 @@ func utf16Text(s string, offset, length int) string {
 	return string(utf16.Decode(u[offset : offset+length]))
 }
 
-func messageResourceLinks(m *tg.Message) []resourceLink {
-	var raw []string
+// utf16ByteOffset converts a Telegram entity offset to a byte offset in s.
+func utf16ByteOffset(s string, offset int) int {
+	units := 0
+	for i, r := range s {
+		if units >= offset {
+			return i
+		}
+		units += utf16.RuneLen(r)
+	}
+	return len(s)
+}
+
+type linkOccurrence struct {
+	raw        string
+	start, end int // byte range in the message text; -1 for buttons
+	label      string
+}
+
+// linkOccurrences lists entity URLs, URL buttons and plain URLs, in that order.
+// A text link is labeled by its anchor and the text between it and the previous
+// link on its line, plus the rest of the line when no other link follows it
+// there. A link alone on its line takes the preceding line as its label (for
+// "Ad 👇" above it) when that line holds no link of its own.
+func linkOccurrences(m *tg.Message) []linkOccurrence {
+	s := m.Message
+	var text []linkOccurrence
 	for _, e := range m.Entities {
+		var raw, anchor string
+		start, end := utf16ByteOffset(s, e.GetOffset()), utf16ByteOffset(s, e.GetOffset()+e.GetLength())
+		end = max(start, end)
 		switch e := e.(type) {
 		case *tg.MessageEntityTextURL:
-			raw = append(raw, e.URL)
+			raw, anchor = e.URL, s[start:end]
 		case *tg.MessageEntityURL:
-			raw = append(raw, utf16Text(m.Message, e.Offset, e.Length))
+			raw = utf16Text(s, e.Offset, e.Length)
+		default:
+			continue
 		}
+		text = append(text, linkOccurrence{raw: raw, start: start, end: end, label: anchor})
 	}
+	entities := len(text)
+	for _, loc := range telegramURL.FindAllStringIndex(s, -1) {
+		text = append(text, linkOccurrence{raw: s[loc[0]:loc[1]], start: loc[0], end: loc[1]})
+	}
+	byStart := make([]int, len(text))
+	for i := range byStart {
+		byStart[i] = i
+	}
+	sort.SliceStable(byStart, func(i, j int) bool { return text[byStart[i]].start < text[byStart[j]].start })
+	hasLink := func(from, to int) bool {
+		for _, o := range text {
+			if o.start >= from && o.start < to {
+				return true
+			}
+		}
+		return false
+	}
+	labels := make([]string, len(text))
+	for k, i := range byStart {
+		o := text[i]
+		lineStart := strings.LastIndexByte(s[:o.start], '\n') + 1
+		before := lineStart
+		for j := k - 1; j >= 0; j-- {
+			if prev := text[byStart[j]]; prev.end <= o.start {
+				before = max(before, prev.end)
+				break
+			}
+		}
+		lineEnd := len(s)
+		if n := strings.IndexByte(s[o.end:], '\n'); n >= 0 {
+			lineEnd = o.end + n
+		}
+		after := ""
+		next := k + 1
+		for next < len(byStart) && text[byStart[next]].start < o.end {
+			next++
+		}
+		if next == len(byStart) || text[byStart[next]].start >= lineEnd {
+			after = s[o.end:lineEnd]
+		}
+		context := s[before:o.start] + " " + after
+		if !strings.ContainsFunc(context, unicode.IsLetter) && lineStart > 0 {
+			prevStart := strings.LastIndexByte(s[:lineStart-1], '\n') + 1
+			if !hasLink(prevStart, lineStart) {
+				context += " " + s[prevStart:lineStart-1]
+			}
+		}
+		labels[i] = o.label + " " + context
+	}
+	for i := range text {
+		text[i].label = labels[i]
+	}
+	var buttons []linkOccurrence
 	if keyboard, ok := m.ReplyMarkup.(*tg.ReplyInlineMarkup); ok {
 		for _, row := range keyboard.Rows {
 			for _, b := range row.Buttons {
 				if b, ok := b.(*tg.KeyboardButtonURL); ok {
-					raw = append(raw, b.URL)
+					buttons = append(buttons, linkOccurrence{raw: b.URL, start: -1, end: -1, label: b.Text})
 				}
 			}
 		}
 	}
-	raw = append(raw, telegramURL.FindAllString(m.Message, -1)...)
+	return append(append(text[:entities:entities], buttons...), text[entities:]...)
+}
+
+// messageResourceLinks returns actionable links in their first appearance
+// order. A promotion label on any link to a target marks every link to that
+// target in the same message, since ads repeat one bot under several labels.
+func messageResourceLinks(m *tg.Message, promotion func(string) bool) []resourceLink {
 	seen := map[string]bool{}
+	promoted := map[string]bool{}
 	var links []resourceLink
-	for _, s := range raw {
-		l, err := parseResourceLink(strings.TrimRight(s, ".,;!，。；！)]）】"))
-		if err != nil || l.Kind == linkKindChat || seen[l.key()] {
+	for _, o := range linkOccurrences(m) {
+		l, err := parseResourceLink(strings.TrimRight(o.raw, ".,;!，。；！)]）】"))
+		if err != nil || l.Kind == linkKindChat {
+			continue
+		}
+		if promotion != nil && promotion(o.label) {
+			promoted[strings.ToLower(l.Chat)] = true
+		}
+		if seen[l.key()] {
 			continue
 		}
 		seen[l.key()] = true
 		links = append(links, l)
+	}
+	for i := range links {
+		links[i].Promo = promoted[strings.ToLower(links[i].Chat)]
 	}
 	return links
 }
@@ -241,17 +380,40 @@ type linkResolver struct {
 	unavailable *UnavailableLinks
 }
 
+// promotionMedia reports a standalone photo whose links are all promotions:
+// an ad banner. Albums cannot carry buttons, and documents or videos with an
+// ad button attached are often the resource itself, so neither qualifies.
+func promotionMedia(m *tg.Message, links []resourceLink) bool {
+	if _, ok := m.Media.(*tg.MessageMediaPhoto); !ok || m.GroupedID != 0 || len(links) == 0 {
+		return false
+	}
+	for _, l := range links {
+		if !l.Promo {
+			return false
+		}
+	}
+	return true
+}
+
+type deferredLink struct {
+	link  resourceLink
+	depth int
+}
+
 func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]linkedResource, []linkHop, error) {
 	if r.unavailable == nil {
 		r.unavailable = &UnavailableLinks{}
 	}
-	var files []linkedResource
+	var files, promoFiles []linkedResource
 	var hops []linkHop
 	var deadEnds error
+	var deferred []deferredLink
 	done, active, mediaSeen := map[string]bool{}, map[string]bool{}, map[string]bool{}
 	// A bot response can contain both resources and unrelated promotion links.
-	// Explore every branch, retaining media from every hop. A dead end must not
-	// discard earlier media or prevent a later sibling from supplying files.
+	// Explore every other branch first, retaining media from every hop. A dead
+	// end must not discard earlier media or prevent a later sibling from
+	// supplying files. Links labeled as promotions are requested only when no
+	// other branch produced a file.
 	stop := func(hop linkHop, err error) error {
 		hop.Skipped = err.Error()
 		hops = append(hops, hop)
@@ -259,6 +421,18 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 		return nil
 	}
 	var walk func(resourceLink, int) error
+	follow := func(links []resourceLink, depth int) error {
+		for _, n := range links {
+			if n.Promo {
+				deferred = append(deferred, deferredLink{link: n, depth: depth})
+				continue
+			}
+			if err := walk(n, depth); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
 	walk = func(l resourceLink, depth int) error {
 		if err := ctx.Err(); err != nil {
 			return err
@@ -289,7 +463,8 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 			cause := r.unavailable.rememberContext(ctx, l, err)
 			err = diagnostic.Describe(fmt.Errorf("resolve %s: %w", l.URL(), cause), corei18n.Message{ID: "errors.message.resolve_value_value", Args: map[string]any{"Arg1": l.URL(), "Arg2": cause}})
 			var noReplies *botNoResourceError
-			if isUnavailableResource(err) || errors.As(err, &noReplies) {
+			var notBot *notBotTargetError
+			if isUnavailableResource(err) || errors.As(err, &noReplies) || errors.As(err, &notBot) {
 				return stop(hop, err)
 			}
 			return err
@@ -298,15 +473,21 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 		usable := false
 		for _, m := range msgs {
 			hop.MessageIDs = append(hop.MessageIDs, m.Message.ID)
+			links := messageResourceLinks(m.Message, r.opts.promotion)
 			if media, ok := tmedia.GetMedia(m.Message); ok && media.Size > 0 {
 				usable = true
 				key := resourceIdentity(media)
 				if !mediaSeen[key] {
-					files = append(files, linkedResource{resourceMessage: m, Media: media})
+					resource := linkedResource{resourceMessage: m, Media: media}
+					if promotionMedia(m.Message, links) {
+						promoFiles = append(promoFiles, resource)
+					} else {
+						files = append(files, resource)
+					}
 					mediaSeen[key] = true
 				}
 			}
-			next = append(next, messageResourceLinks(m.Message)...)
+			next = append(next, links...)
 		}
 		if len(next) == 0 && l.Kind == linkKindMessage && defaultOn(r.opts.ScanComments) {
 			for _, m := range msgs {
@@ -315,7 +496,7 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 					return diagnostic.Describe(fmt.Errorf("linked post comments: %w", err), corei18n.Message{ID: "errors.message.linked_post_comments_value", Args: map[string]any{"Arg1": err}})
 				}
 				for _, comment := range comments {
-					next = append(next, messageResourceLinks(comment.Message)...)
+					next = append(next, messageResourceLinks(comment.Message, r.opts.promotion)...)
 				}
 			}
 		}
@@ -323,20 +504,39 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 			return stop(hop, diagnostic.Describe(fmt.Errorf("%s returned no files or resource links", l.URL()), corei18n.Message{ID: "errors.message.value_returned_no_files_or_resource_links", Args: map[string]any{"Arg1": l.URL()}}))
 		}
 		hops = append(hops, hop)
-		for _, n := range next {
-			if err := walk(n, depth+1); err != nil {
-				return err
-			}
-		}
-		return nil
+		return follow(next, depth+1)
 	}
-	for _, l := range roots {
-		if err := walk(l, 1); err != nil {
-			return files, hops, err
+	if err := follow(roots, 1); err != nil {
+		return files, hops, err
+	}
+	// Without files from other branches, request every promotion deferred so
+	// far: a label between two links can belong to either of them. Promotions
+	// those requests defer in turn (ad chains) only run while no file exists.
+	skipped := map[string]bool{}
+	fallback := len(files) == 0
+	initial := len(deferred)
+	for i := 0; i < len(deferred); i++ {
+		d := deferred[i]
+		if (fallback && i < initial) || len(files) == 0 {
+			if err := walk(d.link, d.depth); err != nil {
+				return files, hops, err
+			}
+			continue
 		}
+		if done[d.link.key()] || skipped[d.link.key()] {
+			continue
+		}
+		skipped[d.link.key()] = true
+		reason := diagnostic.Describe(fmt.Errorf("promotion link not requested: resources were found in other branches"), corei18n.Message{ID: "errors.linked.promotion_not_requested"})
+		hops = append(hops, linkHop{URL: d.link.URL(), Depth: d.depth, Skipped: reason.Error()})
 	}
 	if err := ctx.Err(); err != nil {
 		return files, hops, err
+	}
+	if len(files) == 0 {
+		files = promoFiles
+	} else if len(promoFiles) > 0 {
+		fmt.Println(console.Translate(ctx, uimessages.LinkedPromotionMediaSkipped(len(promoFiles))))
 	}
 	if len(files) == 0 {
 		if deadEnds != nil {
@@ -491,11 +691,11 @@ func (b *telegramLinkBackend) Fetch(ctx context.Context, l resourceLink) ([]reso
 	}
 	if l.Kind == linkKindBot {
 		u, ok := peer.(peers.User)
-		if !ok || !u.Raw().Bot {
-			return nil, tgerr.New(400, "BOT_INVALID")
-		}
-		if u.Raw().Deleted {
+		if ok && u.Raw().Deleted {
 			return nil, tgerr.New(400, "INPUT_USER_DEACTIVATED")
+		}
+		if !ok || !u.Raw().Bot {
+			return nil, notBotTarget(l, peer)
 		}
 		return b.requestBot(ctx, u, l.Start)
 	}
@@ -512,13 +712,40 @@ func (b *telegramLinkBackend) Fetch(ctx context.Context, l resourceLink) ([]reso
 				return nil, diagnostic.Describe(fmt.Errorf("message %d does not belong to linked forum topic %d", m.ID, l.TopicID), corei18n.Message{ID: "errors.message.message_value_does_not_belong_to_linked_forum_topic_value", Args: map[string]any{"Arg1": m.ID, "Arg2": l.TopicID}})
 			}
 		}
-		discussionPeer, _, err := b.discussion(ctx, archiveInputPeer(peer), m)
+		discussionPeer, root, err := b.discussion(ctx, archiveInputPeer(peer), m)
 		if err != nil {
 			return nil, err
 		}
-		return b.messageAlbum(ctx, discussionPeer, l.Comment, l.Single)
+		album, err := b.messageAlbum(ctx, discussionPeer, l.Comment, l.Single)
+		if err != nil || l.Single {
+			return album, err
+		}
+		return b.series(ctx, discussionPeer, album, func(m *tg.Message) bool { return threadMember(m, root) })
 	}
 	return b.resourceMessages(ctx, archiveInputPeer(peer), l.ID, l.Single, l.TopicID)
+}
+
+// A start parameter on a group, channel or person cannot be requested. Report
+// the actual target type rather than BOT_INVALID, which would also mark the
+// whole chat unavailable and skip its message links for the rest of the run.
+type notBotTargetError struct{ err error }
+
+func (e *notBotTargetError) Error() string { return e.err.Error() }
+func (e *notBotTargetError) Unwrap() error { return e.err }
+
+func notBotTarget(l resourceLink, peer peers.Peer) error {
+	kind, message := "user", corei18n.Message{ID: "linked.target.user", Default: "user"}
+	switch p := peer.(type) {
+	case peers.Channel:
+		kind, message = "channel", corei18n.Message{ID: "linked.target.channel", Default: "channel"}
+		if !p.IsBroadcast() {
+			kind, message = "group", corei18n.Message{ID: "linked.target.group", Default: "group"}
+		}
+	case peers.Chat:
+		kind, message = "group", corei18n.Message{ID: "linked.target.group", Default: "group"}
+	}
+	err := diagnostic.Describe(fmt.Errorf("%s points to %s %s (ID %d), not a bot; start parameter %q ignored", l.URL(), kind, l.Chat, peer.ID(), l.Start), corei18n.Message{ID: "errors.linked.not_bot", Args: map[string]any{"Arg1": l.URL(), "Arg2": message, "Arg3": l.Chat, "Arg4": peer.ID(), "Arg5": fmt.Sprintf("%q", l.Start)}})
+	return &notBotTargetError{err: err}
 }
 
 func getLinkedMessage(ctx context.Context, api *tg.Client, peer tg.InputPeerClass, id int) (*tg.Message, error) {
@@ -982,8 +1209,7 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 		}
 		// Poll live updates at the configured frequency, but back off history RPCs
 		// when nothing changes. A final history read proves the idle boundary.
-		actionable := botMessagesActionable(seen)
-		idle := actionable && time.Since(lastChange) >= time.Duration(b.opts.BotIdle)*time.Second
+		idle := botRepliesIdle(seen, lastChange, b.opts)
 		readHistory := !time.Now().Before(nextHistory) || idle
 		if readHistory {
 			msgs, err := b.historySince(responseCtx, bot.InputPeer(), watermark)
@@ -1008,7 +1234,7 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 		if err := responseCtx.Err(); err != nil {
 			return nil, responseError(err)
 		}
-		actionable = botMessagesActionable(seen)
+		actionable := botMessagesActionable(seen)
 		if !actionable {
 			for _, m := range seen {
 				if seconds, ok := botCooldown(m.Message, b.opts.FloodWait); ok {
@@ -1016,7 +1242,10 @@ func (b *telegramLinkBackend) requestBotOnce(ctx context.Context, bot peers.User
 				}
 			}
 		}
-		if actionable && time.Since(lastChange) >= time.Duration(b.opts.BotIdle)*time.Second && readHistory {
+		if readHistory && botRepliesIdle(seen, lastChange, b.opts) {
+			if !actionable {
+				return nil, botTextOnly(bot.ID(), b.opts.BotTextIdle, seen)
+			}
 			return finish(), nil
 		}
 		select {
@@ -1049,7 +1278,7 @@ func botMessageFingerprint(m *tg.Message) string {
 		content.ResourceID = resourceIdentity(media)
 		content.FileName, content.Size, content.DC = media.Name, media.Size, media.DC
 	}
-	for _, link := range messageResourceLinks(m) {
+	for _, link := range messageResourceLinks(m, nil) {
 		content.Links = append(content.Links, link.key())
 	}
 	sort.Strings(content.Links)
@@ -1059,28 +1288,48 @@ func botMessageFingerprint(m *tg.Message) string {
 
 func botMessagesActionable(messages map[int]*tg.Message) bool {
 	for _, m := range messages {
-		if _, ok := tmedia.GetMedia(m); ok || len(messageResourceLinks(m)) > 0 {
+		if _, ok := tmedia.GetMedia(m); ok || len(messageResourceLinks(m, nil)) > 0 {
 			return true
 		}
 	}
 	return false
 }
 
-// A bot's own response deadline with no actionable replies is a dead end.
-// Keep it distinct from caller cancellation and resources that did not settle.
-type botNoResourceError struct{ err error }
+// Progress and auto-delete notices announce files that are still on their way.
+var botProgressMarker = regexp.MustCompile(`(?i)processing|please wait|wait a (moment|minute|second)|uploading|preparing|generating|sending|will be sent|in queue|queued|auto.?delete|正在|处理中|请稍|稍等|稍候|上传中|生成中|准备中|发送中|获取中|即将|马上|排队|加载中|检测到|自动删除|共\s*\d+\s*个`)
 
-func (e *botNoResourceError) Error() string { return e.err.Error() }
-func (e *botNoResourceError) Unwrap() error { return e.err }
-
-func botResponseTimeout(botID int64, seconds int, messages map[int]*tg.Message) error {
-	reason := "no actionable resource received"
-	reasonMessage := corei18n.Message{ID: "bot.timeout.no_actionable", Default: "no actionable resource received"}
-	actionable := botMessagesActionable(messages)
-	if actionable {
-		reason = "resource replies did not settle"
-		reasonMessage = corei18n.Message{ID: "bot.timeout.unsettled", Default: "resource replies did not settle"}
+// botRepliesIdle reports whether the replies settled. Files and links settle
+// after bot_idle_seconds. Text without either (a welcome, an ad or a "join
+// first" notice) settles after bot_text_idle_seconds instead of the full
+// timeout, unless it announces progress. No reply at all waits for the timeout.
+func botRepliesIdle(messages map[int]*tg.Message, lastChange time.Time, opts LinkOptions) bool {
+	if len(messages) == 0 {
+		return false
 	}
+	quiet := time.Since(lastChange)
+	if botMessagesActionable(messages) {
+		return quiet >= time.Duration(opts.BotIdle)*time.Second
+	}
+	for _, m := range messages {
+		if botProgressMarker.MatchString(m.Message) {
+			return false
+		}
+	}
+	textIdle := opts.BotTextIdle
+	if textIdle <= 0 {
+		textIdle = 10 // options that bypassed Normalize
+	}
+	return quiet >= time.Duration(textIdle)*time.Second
+}
+
+func botTextOnly(botID int64, seconds int, messages map[int]*tg.Message) error {
+	lastID, summary, summaryMessage := botLastReply(messages)
+	err := diagnostic.Describe(fmt.Errorf("bot %d replied without files or resource links and stayed idle for %d seconds (%d messages); last reply (ID %d): %q; adjust bot_text_idle_seconds", botID, seconds, len(messages), lastID, summary), corei18n.Message{ID: "errors.bot.text_only", Args: map[string]any{"Arg1": botID, "Arg2": seconds, "Arg3": len(messages), "Arg4": lastID, "Arg5": summaryMessage}})
+	return &botNoResourceError{err: err}
+}
+
+// botLastReply summarizes the newest reply for diagnostics.
+func botLastReply(messages map[int]*tg.Message) (int, string, any) {
 	lastID := 0
 	summary := ""
 	for id, m := range messages {
@@ -1102,6 +1351,25 @@ func botResponseTimeout(botID int64, seconds int, messages map[int]*tg.Message) 
 		summary = "no reply content"
 		summaryMessage = corei18n.Message{ID: "bot.timeout.no_content", Default: "\"no reply content\""}
 	}
+	return lastID, summary, summaryMessage
+}
+
+// A bot's own response deadline with no actionable replies is a dead end.
+// Keep it distinct from caller cancellation and resources that did not settle.
+type botNoResourceError struct{ err error }
+
+func (e *botNoResourceError) Error() string { return e.err.Error() }
+func (e *botNoResourceError) Unwrap() error { return e.err }
+
+func botResponseTimeout(botID int64, seconds int, messages map[int]*tg.Message) error {
+	reason := "no actionable resource received"
+	reasonMessage := corei18n.Message{ID: "bot.timeout.no_actionable", Default: "no actionable resource received"}
+	actionable := botMessagesActionable(messages)
+	if actionable {
+		reason = "resource replies did not settle"
+		reasonMessage = corei18n.Message{ID: "bot.timeout.unsettled", Default: "resource replies did not settle"}
+	}
+	lastID, summary, summaryMessage := botLastReply(messages)
 	err := diagnostic.Describe(fmt.Errorf("bot %d response did not settle within %d seconds (%d messages): %s; last reply (ID %d): %q; adjust bot_timeout_seconds/bot_idle_seconds: %w", botID, seconds, len(messages), reason, lastID, summary, context.DeadlineExceeded), corei18n.Message{ID: "errors.bot.response_timeout", Args: map[string]any{"Arg1": botID, "Arg2": seconds, "Arg3": len(messages), "Arg4": reasonMessage, "Arg5": lastID, "Arg6": summaryMessage, "Arg7": context.DeadlineExceeded}})
 	if !actionable {
 		return &botNoResourceError{err: err}

@@ -29,3 +29,8 @@ jobs: # 按顺序执行任务；仅保留需要的示例
       flood_retries: 5 # 机器人文本请求限流重试次数；默认 5；0 禁用
       flood_wait_seconds: 30 # 限流未提供等待时长时的回退秒数；默认 30
       max_flood_wait_seconds: 3600 # 允许的机器人文本限流等待秒数上限；默认 3600
+      bot_text_idle_seconds: 10 # 机器人只回复文字（无文件或链接）且静默此秒数后视为无资源；“正在处理”类提示仍等待至超时
+      follow_series: true # 同时收集链接消息之后同一发送者连续发送的相册；默认 true
+      series_gap_seconds: 120 # 同一资源连续相册之间允许的最大间隔秒数；默认 120
+      defer_promotions: true # 标注为广告/推广的链接仅在其他分支都没有文件时才请求；默认 true
+      promotion_keywords: [] # 额外的推广标记关键词，与内置列表合并

@@ -1093,5 +1093,17 @@
   },
   "errors.message.valid_values_are_value": {
     "other": "有效值为 {{.Arg1}}"
+  },
+  "errors.linked.not_bot": {
+    "other": "{{.Arg1}} 指向{{.Arg2}} {{.Arg3}}（ID {{.Arg4}}），不是机器人；已忽略 start 参数 {{.Arg5}}"
+  },
+  "errors.linked.promotion_not_requested": {
+    "other": "未请求推广链接：已从其他分支获得资源"
+  },
+  "errors.linked.series_read": {
+    "other": "读取链接消息 {{.Arg1}} 之后的消息失败：{{.Arg2}}"
+  },
+  "errors.bot.text_only": {
+    "other": "机器人 {{.Arg1}} 仅回复了文字（无文件或资源链接），且 {{.Arg2}} 秒内没有新回复（共 {{.Arg3}} 条消息）；最后一条回复（ID {{.Arg4}}）：{{.Arg5}}；可调整 bot_text_idle_seconds"
   }
 }

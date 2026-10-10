@@ -348,16 +348,51 @@ unavailable targets, cycles and depth/link-count limits are skipped. Logs and
 with media at three hops downloads the resources from all three.
 Without any resources, resolution still fails or skips unavailable targets.
 Network/RPC errors, exhausted rate-limit retries, timeouts while resource replies
-have not settled, and caller cancellation remain failures. Bot names and short
-start parameters such as `1` or `ad` are not treated as promotion markers:
-promotion bots may still be requested up to the configured timeout, and any
-media they return is also retained.
+have not settled, and caller cancellation remain failures.
+
+Promotion links are recognized by their labels, never by bot names or start
+parameters such as `1` or `ad`. A label is a button's text, a link's anchor
+text, the caption text next to a plain URL on the same line, or the line above a
+URL that stands alone. Labels containing 推广, 广告, 赞助, 金主, 商务, 合作, 互推,
+招商, 投放, sponsor, promo, advert or the word AD/ADS, or any of
+`promotion_keywords`, mark every link to that target in the same message. With
+`defer_promotions: true` (the default) these links are requested only after
+every other branch has finished. If those branches returned files, the
+promotions are skipped and appear in `hops[].skipped`. Otherwise every deferred
+promotion is requested, as before; promotions found in their replies (ad
+chains) are requested only while no file has been found. A standalone photo whose only links are promotions (an ad
+banner) is downloaded only when nothing else was found. Documents, videos and
+album members are always kept, because bots often attach ad buttons to the
+resource itself.
+
+A bot that replies only with text (no file and no resource link) is treated as
+a dead end after `bot_text_idle_seconds` without new replies, rather than
+waiting for `bot_timeout_seconds`. Replies announcing progress or delivery
+(for example "processing", "please wait", 正在, 请稍候, 检测到…共 N 个, 自动删除)
+still wait for the full timeout. A bot that does not reply at all also waits for
+the timeout.
+
+A `?start=` link whose target turns out to be a group, channel or person is
+skipped with a reason naming the actual target type. It no longer marks that
+chat unavailable, so message links into the same group still resolve.
+
+Resource messages in channels and supergroups also collect the follow-up
+albums their sender posted right after them, because Telegram limits an album
+to 10 items (`follow_series`, default `true`). Messages from other members,
+service messages and other forum topics may interleave. The series ends at the
+first message from the same sender that has no file or carries resource links,
+at a caption naming a different post (captions are compared by their letters
+only, so `Pack (1/3)` and `Pack (2/3)` match), or after a gap longer than
+`series_gap_seconds`. `?single` links and bot replies are not extended. At most
+300 following messages are scanned.
+
 Resource links to forum-topic roots confirmed by Telegram scan the topic up to
 `max_topic_messages`, retain complete albums across pages, and resolve further
-links within the topic. Ordinary resource messages retain their single-message
-or album behavior; topic/reply restrictions on the primary source still apply.
+links within the topic. Topic/reply restrictions on the primary source still apply.
 Explicit resource topic paths and `thread` parameters validate message and album membership.
 Each post is resolved and downloaded before the next one is requested.
+Posts already archived as complete are not resolved again when these options
+change; delete a post's `meta.json` to resolve it again.
 
 Files go into `<download_base>/<subdir>/<main-chat-id>/<main caption [post ID]>/`
 with the complete preview album by default and optional `meta.json` containing
@@ -384,11 +419,18 @@ partial files even when their message IDs change.
 | `flood_retries` | `5` | retries after a bot's textual rate limit; `0` disables |
 | `flood_wait_seconds` | `30` | wait when an explicit rate-limit message gives no duration |
 | `max_flood_wait_seconds` | `3600` | maximum automatic wait for textual bot rate limits |
+| `bot_text_idle_seconds` | `10` | quiet interval after text-only replies before the bot counts as a dead end; at least `bot_timeout_seconds` effectively disables it |
+| `follow_series` | `true` | collect the albums the same sender posts right after a linked message |
+| `series_gap_seconds` | `120` | maximum gap between consecutive albums of one resource |
+| `defer_promotions` | `true` | request labeled promotion links only when no other branch returns files |
+| `promotion_keywords` | `[]` | extra case-insensitive label keywords that mark promotion links |
 
 Zero selects defaults for most numeric `link_options`; only
 `rerequest_limit` / `flood_retries` use `0` to disable retries, and
 `bot_request_interval_seconds: 0` disables the request interval.
-`scan_comments`, `include_previews` and `cleanup_bot_messages` can be set false.
+`scan_comments`, `include_previews`, `cleanup_bot_messages`, `follow_series`
+and `defer_promotions` can be set false.
+Text idle and series gap are at most 3600 seconds.
 Other upper bounds are: timeout 3600 seconds, idle 300 seconds, polling 60000 ms,
 bot messages / comment limit 10000, topic messages 100000, reissues 10, flood retries 20, fallback
 wait 3600 seconds and maximum wait 86400 seconds.

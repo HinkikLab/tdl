@@ -67,7 +67,11 @@ func (b *telegramLinkBackend) resourceMessages(ctx context.Context, peer tg.Inpu
 				return nil, diagnostic.Describe(fmt.Errorf("message %d does not belong to linked forum topic %d", m.ID, topicID), corei18n.Message{ID: "errors.message.message_value_does_not_belong_to_linked_forum_topic_value", Args: map[string]any{"Arg1": m.ID, "Arg2": topicID}})
 			}
 		}
-		return b.albumFromMessage(ctx, peer, m, single, topicID)
+		album, err := b.albumFromMessage(ctx, peer, m, single, topicID)
+		if err != nil || single {
+			return album, err
+		}
+		return b.series(ctx, peer, album, seriesScope(m, topicID))
 	case *tg.MessageService:
 		if _, ok := m.Action.(*tg.MessageActionTopicCreate); !ok {
 			return nil, unsupportedLinkedService(m)

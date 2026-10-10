@@ -120,6 +120,11 @@ jobs: # @i18n:batch.config.global.jobs
       flood_retries: 5 # @i18n:batch.config.jobs.linked_single.link_options.flood_retries
       flood_wait_seconds: 30 # @i18n:batch.config.jobs.linked_single.link_options.flood_wait_seconds
       max_flood_wait_seconds: 3600 # @i18n:batch.config.jobs.linked_single.link_options.max_flood_wait_seconds
+      bot_text_idle_seconds: 10 # @i18n:batch.config.jobs.linked_single.link_options.bot_text_idle_seconds
+      follow_series: true # @i18n:batch.config.jobs.linked_single.link_options.follow_series
+      series_gap_seconds: 120 # @i18n:batch.config.jobs.linked_single.link_options.series_gap_seconds
+      defer_promotions: true # @i18n:batch.config.jobs.linked_single.link_options.defer_promotions
+      promotion_keywords: [] # @i18n:batch.config.jobs.linked_single.link_options.promotion_keywords
 
   # @i18n:batch.config.examples.linked_comments.summary
   # @i18n:batch.config.examples.linked_comments.post_limit

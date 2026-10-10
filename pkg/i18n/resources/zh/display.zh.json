@@ -136,5 +136,14 @@
   },
   "progress.eta": {
     "other": "预计剩余"
+  },
+  "linked.target.user": {
+    "other": "用户"
+  },
+  "linked.target.channel": {
+    "other": "频道"
+  },
+  "linked.target.group": {
+    "other": "群组"
   }
 }

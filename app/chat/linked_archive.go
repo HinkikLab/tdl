@@ -164,7 +164,7 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 		opts.counts.Posts++
 		var links []resourceLink
 		for _, m := range album {
-			links = append(links, messageResourceLinks(m)...)
+			links = append(links, messageResourceLinks(m, opts.Links.promotion)...)
 		}
 		if len(links) == 0 && defaultOn(opts.Links.ScanComments) {
 			for _, m := range album {
@@ -173,7 +173,7 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 					return diagnostic.Describe(fmt.Errorf("post %d comments: %w", post.MessageID, err), corei18n.Message{ID: "errors.message.post_value_comments_value", Args: map[string]any{"Arg1": post.MessageID, "Arg2": err}})
 				}
 				for _, comment := range comments {
-					links = append(links, messageResourceLinks(comment.Message)...)
+					links = append(links, messageResourceLinks(comment.Message, opts.Links.promotion)...)
 				}
 			}
 		}
@@ -247,14 +247,17 @@ func cleanupLinked(ctx context.Context, backend *telegramLinkBackend) error {
 	return nil
 }
 
+// A link counts as a promotion only if every occurrence is labeled as one.
 func uniqueResourceLinks(links []resourceLink) []resourceLink {
-	seen := map[string]bool{}
+	index := map[string]int{}
 	var result []resourceLink
 	for _, l := range links {
-		if !seen[l.key()] {
-			result = append(result, l)
-			seen[l.key()] = true
+		if i, ok := index[l.key()]; ok {
+			result[i].Promo = result[i].Promo && l.Promo
+			continue
 		}
+		index[l.key()] = len(result)
+		result = append(result, l)
 	}
 	return result
 }

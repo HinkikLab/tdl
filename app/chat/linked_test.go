@@ -270,6 +270,7 @@ func TestLinkedSessionRejectsReplacedMediaAndBoundsRetries(t *testing.T) {
 }
 
 func TestBotCollectsOnlyNewMessagesAndKeepsDeletedReplies(t *testing.T) {
+	t.Parallel()
 	opts := LinkOptions{BotTimeout: 3, BotIdle: 1, PollInterval: 10}
 	require.NoError(t, opts.Normalize())
 	bot := (&peers.Manager{}).User(&tg.User{ID: 100, Bot: true, AccessHash: 2})
@@ -304,6 +305,7 @@ func TestBotCollectsOnlyNewMessagesAndKeepsDeletedReplies(t *testing.T) {
 }
 
 func TestBotWaitCancellationAndNoResourceTimeout(t *testing.T) {
+	t.Parallel()
 	for _, cancelNow := range []bool{false, true} {
 		t.Run(fmt.Sprint(cancelNow), func(t *testing.T) {
 			ctx, cancel := context.WithCancel(context.Background())
@@ -378,6 +380,7 @@ func TestLinkedMetadataAndNaming(t *testing.T) {
 }
 
 func TestBotCooldownWaitAndCleanupEveryGeneratedMessage(t *testing.T) {
+	t.Parallel()
 	opts := LinkOptions{BotTimeout: 3, BotIdle: 1, PollInterval: 10, FloodWait: 1}
 	require.NoError(t, opts.Normalize())
 	starts := 0
@@ -484,6 +487,7 @@ func TestBotCleanupBatchesAndReportsFailures(t *testing.T) {
 }
 
 func TestBotLiveUpdatesRetainSelfDeletedFilesAndCleanupLateReplies(t *testing.T) {
+	t.Parallel()
 	opts := LinkOptions{BotTimeout: 3, BotIdle: 1, PollInterval: 10}
 	require.NoError(t, opts.Normalize())
 	updates := &BotUpdates{}

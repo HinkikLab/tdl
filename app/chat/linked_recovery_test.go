@@ -21,6 +21,7 @@ import (
 )
 
 func TestLinkedDeletedBotMessageResumesAfterReissue(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"in-flight", "repeated-deletion", "restart-after-reissue-failure", "changed-file", "request-interval"} {
 		t.Run(mode, func(t *testing.T) {
 			root := t.TempDir()

@@ -13,6 +13,7 @@ import (
 )
 
 func TestBotRequestIntervalUsesLastReplyAcrossJobs(t *testing.T) {
+	t.Parallel()
 	for _, mode := range []string{"same-bot", "elapsed-during-download", "actual-send-time", "different-bot", "disabled", "edits-and-outgoing"} {
 		t.Run(mode, func(t *testing.T) {
 			updates := &BotUpdates{}
@@ -77,6 +78,7 @@ func TestBotRequestIntervalUsesLastReplyAcrossJobs(t *testing.T) {
 }
 
 func TestBotRequestIntervalExtendsForLateReplyAndExcludesIt(t *testing.T) {
+	t.Parallel()
 	updates := &BotUpdates{}
 	updates.Watch(100, 0, 100)
 	require.NoError(t, updates.Handle(t.Context(), &tg.UpdateShort{Update: &tg.UpdateNewMessage{Message: &tg.Message{ID: 5, PeerID: &tg.PeerUser{UserID: 100}, Message: "first reply"}}}))
@@ -116,6 +118,7 @@ func TestBotRequestIntervalExtendsForLateReplyAndExcludesIt(t *testing.T) {
 }
 
 func TestBotRequestIntervalUsesHistoryWithoutLiveUpdates(t *testing.T) {
+	t.Parallel()
 	for _, late := range []bool{false, true} {
 		t.Run(fmt.Sprint(late), func(t *testing.T) {
 			testBotIntervalHistory(t, late)
@@ -162,6 +165,7 @@ func testBotIntervalHistory(t *testing.T, late bool) {
 }
 
 func TestBotRequestIntervalAppliesToFloodRetry(t *testing.T) {
+	t.Parallel()
 	opts := LinkOptions{BotTimeout: 2, BotIdle: 1, PollInterval: 10, BotRequestInterval: 2}
 	require.NoError(t, opts.Normalize())
 	var requestTimes []time.Time

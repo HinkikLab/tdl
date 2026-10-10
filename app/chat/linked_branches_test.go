@@ -230,6 +230,7 @@ func TestLinkedArchiveDownloadsAndResumesDespitePromotionTimeout(t *testing.T) {
 }
 
 func TestLinkedArchiveBotRepliesWithPromotionLinksAndCachedDeadRoot(t *testing.T) {
+	t.Parallel()
 	media := botMultipleReplies("ref")
 	promo := linkedPromotionMessage(6)
 	media[len(media)-1] = promo

@@ -16,6 +16,7 @@ import (
 )
 
 func TestBotUnchangedHistoryBacksOffWithAndWithoutLiveUpdates(t *testing.T) {
+	t.Parallel()
 	for _, live := range []bool{false, true} {
 		t.Run(fmt.Sprint(live), func(t *testing.T) {
 			opts := LinkOptions{BotTimeout: 2, BotIdle: 1, PollInterval: 10}
@@ -53,6 +54,7 @@ func TestBotUnchangedHistoryBacksOffWithAndWithoutLiveUpdates(t *testing.T) {
 }
 
 func TestBotResponseTimeoutBoundsBlockedHistoryRPCAndKeepsReplySummary(t *testing.T) {
+	t.Parallel()
 	opts := LinkOptions{BotTimeout: 2, BotIdle: 1, PollInterval: 10}
 	require.NoError(t, opts.Normalize())
 	api := tg.NewClient(linkedRPC(func(ctx context.Context, in bin.Encoder, out bin.Decoder) error {
@@ -103,6 +105,7 @@ func botMultipleReplies(ref string) []*tg.Message {
 }
 
 func TestBotMultipleRepliesSettleAcrossLiveAndHistoryMetadata(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name    string
 		live    bool
@@ -172,6 +175,7 @@ func TestBotMultipleRepliesSettleAcrossLiveAndHistoryMetadata(t *testing.T) {
 }
 
 func TestBotEditedReplyWaitsForIdleAndIgnoresStaleCopies(t *testing.T) {
+	t.Parallel()
 	for _, source := range []string{"live", "history"} {
 		t.Run(source, func(t *testing.T) {
 			opts := LinkOptions{BotTimeout: 4, BotIdle: 1, PollInterval: 10}
@@ -244,6 +248,7 @@ func TestBotTimeoutSummaryIncludesFinalLinkedText(t *testing.T) {
 }
 
 func TestBotIdleRequiresFinalHistoryReadAndIncludesLateResource(t *testing.T) {
+	t.Parallel()
 	opts := LinkOptions{BotTimeout: 4, BotIdle: 1, PollInterval: 10}
 	require.NoError(t, opts.Normalize())
 	started := time.Time{}
@@ -277,6 +282,7 @@ func TestBotIdleRequiresFinalHistoryReadAndIncludesLateResource(t *testing.T) {
 }
 
 func TestBotLateLiveRepliesDuringFinalHistoryReadAreCollected(t *testing.T) {
+	t.Parallel()
 	opts := LinkOptions{BotTimeout: 4, BotIdle: 1, PollInterval: 10}
 	require.NoError(t, opts.Normalize())
 	updates := &BotUpdates{}
@@ -311,6 +317,7 @@ func TestBotLateLiveRepliesDuringFinalHistoryReadAreCollected(t *testing.T) {
 }
 
 func TestBotResponseLimitAndCancellationWithCollectedResources(t *testing.T) {
+	t.Parallel()
 	for _, stage := range []string{"limit", "cancel", "cancel-at-idle"} {
 		t.Run(stage, func(t *testing.T) {
 			opts := LinkOptions{BotTimeout: 3, BotIdle: 1, PollInterval: 10, MaxBotMessages: 4}

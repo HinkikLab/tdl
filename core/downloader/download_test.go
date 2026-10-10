@@ -41,11 +41,13 @@ func (p callbackProgress) OnAdd(e Elem) {
 		p.add(e)
 	}
 }
+
 func (p callbackProgress) OnDone(e Elem, err error) {
 	if p.done != nil {
 		p.done(e, err)
 	}
 }
+
 func (p callbackProgress) OnDownload(e Elem, s ProgressState) {
 	if p.download != nil {
 		p.download(s)

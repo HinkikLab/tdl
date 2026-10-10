@@ -26,7 +26,7 @@ func TestDrainPropagatesUnconsumedJournalFlushFailureAndClosesFile(t *testing.T)
 	e := newTestElem(path, 10)
 	require.NoError(t, e.start(false))
 	e.store.PartDone(0)
-	require.NoError(t, os.Mkdir(downloader.PartsPath(path+tempExt)+".new", 0700))
+	require.NoError(t, os.Mkdir(downloader.PartsPath(path+tempExt)+".new", 0o700))
 	i := &iter{elems: make(chan downloader.Elem, 1)}
 	i.elems <- e
 	require.Error(t, i.Drain())

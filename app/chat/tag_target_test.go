@@ -152,13 +152,14 @@ func TestTagTopicPaginationKeepsTheSameThread(t *testing.T) {
 			require.Equal(t, peer, req.Peer)
 			require.Equal(t, 100, req.Limit)
 			first, last := 42102, 42003
-			if pages == 1 {
+			switch pages {
+			case 1:
 				require.Zero(t, req.OffsetID)
-			} else if pages == 2 {
+			case 2:
 				require.Equal(t, 2, pages)
 				require.Equal(t, 42003, req.OffsetID)
 				first, last = 42002, 42001
-			} else {
+			default:
 				// gotd probes once more after a short final batch.
 				require.Equal(t, 3, pages)
 				require.Equal(t, 42001, req.OffsetID)

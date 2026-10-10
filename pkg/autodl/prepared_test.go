@@ -70,8 +70,10 @@ func TestOverlapZeroKeepsLegacyFallbackSemantics(t *testing.T) {
 
 func TestPreparedRunValidatesBeforeCreatingFiles(t *testing.T) {
 	for _, test := range []struct{ field, reason string }{
-		{`"topic_id":-1`, "topic_id"}, {`"reply_post_id":0`, "reply_post_id"},
-		{`"comment":"true"`, "comment"}, {`"comment":1.5`, "comment"},
+		{`"topic_id":-1`, "topic_id"},
+		{`"reply_post_id":0`, "reply_post_id"},
+		{`"comment":"true"`, "comment"},
+		{`"comment":1.5`, "comment"},
 		{`"export_filter":"ID >"`, "export_filter"},
 	} {
 		t.Run(test.reason+test.field, func(t *testing.T) {

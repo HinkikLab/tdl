@@ -21,9 +21,10 @@ func TestBotRequestIntervalUsesLastReplyAcrossJobs(t *testing.T) {
 				previousBot++
 			}
 			previous := &tg.Message{ID: 5, PeerID: &tg.PeerUser{UserID: previousBot}, Message: "最后一条推广文本"}
-			if mode == "elapsed-during-download" {
+			switch mode {
+			case "elapsed-during-download":
 				previous.Date = int(time.Now().Add(-5 * time.Second).Unix())
-			} else if mode == "actual-send-time" {
+			case "actual-send-time":
 				previous.Date = int(time.Now().Add(-1500 * time.Millisecond).Unix())
 			}
 			updates.Watch(previousBot, 0, 100)

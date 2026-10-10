@@ -73,9 +73,9 @@ func TestCompletedMediaRevalidatedAcrossRuns(t *testing.T) {
 			case "missing":
 				require.NoError(t, os.Remove(path))
 			case "truncated":
-				require.NoError(t, os.WriteFile(path, []byte("A"), 0600))
+				require.NoError(t, os.WriteFile(path, []byte("A"), 0o600))
 			case "same size local edit":
-				require.NoError(t, os.WriteFile(path, []byte("EDIT"), 0600))
+				require.NoError(t, os.WriteFile(path, []byte("EDIT"), 0o600))
 				// Make the recorded change deterministic on coarse timestamp filesystems.
 				future := time.Now().Add(time.Hour)
 				require.NoError(t, os.Chtimes(path, future, future))

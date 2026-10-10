@@ -23,7 +23,8 @@ func TestArchiveWindowKeepsBoundaryAlbumsAcrossPages(t *testing.T) {
 				require.True(t, ok)
 				pages++
 				var batch []tg.MessageClass
-				if pages == 1 {
+				switch pages {
+				case 1:
 					if window.EndID > 0 {
 						require.Equal(t, 111, req.OffsetID)
 					}
@@ -35,7 +36,7 @@ func TestArchiveWindowKeepsBoundaryAlbumsAcrossPages(t *testing.T) {
 						}
 						batch = append(batch, m)
 					}
-				} else if pages == 2 {
+				case 2:
 					require.Equal(t, 103, req.OffsetID)
 					for id := 102; id >= 97; id-- {
 						m := &tg.Message{ID: id, Date: 999, PeerID: &tg.PeerChannel{ChannelID: 1}}
@@ -91,11 +92,12 @@ func TestArchiveWindowCompletionFailuresAndCancellation(t *testing.T) {
 					}
 					return false, nil
 				})
-			if scenario == "failure" {
+			switch scenario {
+			case "failure":
 				require.ErrorIs(t, err, failure)
-			} else if scenario == "cancel" {
+			case "cancel":
 				require.ErrorIs(t, err, context.Canceled)
-			} else {
+			default:
 				require.NoError(t, err)
 				require.False(t, complete)
 			}

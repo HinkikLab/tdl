@@ -62,7 +62,7 @@ func TestRenameFailureDoesNotMarkFinished(t *testing.T) {
 	it := &iter{mu: &sync.Mutex{}, finished: make(map[int]struct{})}
 	p := newProgress(pw.NewWriter(), it, Options{})
 	path := filepath.Join(t.TempDir(), "blocked")
-	require.NoError(t, os.Mkdir(path, 0755))
+	require.NoError(t, os.Mkdir(path, 0o755))
 	f, s, err := downloader.OpenPartial(path+tempExt, 1)
 	require.NoError(t, err)
 	e := &iterElem{id: 1, logicalPos: 1, from: (&peers.Manager{}).Channel(&tg.Channel{ID: 123}), fromMsg: &tg.Message{ID: 1}, file: &tmedia.Media{Size: 1}, to: f, parts: s}

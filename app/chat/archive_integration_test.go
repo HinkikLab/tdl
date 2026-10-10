@@ -13,8 +13,9 @@ import (
 	"github.com/gotd/td/bin"
 	"github.com/gotd/td/tg"
 	"github.com/gotd/td/tgerr"
-	"github.com/iyear/tdl/core/storage"
 	"github.com/stretchr/testify/require"
+
+	"github.com/iyear/tdl/core/storage"
 )
 
 type archiveMemory struct {
@@ -31,6 +32,7 @@ func (s *archiveMemory) Get(_ context.Context, key string) ([]byte, error) {
 	}
 	return append([]byte(nil), b...), nil
 }
+
 func (s *archiveMemory) Set(_ context.Context, key string, value []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -40,6 +42,7 @@ func (s *archiveMemory) Set(_ context.Context, key string, value []byte) error {
 	s.data[key] = append([]byte(nil), value...)
 	return nil
 }
+
 func (s *archiveMemory) Delete(_ context.Context, key string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -102,8 +105,10 @@ func TestTagArchiveDownloadsWholeBoundaryAlbumAndKeepsTruncatedWindow(t *testing
 					return fmt.Errorf("unexpected RPC %T", in)
 				}
 			}))
-			opts := TagOptions{Chat: "https://t.me/source", Tag: "#notes", Dir: t.TempDir(), Pool: linkedPool{api}, Threads: 1, Limit: 1,
-				Window: ArchiveWindow{StartID: 10, EndID: 11}}
+			opts := TagOptions{
+				Chat: "https://t.me/source", Tag: "#notes", Dir: t.TempDir(), Pool: linkedPool{api}, Threads: 1, Limit: 1,
+				Window: ArchiveWindow{StartID: 10, EndID: 11},
+			}
 			if incremental {
 				opts.Window = ArchiveWindow{Until: 1700000000}
 				opts.MaxPosts = 1
@@ -145,8 +150,10 @@ func TestLinkedArchiveSkipsDeadTargetsAndStillDownloadsHealthyPosts(t *testing.T
 			pages++
 			var batch []tg.MessageClass
 			if pages == 1 {
-				for i, link := range []string{"https://t.me/dead_bot?start=a", "tg://resolve?domain=DEAD_bot&start=b",
-					"https://t.me/old_group/1", "https://t.me/old_group/2", "https://t.me/healthy/10"} {
+				for i, link := range []string{
+					"https://t.me/dead_bot?start=a", "tg://resolve?domain=DEAD_bot&start=b",
+					"https://t.me/old_group/1", "https://t.me/old_group/2", "https://t.me/healthy/10",
+				} {
 					batch = append(batch, &tg.Message{ID: 100 - i, Date: 1700000000, PeerID: &tg.PeerChannel{ChannelID: 50}, Message: "Source caption " + link})
 				}
 			}
@@ -163,8 +170,10 @@ func TestLinkedArchiveSkipsDeadTargetsAndStillDownloadsHealthyPosts(t *testing.T
 		}
 	}))
 	comments := false
-	opts := LinkedOptions{Chat: "https://t.me/source", Dir: t.TempDir(), Threads: 1, Limit: 1, Pool: linkedPool{api},
-		Window: ArchiveWindow{Since: 1700000000, Until: 1700000000}, Links: LinkOptions{ScanComments: &comments}}
+	opts := LinkedOptions{
+		Chat: "https://t.me/source", Dir: t.TempDir(), Threads: 1, Limit: 1, Pool: linkedPool{api},
+		Window: ArchiveWindow{Since: 1700000000, Until: 1700000000}, Links: LinkOptions{ScanComments: &comments},
+	}
 	require.NoError(t, downloadLinked(context.Background(), api, &archiveMemory{}, opts))
 	require.Equal(t, 1, resolveCalls["dead_bot"])
 	require.Equal(t, 1, resolveCalls["old_group"])

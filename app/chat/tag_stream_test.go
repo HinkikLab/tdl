@@ -29,7 +29,8 @@ func TestTagStreamDownloadsBeforeNextPageAndDoesNotRefetchMessages(t *testing.T)
 			}
 			pages++
 			var batch []tg.MessageClass
-			if pages == 1 {
+			switch pages {
+			case 1:
 				for id := 200; id > 100; id-- {
 					m := &tg.Message{ID: id, Date: 1700000000, PeerID: &tg.PeerChannel{ChannelID: 50}}
 					if id == 200 {
@@ -39,7 +40,7 @@ func TestTagStreamDownloadsBeforeNextPageAndDoesNotRefetchMessages(t *testing.T)
 					}
 					batch = append(batch, m)
 				}
-			} else if pages == 2 {
+			case 2:
 				require.Equal(t, 1, downloads, "first selected post must commit before requesting the next page")
 			}
 			return linkedReply(&tg.MessagesMessagesSlice{Count: 100, Messages: batch}, out)

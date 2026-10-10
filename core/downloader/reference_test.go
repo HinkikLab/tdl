@@ -289,11 +289,12 @@ func TestRefreshMessageFileValidatesAttachment(t *testing.T) {
 			} else {
 				require.Error(t, err)
 				require.Nil(t, loc)
-				if mode == "deleted" || mode == "no media" {
+				switch mode {
+				case "deleted", "no media":
 					require.ErrorContains(t, err, "no longer has media")
-				} else if mode == "wrong message" {
+				case "wrong message":
 					require.ErrorContains(t, err, "unavailable or deleted")
-				} else {
+				default:
 					require.ErrorContains(t, err, "media changed")
 				}
 			}

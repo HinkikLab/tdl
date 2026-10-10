@@ -74,8 +74,10 @@ func TestLinkedArchiveLegacyCompletion(t *testing.T) {
 			require.NoError(t, err)
 			require.NoError(t, os.Mkdir(dir, 0o755))
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "file.zip"), []byte("data"), 0o644))
-			saved := linkedPost{tagPost: post, Version: 1, LinkHash: linkedFingerprint([]resourceLink{link}, opts), Complete: true,
-				Resources: []archivedResource{{File: "file.zip", Size: 4}}}
+			saved := linkedPost{
+				tagPost: post, Version: 1, LinkHash: linkedFingerprint([]resourceLink{link}, opts), Complete: true,
+				Resources: []archivedResource{{File: "file.zip", Size: 4}},
+			}
 			require.NoError(t, writeArchiveJSON(filepath.Join(dir, "message.json"), saved))
 			// A nil resolver and pool ensure a completed legacy archive never
 			// requests the chain or downloads its media again.

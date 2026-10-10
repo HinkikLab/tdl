@@ -21,10 +21,10 @@ func partIdentity(size int64) FileIdentity {
 func TestPartsStoreRejectsInvalidAndMissingBytes(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "file.tmp")
 	id := partIdentity(3 * MaxPartSize)
-	require.NoError(t, os.WriteFile(path, make([]byte, MaxPartSize), 0600))
+	require.NoError(t, os.WriteFile(path, make([]byte, MaxPartSize), 0o600))
 	body, err := json.Marshal(partsFile{Version: 2, Parts: 3, Size: id.Size, Identity: id, Done: []int{-1, 0, 1, 3, 999}})
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(PartsPath(path), body, 0600))
+	require.NoError(t, os.WriteFile(PartsPath(path), body, 0o600))
 	require.Equal(t, map[int]struct{}{0: {}}, NewPartsStore(path, id.Size, id).Done())
 	require.NoError(t, os.Remove(path))
 	require.Empty(t, NewPartsStore(path, id.Size, id).Done())
@@ -42,8 +42,8 @@ func TestPartsStorePreservesUnverifiedData(t *testing.T) {
 	} {
 		t.Run(journal, func(t *testing.T) {
 			path := filepath.Join(t.TempDir(), "file.tmp")
-			require.NoError(t, os.WriteFile(path, []byte("old"), 0600))
-			require.NoError(t, os.WriteFile(PartsPath(path), []byte(journal), 0600))
+			require.NoError(t, os.WriteFile(path, []byte("old"), 0o600))
+			require.NoError(t, os.WriteFile(PartsPath(path), []byte(journal), 0o600))
 			s := NewPartsStore(path, 3, partIdentity(3))
 			require.Empty(t, s.Done())
 			require.FileExists(t, path)
@@ -150,12 +150,12 @@ func TestConcurrentFilesHaveIndependentJournals(t *testing.T) {
 func TestChangedPartSpecificationDoesNotReuseJournal(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "file.tmp")
 	id := partIdentity(3)
-	require.NoError(t, os.WriteFile(path, []byte("old"), 0600))
+	require.NoError(t, os.WriteFile(path, []byte("old"), 0o600))
 	journal := partsFile{Version: 2, Parts: 1, Size: id.Size, Identity: id, Done: []int{0}}
 	journal.Identity.PartSize = MaxPartSize / 2
 	body, err := json.Marshal(journal)
 	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(PartsPath(path), body, 0600))
+	require.NoError(t, os.WriteFile(PartsPath(path), body, 0o600))
 	f, s, err := OpenPartial(path, id.Size, id)
 	require.NoError(t, err)
 	defer f.Close()
@@ -250,8 +250,8 @@ func TestRenewedReferenceOnlyDownloadsMissingParts(t *testing.T) {
 
 func TestPartsStoreRecoveryDoesNotOverwriteEarlierBackup(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "file.tmp")
-	require.NoError(t, os.WriteFile(path+".unverified", []byte("previous"), 0600))
-	require.NoError(t, os.WriteFile(path, []byte("current"), 0600))
+	require.NoError(t, os.WriteFile(path+".unverified", []byte("previous"), 0o600))
+	require.NoError(t, os.WriteFile(path, []byte("current"), 0o600))
 	f, s, err := OpenPartial(path, 7, partIdentity(7))
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
@@ -275,7 +275,7 @@ func TestPartsStoreFlushFailureRetainsPendingCheckpoint(t *testing.T) {
 	s := NewPartsStore(path, 3, partIdentity(3))
 	s.PartDone(0)
 	staging := PartsPath(path) + ".new"
-	require.NoError(t, os.Mkdir(staging, 0700))
+	require.NoError(t, os.Mkdir(staging, 0o700))
 	require.Error(t, s.Flush())
 	require.Equal(t, map[int]struct{}{0: {}}, s.Done())
 	require.NoError(t, os.Remove(staging))
@@ -291,9 +291,9 @@ func TestPartsStoreCleanupFailureRetainsTracking(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "file.tmp")
 	s := NewPartsStore(path, 3, partIdentity(3))
 	s.PartDone(0)
-	require.NoError(t, os.Mkdir(PartsPath(path), 0700))
+	require.NoError(t, os.Mkdir(PartsPath(path), 0o700))
 	child := filepath.Join(PartsPath(path), "occupied")
-	require.NoError(t, os.WriteFile(child, nil, 0600))
+	require.NoError(t, os.WriteFile(child, nil, 0o600))
 	require.Error(t, s.RemoveChecked())
 	require.Equal(t, map[int]struct{}{0: {}}, s.Done())
 	require.NoError(t, os.Remove(child))

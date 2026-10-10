@@ -50,9 +50,10 @@ func TestLinkedResolutionKeepsMediaAcrossEightBotLayers(t *testing.T) {
 		var msgs []resourceMessage
 		if layer == 2 || layer == 5 || layer == 8 {
 			m := linkedDocument(layer, int64(layer), "ref", []byte("media"))
-			if layer == 2 {
+			switch layer {
+			case 2:
 				m.Media.(*tg.MessageMediaDocument).Video = true
-			} else if layer == 5 {
+			case 5:
 				m = botMultipleReplies("ref")[3]
 				m.Media.(*tg.MessageMediaPhoto).Photo.(*tg.Photo).ID = 5
 			}
@@ -281,9 +282,11 @@ func TestLinkedArchiveBotRepliesWithPromotionLinksAndCachedDeadRoot(t *testing.T
 	no := false
 	cache := &UnavailableLinks{}
 	cache.remember(resourceLink{Kind: "bot", Chat: "dead_bot"}, tgerr.New(400, "USERNAME_NOT_OCCUPIED"))
-	opts := LinkedOptions{Chat: "https://t.me/source/42", Dir: t.TempDir(), Threads: 1, Limit: 1,
+	opts := LinkedOptions{
+		Chat: "https://t.me/source/42", Dir: t.TempDir(), Threads: 1, Limit: 1,
 		Pool: linkedPool{api: api}, Unavailable: cache,
-		Links: LinkOptions{BotTimeout: 2, BotIdle: 1, PollInterval: 10, ScanComments: &no, CleanupBotMessages: &no}}
+		Links: LinkOptions{BotTimeout: 2, BotIdle: 1, PollInterval: 10, ScanComments: &no, CleanupBotMessages: &no},
+	}
 	require.NoError(t, downloadLinked(t.Context(), api, &archiveMemory{}, opts))
 	require.Equal(t, map[string]int{"100:files": 1, "200:ad": 1, "200:1": 1}, requests)
 	entries, err := os.ReadDir(filepath.Join(opts.Dir, "50"))

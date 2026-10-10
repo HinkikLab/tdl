@@ -305,7 +305,7 @@ func TestMissingDoesNotTrustUnknownFileSize(t *testing.T) {
 func TestIterDoesNotSkipTruncatedFile(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "1.bin")
-	require.NoError(t, os.WriteFile(path, []byte("short"), 0600))
+	require.NoError(t, os.WriteFile(path, []byte("short"), 0o600))
 	dialog := (&peers.Manager{}).Channel(&tg.Channel{ID: 123})
 	it, err := newIter(nil, nil, dialog, dir, nil, &iterOptions{template: `{{.MessageID}}.bin`})
 	require.NoError(t, err)

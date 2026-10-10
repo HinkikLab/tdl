@@ -28,6 +28,7 @@ type linkedRPC func(context.Context, bin.Encoder, bin.Decoder) error
 func (f linkedRPC) Invoke(ctx context.Context, in bin.Encoder, out bin.Decoder) error {
 	return f(ctx, in, out)
 }
+
 func linkedReply(in bin.Encoder, out bin.Decoder) error {
 	var b bin.Buffer
 	if err := in.Encode(&b); err != nil {
@@ -50,6 +51,7 @@ type linkedFakeBackend struct {
 func (b linkedFakeBackend) Fetch(ctx context.Context, l resourceLink) ([]resourceMessage, error) {
 	return b.fetch(ctx, l)
 }
+
 func (linkedFakeBackend) Comments(context.Context, tg.InputPeerClass, *tg.Message, int) ([]resourceMessage, error) {
 	return nil, nil
 }

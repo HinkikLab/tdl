@@ -128,14 +128,15 @@ func TestLinkedDeletedBotMessageResumesAfterReissue(t *testing.T) {
 			require.Equal(t, len(data), len(got))
 			require.Equal(t, sha256.Sum256(data), sha256.Sum256(got))
 			expectedOffsets := []int64{0, downloader.MaxPartSize, downloader.MaxPartSize, 2 * downloader.MaxPartSize, 3 * downloader.MaxPartSize}
-			if mode == "repeated-deletion" {
+			switch mode {
+			case "repeated-deletion":
 				expectedOffsets = []int64{0, downloader.MaxPartSize, downloader.MaxPartSize, 2 * downloader.MaxPartSize, 2 * downloader.MaxPartSize, 3 * downloader.MaxPartSize}
 				require.Equal(t, 3, starts)
 				require.Equal(t, 2, deletedLookups)
-			} else if mode == "restart-after-reissue-failure" {
+			case "restart-after-reissue-failure":
 				require.Equal(t, 3, starts)
 				require.Equal(t, 1, deletedLookups)
-			} else {
+			default:
 				require.Equal(t, 2, starts)
 				require.Equal(t, 1, deletedLookups)
 			}

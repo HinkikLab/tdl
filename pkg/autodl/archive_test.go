@@ -7,16 +7,19 @@ import (
 	"testing"
 	"time"
 
-	"github.com/iyear/tdl/app/chat"
 	"github.com/stretchr/testify/require"
+
+	"github.com/iyear/tdl/app/chat"
 )
 
 func TestArchiveRangeAndIncrementalState(t *testing.T) {
 	for _, linked := range []bool{false, true} {
 		for _, scenario := range []string{"range", "success", "failure", "limit", "check", "cancel"} {
 			t.Run(fmtArchiveCase(linked, scenario), func(t *testing.T) {
-				job := &Job{ChatURL: "https://t.me/course", FollowLinks: linked, Tag: "#notes", dir: t.TempDir(),
-					StartComment: ptr(10), EndComment: ptr(20), Incremental: ptr(scenario != "range"), Overlap: ptr(100)}
+				job := &Job{
+					ChatURL: "https://t.me/course", FollowLinks: linked, Tag: "#notes", dir: t.TempDir(),
+					StartComment: ptr(10), EndComment: ptr(20), Incremental: ptr(scenario != "range"), Overlap: ptr(100),
+				}
 				r := &Runner{cfg: &Config{}, opts: Options{CheckOnly: scenario == "check"}}
 				scope, err := r.archiveStateScope(job, job.Dir())
 				require.NoError(t, err)
@@ -47,11 +50,12 @@ func TestArchiveRangeAndIncrementalState(t *testing.T) {
 					}
 					return nil
 				})
-				if scenario == "failure" || scenario == "limit" {
+				switch scenario {
+				case "failure", "limit":
 					require.ErrorIs(t, err, failure)
-				} else if scenario == "cancel" {
+				case "cancel":
 					require.ErrorIs(t, err, context.Canceled)
-				} else {
+				default:
 					require.NoError(t, err)
 				}
 				saved, err := LoadState(r.statePath(job))

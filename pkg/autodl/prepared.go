@@ -28,6 +28,29 @@ type EffectiveOptions struct {
 // OptionOrigins describes why each effective value was chosen.
 type OptionOrigins struct{ Namespace, Pool, Threads, Limit string }
 
+// Origin labels used by OptionOrigins. Callers may supply a more specific
+// override label, such as the flag that set the value.
+const (
+	OriginDefault   = "default"
+	OriginConfig    = "config"
+	OriginOverride  = "override"
+	originNamespace = "namespace override"
+)
+
+// resolveOrigin labels a value chosen from an override, the config or a default.
+func resolveOrigin(override bool, label string, config bool) string {
+	switch {
+	case override && label != "":
+		return label
+	case override:
+		return OriginOverride
+	case config:
+		return OriginConfig
+	default:
+		return OriginDefault
+	}
+}
+
 // PreparedRun is an immutable configuration snapshot. Its configuration and
 // overrides are private so callers cannot change account/update requirements
 // after preparing the run.
@@ -107,48 +130,27 @@ func prepareConfig(cfg *Config, opts Options) (*PreparedRun, error) {
 		return nil, &ConfigError{Path: opts.ConfigPath, Err: diagnostic.Describe(errors.New("include and exclude cannot be combined"), corei18n.Message{ID: "errors.message.include_and_exclude_cannot_be_combined"})}
 	}
 	ns := strings.TrimSpace(opts.Namespace)
-	origins := OptionOrigins{Namespace: "default", Pool: "default", Threads: "default", Limit: "default"}
-	if opts.NamespaceSet {
-		origins.Namespace = "namespace override"
-	}
-	if !opts.NamespaceSet && strings.TrimSpace(cfg.Namespace) != "" {
+	configNamespace := !opts.NamespaceSet && strings.TrimSpace(cfg.Namespace) != ""
+	if configNamespace {
 		ns = strings.TrimSpace(cfg.Namespace)
-		origins.Namespace = "config"
 	}
 	if ns == "" {
 		ns = "default"
 	}
 	opts.Namespace = ns
+	poolOverride := opts.PoolSizeSet || opts.PoolSize > 0
 	pool := DefaultPoolSize
-	if cfg.Pool != nil {
-		pool = *cfg.Pool
-		origins.Pool = "config"
-	}
-	if opts.PoolSizeSet || opts.PoolSize > 0 {
+	if poolOverride {
 		pool = opts.PoolSize
-		origins.Pool = "override"
-		if opts.Origins.Pool != "" {
-			origins.Pool = opts.Origins.Pool
-		}
+	} else if cfg.Pool != nil {
+		pool = *cfg.Pool
 	}
 	threads, limit := pick(opts.Threads, num(cfg.Threads), DefaultThreads), pick(opts.Limit, num(cfg.Limit), DefaultLimit)
-	if cfg.Threads != nil {
-		origins.Threads = "config"
-	}
-	if cfg.Limit != nil {
-		origins.Limit = "config"
-	}
-	if opts.Threads > 0 {
-		origins.Threads = "override"
-		if opts.Origins.Threads != "" {
-			origins.Threads = opts.Origins.Threads
-		}
-	}
-	if opts.Limit > 0 {
-		origins.Limit = "override"
-		if opts.Origins.Limit != "" {
-			origins.Limit = opts.Origins.Limit
-		}
+	origins := OptionOrigins{
+		Namespace: resolveOrigin(opts.NamespaceSet, originNamespace, configNamespace),
+		Pool:      resolveOrigin(poolOverride, opts.Origins.Pool, cfg.Pool != nil),
+		Threads:   resolveOrigin(opts.Threads > 0, opts.Origins.Threads, cfg.Threads != nil),
+		Limit:     resolveOrigin(opts.Limit > 0, opts.Origins.Limit, cfg.Limit != nil),
 	}
 	opts.PoolSize, opts.PoolSizeSet, opts.Threads, opts.Limit = pool, true, threads, limit
 	r := &Runner{cfg: cfg, opts: opts}

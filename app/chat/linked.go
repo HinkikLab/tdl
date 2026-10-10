@@ -105,6 +105,13 @@ func (o *LinkOptions) Normalize() error {
 
 func defaultOn(v *bool) bool { return v == nil || *v }
 
+// Resource link kinds. The values are part of persisted link fingerprints.
+const (
+	linkKindChat    = "chat"
+	linkKindMessage = "message"
+	linkKindBot     = "bot"
+)
+
 type resourceLink struct {
 	Kind    string
 	Chat    string
@@ -120,7 +127,7 @@ func (l resourceLink) key() string {
 }
 
 func (l resourceLink) URL() string {
-	if l.Kind == "bot" {
+	if l.Kind == linkKindBot {
 		return "https://t.me/" + l.Chat + "?start=" + url.QueryEscape(l.Start)
 	}
 	path := l.Chat
@@ -156,11 +163,11 @@ func parseResourceLink(raw string) (resourceLink, error) {
 	if err != nil {
 		return resourceLink{}, err
 	}
-	kind := "chat"
+	kind := linkKindChat
 	if ref.Bot {
-		kind = "bot"
+		kind = linkKindBot
 	} else if ref.MessageID > 0 {
-		kind = "message"
+		kind = linkKindMessage
 	}
 	return resourceLink{Kind: kind, Chat: ref.Chat, ID: ref.MessageID, TopicID: ref.TopicID, Start: ref.Start, Comment: ref.CommentID, Single: ref.Single}, nil
 }
@@ -197,7 +204,7 @@ func messageResourceLinks(m *tg.Message) []resourceLink {
 	var links []resourceLink
 	for _, s := range raw {
 		l, err := parseResourceLink(strings.TrimRight(s, ".,;!，。；！)]）】"))
-		if err != nil || l.Kind == "chat" || seen[l.key()] {
+		if err != nil || l.Kind == linkKindChat || seen[l.key()] {
 			continue
 		}
 		seen[l.key()] = true
@@ -301,7 +308,7 @@ func (r *linkResolver) Resolve(ctx context.Context, roots []resourceLink) ([]lin
 			}
 			next = append(next, messageResourceLinks(m.Message)...)
 		}
-		if len(next) == 0 && l.Kind == "message" && defaultOn(r.opts.ScanComments) {
+		if len(next) == 0 && l.Kind == linkKindMessage && defaultOn(r.opts.ScanComments) {
 			for _, m := range msgs {
 				comments, err := r.backend.Comments(ctx, m.Peer, m.Message, r.opts.CommentLimit)
 				if err != nil {
@@ -472,7 +479,7 @@ func waitLinked(ctx context.Context, d time.Duration) error {
 func (b *telegramLinkBackend) Fetch(ctx context.Context, l resourceLink) ([]resourceMessage, error) {
 	var peer peers.Peer
 	var err error
-	if id, parseErr := strconv.ParseInt(l.Chat, 10, 64); parseErr == nil && l.Kind != "bot" {
+	if id, parseErr := strconv.ParseInt(l.Chat, 10, 64); parseErr == nil && l.Kind != linkKindBot {
 		// /c/ links identify channels; keep the typed error instead of falling
 		// through user/chat resolvers, which would obscure an unavailable group.
 		peer, err = b.manager.ResolveChannelID(ctx, id)
@@ -482,7 +489,7 @@ func (b *telegramLinkBackend) Fetch(ctx context.Context, l resourceLink) ([]reso
 	if err != nil {
 		return nil, diagnostic.Describe(fmt.Errorf("resolve %s peer %q: %w", l.Kind, l.Chat, err), corei18n.Message{ID: "errors.message.resolve_value_peer_value_value", Args: map[string]any{"Arg1": l.Kind, "Arg2": fmt.Sprintf("%q", l.Chat), "Arg3": err}})
 	}
-	if l.Kind == "bot" {
+	if l.Kind == linkKindBot {
 		u, ok := peer.(peers.User)
 		if !ok || !u.Raw().Bot {
 			return nil, tgerr.New(400, "BOT_INVALID")

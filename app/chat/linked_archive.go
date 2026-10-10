@@ -102,7 +102,7 @@ func downloadLinked(ctx context.Context, api *tg.Client, kvd storage.Storage, op
 	if err != nil {
 		return err
 	}
-	if source.Kind == "bot" || source.Comment != 0 {
+	if source.Kind == linkKindBot || source.Comment != 0 {
 		return diagnostic.Describe(fmt.Errorf("source must be a main chat or post"), corei18n.Message{ID: "errors.message.source_must_be_a_main_chat_or_post"})
 	}
 	if opts.Window == (ArchiveWindow{}) {
@@ -287,7 +287,7 @@ func linkedSourcePost(album []*tg.Message, tags []string, mode string, chatID in
 		}
 	}
 	p := tagPost{ChatID: chatID, MessageID: album[0].ID, GroupedID: album[0].GroupedID, Text: caption, Messages: media}
-	p.SourceURL = (resourceLink{Kind: "message", Chat: chat, ID: p.MessageID}).URL()
+	p.SourceURL = (resourceLink{Kind: linkKindMessage, Chat: chat, ID: p.MessageID}).URL()
 	p.Directory = linkedDirectory(caption, p.MessageID, "")
 	return p, true
 }

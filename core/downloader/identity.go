@@ -10,6 +10,12 @@ import (
 	corei18n "github.com/iyear/tdl/core/i18n"
 )
 
+// File kinds recorded in FileIdentity.
+const (
+	FileKindDocument = "document"
+	FileKindPhoto    = "photo"
+)
+
 // FileIdentity describes the bytes selected for a resumable download. Expiring
 // references, access hashes and source message IDs deliberately do not belong
 // to the identity: a bot may issue the same file through a new message.
@@ -31,17 +37,14 @@ func FileIdentityOf(file File) (FileIdentity, error) {
 	switch loc := file.Location().(type) {
 	case *tg.InputDocumentFileLocation:
 		if loc != nil {
-			id.Kind, id.ID, id.ThumbSize = "document", loc.ID, loc.ThumbSize
+			id.Kind, id.ID, id.ThumbSize = FileKindDocument, loc.ID, loc.ThumbSize
 		}
 	case *tg.InputPhotoFileLocation:
 		if loc != nil {
-			id.Kind, id.ID, id.ThumbSize = "photo", loc.ID, loc.ThumbSize
+			id.Kind, id.ID, id.ThumbSize = FileKindPhoto, loc.ID, loc.ThumbSize
 		}
 	default:
-		return FileIdentity{}, func() error {
-			messageArg1 := file.Location()
-			return diagnostic.Describe(fmt.Errorf("unsupported resumable file location %T", messageArg1), corei18n.Message{ID: "errors.message.unsupported_resumable_file_location_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", messageArg1)}})
-		}()
+		return FileIdentity{}, diagnostic.Describe(fmt.Errorf("unsupported resumable file location %T", loc), corei18n.Message{ID: "errors.message.unsupported_resumable_file_location_value", Args: map[string]any{"Arg1": fmt.Sprintf("%T", loc)}})
 	}
 	if !id.valid() {
 		return FileIdentity{}, diagnostic.Describe(fmt.Errorf("invalid resumable file identity: %+v", id), corei18n.Message{ID: "errors.message.invalid_resumable_file_identity_value", Args: map[string]any{"Arg1": id}})
@@ -50,7 +53,7 @@ func FileIdentityOf(file File) (FileIdentity, error) {
 }
 
 func (id FileIdentity) valid() bool {
-	return (id.Kind == "document" || id.Kind == "photo") && id.ID != 0 &&
+	return (id.Kind == FileKindDocument || id.Kind == FileKindPhoto) && id.ID != 0 &&
 		id.Size >= 0 && id.DC > 0 && id.PartSize == MaxPartSize
 }
 

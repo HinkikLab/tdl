@@ -85,24 +85,19 @@ func (f *batchFlags) options(global *cobra.Command) autodl.Options {
 		v := f.overlapSeconds
 		opts.OverlapSeconds = &v
 	}
-	if poolSizeSet {
-		opts.Origins.Pool = "global flag"
-		if changed(global, "batch-pool") {
-			opts.Origins.Pool = "batch flag"
+	origin := func(set, batch bool) string {
+		switch {
+		case batch:
+			return "batch flag"
+		case set:
+			return "global flag"
+		default:
+			return ""
 		}
 	}
-	if opts.Threads > 0 {
-		opts.Origins.Threads = "global flag"
-		if f.threads > 0 {
-			opts.Origins.Threads = "batch flag"
-		}
-	}
-	if opts.Limit > 0 {
-		opts.Origins.Limit = "global flag"
-		if f.limit > 0 {
-			opts.Origins.Limit = "batch flag"
-		}
-	}
+	opts.Origins.Pool = origin(poolSizeSet, changed(global, "batch-pool"))
+	opts.Origins.Threads = origin(opts.Threads > 0, f.threads > 0)
+	opts.Origins.Limit = origin(opts.Limit > 0, f.limit > 0)
 
 	return opts
 }
@@ -170,13 +165,12 @@ Partial downloads keep their parts so only missing parts are fetched again.`,
 		GroupID: groupTools.ID,
 		Args:    cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, args []string) error {
-			for name, value := range map[string]int{
-				"batch-threads": f.threads,
-				"batch-limit":   f.limit,
-				"batch-pool":    f.pool,
-			} {
-				if value < 0 {
-					return diagnostic.Describe(fmt.Errorf("--%s must not be negative", name), corei18n.Message{ID: "errors.message.value_must_not_be_negative", Args: map[string]any{"Arg1": name}})
+			for _, flag := range []struct {
+				name  string
+				value int
+			}{{"batch-threads", f.threads}, {"batch-limit", f.limit}, {"batch-pool", f.pool}} {
+				if flag.value < 0 {
+					return diagnostic.Describe(fmt.Errorf("--%s must not be negative", flag.name), corei18n.Message{ID: "errors.message.value_must_not_be_negative", Args: map[string]any{"Arg1": flag.name}})
 				}
 			}
 			for _, name := range []string{consts.FlagThreads, consts.FlagLimit, consts.FlagPoolSize} {

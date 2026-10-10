@@ -135,15 +135,10 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 		return r.runRangeWindow(ctx, job, link, dir, store, state, threads, limit)
 	}
 
-	var targets []int
-	var exportTS int64
-	defer func() { r.setTargets(len(targets)) }()
-
-	if incremental {
-		targets, exportTS, err = r.planIncremental(ctx, job, link, dir, state)
-		if err != nil {
-			return err
-		}
+	targets, exportTS, err := r.planIncremental(ctx, job, peer, dir, state)
+	r.setTargets(len(targets))
+	if err != nil {
+		return err
 	}
 
 	if len(targets) == 0 {
@@ -152,7 +147,7 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 
 		// an empty window still has to move the timestamp, otherwise the next
 		// run scans the same range again
-		if incremental && !r.opts.CheckOnly {
+		if !r.opts.CheckOnly {
 			return r.advanceIncremental(ctx, job, store, state, nil, exportTS)
 		}
 		return nil
@@ -175,10 +170,7 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 
 	if len(missing) == 0 {
 		color.Green("%s", console.Translate(ctx, messages.BatchEverythingDownloaded()))
-		if incremental {
-			return r.advanceIncremental(ctx, job, store, state, targets, exportTS)
-		}
-		return nil
+		return r.advanceIncremental(ctx, job, store, state, targets, exportTS)
 	}
 
 	if err = r.download(ctx, job, link, dir, missing, store, state, threads, limit); err != nil {
@@ -191,9 +183,7 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 		log.Warn("batch.messages_missing", zap.String("event_id", "batch.messages_missing"), zap.Int("count", len(left)), zap.Ints("ids", left))
 
 		if !r.confirm(ctx, console.Translate(ctx, messages.BatchRetryPrompt(len(left))), true) {
-			if incremental {
-				color.Yellow("%s", console.Translate(ctx, messages.BatchKeepIncrementalTimestamp()))
-			}
+			color.Yellow("%s", console.Translate(ctx, messages.BatchKeepIncrementalTimestamp()))
 			return diagnostic.New("errors.batch.messages_missing", map[string]any{"Count": len(left)})
 		}
 
@@ -207,9 +197,5 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 		}
 	}
 
-	if incremental {
-		return r.advanceIncremental(ctx, job, store, state, targets, exportTS)
-	}
-
-	return nil
+	return r.advanceIncremental(ctx, job, store, state, targets, exportTS)
 }

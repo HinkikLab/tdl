@@ -55,13 +55,10 @@ type exportFile struct {
 //
 // It returns the ids of the window and the timestamp the window ended at,
 // which is the value the state may advance to once everything is downloaded.
-func (r *Runner) planIncremental(ctx context.Context, job *Job, link Link, dir string, state *State) ([]int, int64, error) {
+//
+// dialog is the peer already resolved by scanPeer for this job.
+func (r *Runner) planIncremental(ctx context.Context, job *Job, dialog peers.Peer, dir string, state *State) ([]int, int64, error) {
 	log := logctx.From(ctx)
-
-	dialog, err := r.scanPeer(ctx, job, link)
-	if err != nil {
-		return nil, 0, err
-	}
 
 	now := time.Now().Unix()
 	overlap := r.overlapSeconds(job)

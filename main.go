@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"io"
 	"os"
 	"os/signal"
 
@@ -41,9 +40,4 @@ func main() {
 		console.PrintError(color.Error, err, translator, viper.GetBool(consts.FlagDebug))
 		os.Exit(1)
 	}
-}
-
-// printError keeps the stable English helper used by package-level callers.
-func printError(w io.Writer, err error, debug bool) {
-	console.PrintError(w, err, corei18n.EnglishTranslator(), debug)
 }

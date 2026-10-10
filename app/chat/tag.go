@@ -414,8 +414,9 @@ func migrateTagDirectoryContext(ctx context.Context, root, target string, post t
 		return err
 	}
 	var source string
+	legacyName, suffix := fmt.Sprintf("message_%d", id), fmt.Sprintf(" [%d]", id)
 	for _, entry := range entries {
-		if !entry.IsDir() || !(entry.Name() == fmt.Sprintf("message_%d", id) || strings.HasSuffix(entry.Name(), fmt.Sprintf(" [%d]", id))) {
+		if !entry.IsDir() || (entry.Name() != legacyName && !strings.HasSuffix(entry.Name(), suffix)) {
 			continue
 		}
 		candidate := filepath.Join(root, entry.Name())
@@ -470,12 +471,4 @@ func photoOrVideo(m *tg.Message) (*tmedia.Media, bool) {
 		return nil, false
 	}
 	return tmedia.GetMedia(m)
-}
-
-func writeTagJSON(path string, value any) error {
-	b, err := json.MarshalIndent(value, "", "  ")
-	if err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(b, '\n'), 0o644)
 }

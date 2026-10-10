@@ -122,14 +122,6 @@ func RunPrepared(ctx context.Context, c *telegram.Client, kvd storage.Storage, p
 	return runPrepared(ctx, c, kvd, prepared.cfg, prepared.opts)
 }
 
-func run(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Config, opts Options) (rerr error) {
-	prepared, err := prepareConfig(cfg, opts)
-	if err != nil {
-		return err
-	}
-	return RunPrepared(ctx, c, kvd, prepared)
-}
-
 func runPrepared(ctx context.Context, c *telegram.Client, kvd storage.Storage, cfg *Config, opts Options) (rerr error) {
 	poolSize, threads, limit := opts.PoolSize, opts.Threads, opts.Limit
 

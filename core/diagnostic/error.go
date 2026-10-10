@@ -236,11 +236,3 @@ func clone(args map[string]any) map[string]any {
 	}
 	return out
 }
-
-// WrapLegacy retains an existing diagnostic string while adding a stable code.
-func WrapLegacy(code string, cause error, args map[string]any) error {
-	if cause == nil {
-		return fmt.Errorf("%s", code)
-	}
-	return Wrap(code, args, cause)
-}

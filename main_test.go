@@ -2,19 +2,30 @@ package main
 
 import (
 	"bytes"
+	"io"
 	"strings"
 	"testing"
 
 	"github.com/fatih/color"
 	"github.com/go-faster/errors"
-	"github.com/iyear/tdl/pkg/autodl"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/bbolt"
+
+	corei18n "github.com/iyear/tdl/core/i18n"
+	"github.com/iyear/tdl/pkg/autodl"
+	"github.com/iyear/tdl/pkg/console"
 )
 
+// printError renders errors exactly as main does for an English run.
+func printError(w io.Writer, err error, debug bool) {
+	console.PrintError(w, err, corei18n.EnglishTranslator(), debug)
+}
+
 func TestPrintErrorSeparatesConfigurationContextAndDebugStack(t *testing.T) {
-	err := &autodl.ConfigError{Path: "config.json", Job: 1,
-		ChatURL: "https://t.me/c/2255983776/41872/", Err: errors.New("tags must not contain blanks")}
+	err := &autodl.ConfigError{
+		Path: "config.json", Job: 1,
+		ChatURL: "https://t.me/c/2255983776/41872/", Err: errors.New("tags must not contain blanks"),
+	}
 	var output bytes.Buffer
 	printError(&output, err, false)
 	require.Contains(t, output.String(), "config \"config.json\" is invalid\n  Job: 1\n  Chat: https://t.me/c/2255983776/41872/\n  Reason: tags must not contain blanks\n")

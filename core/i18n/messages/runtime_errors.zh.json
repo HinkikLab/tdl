@@ -323,9 +323,6 @@
   "errors.context.unmarshal_extension_environment": {
     "other": "解码扩展环境: {{.Reason}}"
   },
-  "errors.context.resolve_extension_language": {
-    "other": "选择扩展语言: {{.Reason}}"
-  },
   "errors.context.load_extension_translations": {
     "other": "加载扩展翻译: {{.Reason}}"
   },

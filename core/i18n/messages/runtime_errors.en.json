@@ -323,9 +323,6 @@
   "errors.context.unmarshal_extension_environment": {
     "other": "unmarshal extension environment: {{.Reason}}"
   },
-  "errors.context.resolve_extension_language": {
-    "other": "resolve extension language: {{.Reason}}"
-  },
   "errors.context.load_extension_translations": {
     "other": "load extension translations: {{.Reason}}"
   },

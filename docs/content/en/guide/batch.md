@@ -107,9 +107,9 @@ Jobs run in array order; one configuration can contain several modes.
 
 | Mode | `chat_url` | ID meaning and constraints |
 | --- | --- | --- |
-| Direct range | Channel/group home or post | Both range endpoints are required; the post ID in the URL does not automatically select a download range |
+| Direct range | Channel/group home, post or forum topic link | Both range endpoints are required; the post ID in the URL does not automatically select a download range. A forum topic link or `topic_id` keeps only that topic's messages in the range |
 | Comment range | Main channel post, `comment: true` | Range IDs belong to the linked discussion group; these IDs are not automatically restricted to replies to that post |
-| Incremental | Chat home or main post | No range required; `topic_id` / `reply_post_id` apply only to incremental scanning |
+| Incremental | Chat home, main post or forum topic link | No range required; a forum topic link or `topic_id` scans only that topic; `reply_post_id` applies only to incremental scanning |
 | Caption-tag archive | Channel/group home or forum topic link | Supports ID ranges or timestamp incremental scanning; optional `topic_id`; comment mode and `reply_post_id` are unsupported |
 | Linked-resource archive | Main channel home or one post | Supports main-post ID ranges or timestamp incremental scanning, with optional tags; comment mode and topic/reply selectors are unsupported |
 
@@ -172,7 +172,7 @@ namespace: default
 | `export_filter` | expr filter for ordinary incremental message jobs, same as `tdl chat export -f`; archives filter by tags/links |
 | `with_content` | include `date`/`text` in ordinary incremental message exports |
 | `export_all` | export non-media messages in ordinary incremental jobs; archives preserve captions themselves |
-| `topic_id` | Positive topic root ID for incremental or tag scanning. Tag jobs also infer it from topic URLs; explicit values must agree. Incremental jobs still require the explicit selector |
+| `topic_id` | Positive topic root ID for message, incremental or tag jobs. All of them also infer it from forum topic URLs; explicit values must agree with a topic path or `?thread=`. Cannot be combined with `reply_post_id` |
 | `reply_post_id` | Incremental only: positive reply root ID in the scan dialog; use the forwarded root ID in the discussion group, not the original channel post ID |
 | `tag` / `tags` | one hashtag or an array matched against photo/video captions; may combine with ID ranges or incremental windows |
 | `tag_match` | `any` (default) selects posts with any requested tag; `all` requires every tag |
@@ -180,7 +180,7 @@ namespace: default
 | `follow_links` | archive resources reached through links in preview posts or their comments |
 | `link_options` | bounded resolution, bot waiting, reissue and cleanup settings described below |
 
-`export_filter`, `with_content`, `export_all`, topic/reply selectors and
+`export_filter`, `with_content`, `export_all`, `reply_post_id` and
 incremental lookback are not used by direct ID-range scanning.
 `export_all: true` includes non-media messages in the plan; it does not turn
 text into downloadable files. Use an archive mode to preserve post descriptions.
@@ -192,9 +192,13 @@ tag archives, linked-resource archives, incremental scans and message-range jobs
 Without a topic selector, history scanning covers every topic. `max_posts: 0`
 scans the complete history; a positive limit stops after that many matching posts
 across the chat, rather than taking that many posts per topic. Tag jobs select a
-single topic using a topic link or `topic_id`; incremental jobs require explicit
-`topic_id`. Linked-resource jobs scan all topics from the home URL and still do
-not support topic selectors.
+single topic using a topic link or `topic_id`. Message range and incremental jobs
+do the same: in a forum, `https://t.me/c/2255983776/24568/` only downloads topic
+24568, because message IDs are shared by every topic. Telegram must confirm the
+topic; a forum link whose ID is not an accessible topic fails instead of scanning
+the whole chat. Comment mode and `reply_post_id` keep treating the URL ID as a post
+and reject topic paths. Linked-resource jobs scan all topics from the home URL
+and still do not support topic selectors.
 
 After resolving the target, job headings show `Chat name (chat ID) / Topic name
 (topic ID)`. Whole-forum scans show `Chat name (chat ID) / all topics`, with the

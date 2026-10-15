@@ -152,27 +152,8 @@ func (r *Runner) collectIDs(ctx context.Context, job *Job, dialog peers.Peer, st
 			return diagnostic.Describe(errors.Errorf("incremental scan exceeded %d messages; keeping last_ts to avoid losing older messages", maxIncrementalScan), corei18n.Message{ID: "errors.batch.incremental_scan_limit", Args: map[string]any{"Arg1": maxIncrementalScan}})
 		}
 
-		if job.TopicID != nil && *job.TopicID > 0 {
-			// topics are message threads; only keep messages that answer the
-			// topic root. Direct replies often omit ReplyToTopID, in which
-			// case ReplyToMsgID itself is the topic root.
-			if m.ID != *job.TopicID {
-				top, ok := m.GetReplyTo()
-				if !ok {
-					return nil
-				}
-				header, ok := top.(*tg.MessageReplyHeader)
-				if !ok {
-					return nil
-				}
-				topicID := header.ReplyToMsgID
-				if id, ok := header.GetReplyToTopID(); ok {
-					topicID = id
-				}
-				if topicID != *job.TopicID {
-					return nil
-				}
-			}
+		if num(job.TopicID) > 0 && !inTopic(m, *job.TopicID) {
+			return nil
 		}
 
 		media, hasMedia := tmedia.GetMedia(m)

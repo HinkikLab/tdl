@@ -756,7 +756,10 @@
     "other": "tag job cannot select comment mode or reply_post_id"
   },
   "errors.batch.selector_requires_incremental": {
-    "other": "topic_id and reply_post_id require incremental mode for message jobs"
+    "other": "reply_post_id requires incremental mode for message jobs"
+  },
+  "errors.batch.topic_link_selector": {
+    "other": "chat_url topic links cannot be combined with comment mode or reply_post_id"
   },
   "errors.batch.range_required": {
     "other": "start_comment and end_comment are required unless incremental mode is enabled"

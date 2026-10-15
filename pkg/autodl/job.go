@@ -84,19 +84,18 @@ func (r *Runner) runJob(ctx context.Context, job *Job, threads, limit int, onRes
 	if err != nil {
 		return err
 	}
-	topicID, topicTitle := 0, ""
-	if incremental {
-		topicID = num(job.TopicID)
+	topicID, topicTitle, err := r.jobTopic(ctx, job, link, peer)
+	if err != nil {
+		return err
 	}
-	if topicID > 0 {
-		if topic, err := chat.ResolveForumTopic(ctx, r.pool.Default(ctx), peer.InputPeer(), topicID); err == nil {
-			topicTitle = topic.Title
-		} else {
-			return diagnostic.Describe(errors.Wrapf(err, "resolve topic_id %d", topicID), corei18n.Message{ID: "errors.context.resolve_topic_key_id_value", Args: map[string]any{"Arg1": topicID, "Reason": err}})
-		}
+	if topicID != num(job.TopicID) {
+		// The state scope, scan and download all read the effective topic.
+		selected := *job
+		selected.TopicID = &topicID
+		job = &selected
 	}
 	if onResolved != nil {
-		onResolved(chat.TargetNameContext(ctx, peer, topicID, topicTitle, !incremental || (topicID == 0 && job.ReplyPostID == nil)))
+		onResolved(chat.TargetNameContext(ctx, peer, topicID, topicTitle, topicID == 0 && job.ReplyPostID == nil))
 	}
 
 	if !r.opts.CheckOnly {

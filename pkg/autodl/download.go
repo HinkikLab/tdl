@@ -55,6 +55,7 @@ func (r *Runner) downloadSelection(ctx context.Context, job *Job, link Link, dir
 		state:        state,
 		rangeStart:   start,
 		rangeEnd:     end,
+		topicID:      num(job.TopicID),
 		template:     r.template(),
 		include:      r.opts.Include,
 		exclude:      r.opts.Exclude,

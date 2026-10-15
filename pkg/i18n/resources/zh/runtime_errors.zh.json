@@ -756,7 +756,10 @@
     "other": "标签任务不能选择评论模式或 reply_post_id"
   },
   "errors.batch.selector_requires_incremental": {
-    "other": "消息任务的 topic_id 和 reply_post_id 需要增量模式"
+    "other": "消息任务的 reply_post_id 需要增量模式"
+  },
+  "errors.batch.topic_link_selector": {
+    "other": "chat_url 的话题链接不能与评论模式或 reply_post_id 同时使用"
   },
   "errors.batch.range_required": {
     "other": "未启用增量模式时，必须设置 start_comment 和 end_comment"

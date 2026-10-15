@@ -121,12 +121,12 @@ func TestParseLink(t *testing.T) {
 		{
 			name: "public topic link uses the final message id",
 			raw:  "https://t.me/iFreeKnow/45662/55005",
-			want: Link{Chat: "iFreeKnow", MessageID: 55005},
+			want: Link{Chat: "iFreeKnow", MessageID: 55005, TopicID: 45662},
 		},
 		{
 			name: "private topic link uses the final message id",
 			raw:  "https://t.me/c/1492447836/251015/251021",
-			want: Link{Chat: "1492447836", MessageID: 251021},
+			want: Link{Chat: "1492447836", MessageID: 251021, TopicID: 251015},
 		},
 		{
 			name: "missing scheme",

@@ -120,6 +120,8 @@ type iterOptions struct {
 	onSkip func(ids []int)
 	// onFinish is called with the ids that are already downloaded.
 	onFinish func(ids []int)
+	// topicID keeps only the messages of one forum topic; zero keeps all.
+	topicID int
 }
 
 // newIter creates the download iterator of one job.
@@ -200,6 +202,14 @@ func (i *iter) process(ctx context.Context) bool {
 			i.pending[0] = nil
 			i.pending = i.pending[1:]
 			if i.isFinished(msg.ID) {
+				continue
+			}
+			if i.opts.topicID > 0 && !inTopic(msg, i.opts.topicID) {
+				// IDs of a forum range are shared by every topic.
+				if i.opts.state != nil {
+					i.opts.state.Filter(msg.ID)
+				}
+				i.markDone(msg.ID)
 				continue
 			}
 			if i.push(ctx, i.dialog, msg) {

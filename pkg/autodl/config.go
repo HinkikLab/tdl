@@ -313,9 +313,18 @@ func (j *Job) normalize(base string, globalIncremental bool) error {
 		return j.validateArchiveSelection()
 	}
 
+	if link, _ := ParseLink(j.ChatURL); link.TopicID > 0 {
+		if link.CommentMode() || j.CommentMode() || j.ReplyPostID != nil {
+			return diagnostic.Describe(errors.New("chat_url topic links cannot be combined with comment mode or reply_post_id"), corei18n.Message{ID: "errors.batch.topic_link_selector"})
+		}
+		if j.TopicID != nil && *j.TopicID != link.TopicID {
+			return diagnostic.Describe(fmt.Errorf("topic_id (%d) conflicts with chat_url topic (%d)", *j.TopicID, link.TopicID), corei18n.Message{ID: "errors.message.topic_key_id_value_conflicts_with_chat_key_url_topic_value", Args: map[string]any{"Arg1": *j.TopicID, "Arg2": link.TopicID}})
+		}
+	}
+
 	if !j.UsesIncremental(globalIncremental) {
-		if j.TopicID != nil || j.ReplyPostID != nil {
-			return diagnostic.Describe(errors.New("topic_id and reply_post_id require incremental mode for message jobs"), corei18n.Message{ID: "errors.batch.selector_requires_incremental"})
+		if j.ReplyPostID != nil {
+			return diagnostic.Describe(errors.New("reply_post_id requires incremental mode for message jobs"), corei18n.Message{ID: "errors.batch.selector_requires_incremental"})
 		}
 		if j.StartComment == nil || j.EndComment == nil {
 			// a range job needs both ends; incremental jobs get ids from the
@@ -463,6 +472,10 @@ type Link struct {
 	// Comment is the comment id when the link points into the discussion
 	// group, zero otherwise.
 	Comment int
+	// TopicID is the forum topic of a /c/chat/topic/message path or a
+	// ?thread=N query, zero otherwise. A bare /c/chat/topic path only sets
+	// MessageID; whether that names a topic is decided with Telegram.
+	TopicID int
 }
 
 // CommentMode reports whether the link points at a comment.
@@ -484,7 +497,7 @@ func ParseLink(raw string) (Link, error) {
 	if ref.Bot {
 		return Link{}, diagnostic.Describe(errors.New("bot start links are not a batch message source"), corei18n.Message{ID: "errors.message.bot_start_links_are_not_a_batch_message_source"})
 	}
-	return Link{Chat: ref.Chat, MessageID: ref.MessageID, Comment: ref.CommentID}, nil
+	return Link{Chat: ref.Chat, MessageID: ref.MessageID, Comment: ref.CommentID, TopicID: ref.TopicID}, nil
 }
 
 // FindConfig returns the first existing config candidate in the working
